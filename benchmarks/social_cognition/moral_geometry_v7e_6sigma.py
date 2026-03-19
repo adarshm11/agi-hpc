@@ -861,7 +861,9 @@ def t5_conservation(llm):
 MODELS_TO_TEST = [
     "google/gemini-2.5-flash",
     "google/gemini-2.5-pro",
-    "meta/llama-3.1-70b",
+    "anthropic/claude-sonnet-4-6@default",
+    "deepseek-ai/deepseek-r1-0528",
+    "qwen/qwen3-235b-a22b-instruct-2507",
 ]
 
 print(f"\n[2/8] Running 5 geometric tests across {len(MODELS_TO_TEST)} models")
