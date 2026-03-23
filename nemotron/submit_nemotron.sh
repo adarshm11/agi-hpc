@@ -9,11 +9,18 @@
 #SBATCH --mem=64G
 #SBATCH --time=48:00:00
 
-module load cuda/12.2
-export PATH=~/nemotron/env/bin:$PATH
+GCC_DIR=/opt/ohpc/pub/apps/spack/opt/spack/linux-centos7-broadwell/gcc-11.2.0/gcc-12.2.0-7gle75fpui2uzq74izjwiloxtobg4v4v
+CUDA_DIR=/opt/ohpc/pub/nvidia/cuda-12.2
+
+export PATH=$GCC_DIR/bin:$CUDA_DIR/bin:~/nemotron/env/bin:$PATH
+export LD_LIBRARY_PATH=$GCC_DIR/lib64:$CUDA_DIR/lib64:$LD_LIBRARY_PATH
 export WORK_DIR=~/nemotron
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+source /opt/ohpc/pub/apps/anaconda/3.9/etc/profile.d/conda.sh
+conda activate ~/nemotron/env
 
 echo "=== Nemotron LoRA Training ==="
 echo "Job ID: $SLURM_JOB_ID"

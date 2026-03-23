@@ -1,0 +1,335 @@
+Geometric Reasoning: a framework
+1. Core thesis
+
+Reasoning is best modeled as informed search through a structured possibility space.
+
+Not all search is equal:
+
+Uninformed search explores broadly with little guidance.
+Informed search uses a heuristic to prioritize promising paths.
+Good reasoning is efficient, goal-directed, constraint-aware search.
+Bad reasoning is search with a distorted heuristic, wrong objective, poor pruning, or unstable geometry.
+
+For AI, this means we stop treating “reasoning” as either:
+
+mere next-token prediction, or
+a black-box magic faculty,
+
+and instead treat it as trajectory formation in a structured space.
+
+2. The levels of the framework
+
+The framework has five layers.
+
+A. Representational layer: the search space
+
+This is the space of candidate thoughts, interpretations, plans, proofs, or actions.
+
+Depending on the domain, the space could be:
+
+a graph,
+a manifold,
+a tree of partial solutions,
+a program space,
+a policy space,
+or a hybrid latent structure.
+
+A state is not just a token. It is better thought of as a partial cognitive configuration:
+
+what has been inferred,
+what constraints are active,
+what goals are being pursued,
+what options remain open.
+B. Geometric layer: structure on the space
+
+The space has structure, not just connectivity.
+
+Key geometric objects:
+
+distance: how far a state is from a solution or coherent completion
+cost: how expensive a transition is
+curvature: where the space bends, funnels, or misleads
+boundaries: regions that are forbidden, incoherent, or unacceptable
+bottlenecks: narrow passages requiring specific insight
+symmetries/invariances: transformations that should not change the answer
+
+This is where the “geometric” part matters. Reasoning is not just moving; it is moving through a space with shape.
+
+C. Search layer: the dynamics
+
+Reasoning is the process of traversing this structured space.
+
+The key distinction:
+
+BFS/DFS-style cognition: broad or brute-force exploration
+Greedy cognition: jumps toward the most salient local option
+A*-like cognition: uses a learned or computed estimate of future value/cost
+Beam-search cognition: tracks several plausible lines before pruning
+Backtracking cognition: revises when a path fails
+Meta-search: search over strategies, not just answers
+D. Heuristic layer: guidance
+
+This is the heart of the framework.
+
+A heuristic is any internal signal that estimates:
+
+which directions are promising,
+which branches are dead ends,
+which details matter,
+which intermediate states are closer to success.
+
+In humans, this may correspond to:
+
+intuition,
+selective attention,
+learned skill,
+salience,
+pattern recognition.
+
+In AI systems, it may be implemented by:
+
+attention allocation,
+latent representations,
+value-like signals,
+routing mechanisms,
+scratchpad processes,
+tool-selection policies.
+
+The key claim is not that “attention = heuristic” in a literal one-to-one sense.
+The better claim is:
+
+attention and learned internal structure are part of the machinery that implements heuristic guidance.
+
+E. Control layer: metacognition
+
+A powerful system does not just search. It monitors search.
+
+Metacognition is:
+
+estimating whether the current path is reliable,
+deciding whether to explore or commit,
+detecting when one is lost,
+reallocating attention,
+asking for clarification,
+switching strategy.
+
+So in this framework:
+
+reasoning = informed search
+metacognition = control of informed search
+
+3. The primitive objects
+
+To make this a real field, you need a standard vocabulary.
+
+Core primitives
+State space: all reachable partial reasoning states
+Transition operator: allowable moves from one state to another
+Goal region: acceptable terminal states
+Constraint set: rules, boundaries, or hard prohibitions
+Cost function: penalty for paths or transitions
+Heuristic field: estimate of distance/value from each state
+Policy: rule for choosing the next move
+Memory state: retained context affecting reachable paths
+Observation frame: how the problem is presented
+Symmetry group: transformations that should preserve solution quality
+Derived objects
+Trajectory: actual reasoning path taken
+Frontier: currently plausible alternatives
+Attractor basin: region the system tends to fall into
+Dead zone: unproductive but absorbing area
+Bottleneck: necessary insight transition
+Loop: repetitive unproductive reasoning
+Shortcut: low-cost path that bypasses brute force
+Proxy target: a nearby but wrong objective the system mistakes for the goal
+4. What counts as success
+
+A good reasoner is not just accurate.
+
+It should show:
+
+goal attainment: reaches correct or acceptable states
+efficiency: avoids exhaustive search
+robustness: resists irrelevant perturbations
+constraint respect: avoids forbidden regions
+recoverability: can backtrack from bad paths
+calibration: knows when its path estimate is weak
+invariance: preserves judgment under irrelevant reformulations
+adaptivity: changes strategy when structure changes
+
+That gives you a richer target than “final answer accuracy.”
+
+5. Main failure modes
+
+This is where the framework becomes useful.
+
+A. Heuristic corruption
+
+The guidance signal points in the wrong direction.
+
+Examples:
+
+salient distractors
+framing effects
+emotional anchoring
+social-pressure cues
+reward-hacking proxies
+B. Local minima
+
+The system reaches a plausible but wrong intermediate solution and gets stuck.
+
+C. Premature convergence
+
+It collapses too quickly onto one path without adequate exploration.
+
+D. Frontier explosion
+
+Too many plausible branches remain active; the system loses focus.
+
+E. Constraint blindness
+
+It reaches a seemingly good answer by crossing a prohibited boundary.
+
+F. Proxy-goal capture
+
+The system optimizes a nearby surrogate:
+
+sounding confident instead of being right,
+agreeing with the user instead of tracking truth,
+producing coherence instead of correctness.
+G. Search instability
+
+Small irrelevant changes reshape the search path too much.
+
+H. Meta-search failure
+
+The system does not realize it needs a different strategy.
+
+6. How this maps to LLMs
+
+This is the most delicate part, but also the most exciting.
+
+The safe version is:
+
+LLMs can be modeled as approximate heuristic-guided search systems over latent continuation space.
+
+Mapping
+state = internal hidden-state configuration plus generated context
+move = selecting a continuation step
+trajectory = chain of intermediate reasoning states expressed partly in text
+heuristic guidance = learned signals that prioritize certain continuations
+attention = one major routing mechanism for allocating that guidance
+chain-of-thought = partial externalization of search trace
+tool use = delegated expansion of frontier or evaluation of branches
+self-reflection = meta-search over current strategy
+
+Important caution:
+the model is not literally running textbook A* over an explicit graph.
+The framework says the behavior is well modeled as A*-like or heuristic-search-like, not that the implementation is literally classical search.
+
+7. Why geometry matters
+
+Without geometry, “search” is too generic.
+
+Geometry lets you ask sharper questions:
+
+Which tasks have smooth versus jagged solution landscapes?
+Where are the bottlenecks?
+Which perturbations preserve topology and which warp it?
+Are some failures caused by local curvature rather than ignorance?
+Which models take shorter geodesic-like routes?
+Which heuristics are robust under reparameterization?
+
+This turns vague reasoning claims into structural ones.
+
+8. Benchmarks this framework suggests
+
+This is where the field becomes empirical.
+
+A. Invariance tests
+
+Does the system reach the same conclusion under transformations that should not matter?
+
+B. Heuristic sensitivity tests
+
+What distractors or salience cues warp search?
+
+C. Bottleneck tests
+
+Can the model pass through narrow insight transitions?
+
+D. Recovery tests
+
+Can it detect and escape bad intermediate paths?
+
+E. Frontier management tests
+
+Can it maintain multiple hypotheses without confusion?
+
+F. Meta-search tests
+
+Can it tell when it should switch strategies?
+
+G. Constraint tests
+
+Can it avoid forbidden but tempting routes?
+
+H. Path-efficiency tests
+
+Does it solve tasks by efficient structured traversal or brute-force sprawl?
+
+9. Alignment interpretation
+
+This framework is especially strong for alignment.
+
+Instead of asking only:
+“Did the model produce the right answer?”
+
+you ask:
+
+What objective was its search implicitly following?
+What heuristic guided it?
+What constraints did it respect or ignore?
+What perturbations hijack its search?
+Can we shape its heuristic without wrecking competence?
+
+That leads to a clean alignment picture:
+
+Alignment as heuristic shaping
+
+We want systems whose guidance signals favor:
+
+truth over approval,
+relevant over salient,
+robust invariants over superficial cues,
+hard constraints over expedient shortcuts.
+Safety as path governance
+
+Unsafe behavior can be seen as:
+
+entering forbidden regions,
+optimizing proxy goals,
+or becoming unstable under adversarial geometry.
+10. The field’s core research questions
+
+A real field needs central questions.
+
+Theory
+What is the right mathematical object for reasoning space?
+When is graph language enough, and when do we need manifolds?
+What kinds of curvature correspond to cognitive difficulty?
+Mechanisms
+Which internal components implement heuristic guidance?
+How distributed is the heuristic?
+Can search traces be recovered from activations?
+Evaluation
+How do we distinguish informed search from memorized pattern completion?
+What metrics capture path quality, not just endpoint accuracy?
+Alignment
+How do we train better heuristics?
+How do we detect heuristic corruption?
+How do we encode constraints without collapse?
+Philosophy/cognitive science
+Is deliberation best understood as bounded search?
+What are intuition, attention, and explanation in search terms?
+Is moral reasoning a special case of constrained search?

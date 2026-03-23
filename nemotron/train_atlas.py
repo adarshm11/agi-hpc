@@ -1,45 +1,20 @@
-"""Nemotron 3 Reasoning Challenge — HPC Training Script
-NVIDIA Competition | $106K + DGX Sparks
+"""Nemotron 3 Reasoning Challenge — Atlas GV100 Training Script.
 
-Adapted for SJSU CoE HPC with 2x P100 GPUs (16GB each).
-P100 does NOT support bf16 — uses fp16 throughout.
+Optimized for 2x Quadro GV100 (32GB each, Volta, compute 7.0).
+- Full LoRA rank 32 (competition maximum)
+- FP16 mixed precision (Volta Tensor Cores)
+- No quantization needed (64GB total GPU RAM)
+- device_map="auto" across both GPUs
 """
 
-import os, json, time, random, re, shutil
+import os, time, random, re, shutil
 import torch
 import pandas as pd
 from pathlib import Path
 from datasets import Dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import LoraConfig, get_peft_model
 from trl import SFTTrainer, SFTConfig
-
-# Patch safetensors metadata bug (None metadata in some model files)
-import transformers.modeling_utils as _mu
-_orig_load_state_dict = _mu.load_state_dict
-def _patched_load_state_dict(checkpoint_file, *args, **kwargs):
-    if str(checkpoint_file).endswith(".safetensors"):
-        from safetensors import safe_open
-        from safetensors.torch import load_file
-        with safe_open(checkpoint_file, framework="pt") as f:
-            metadata = f.metadata()
-        if metadata is None:
-            return load_file(checkpoint_file)
-    return _orig_load_state_dict(checkpoint_file, *args, **kwargs)
-_mu.load_state_dict = _patched_load_state_dict
-
-# Patch LoRA 4-bit forward to handle uint8 inputs from quantized layers
-try:
-    import peft.tuners.lora.bnb as _lora_bnb
-    if hasattr(_lora_bnb, 'Linear4bit'):
-        _orig_linear4bit_forward = _lora_bnb.Linear4bit.forward
-        def _patched_linear4bit_forward(self, x, *args, **kwargs):
-            if x.dtype == torch.uint8:
-                x = x.to(self.compute_dtype if hasattr(self, 'compute_dtype') else torch.bfloat16)
-            return _orig_linear4bit_forward(self, x, *args, **kwargs)
-        _lora_bnb.Linear4bit.forward = _patched_linear4bit_forward
-except ImportError:
-    pass
 
 # ═══════════════════════════════════════════════════════════════
 # Setup
@@ -60,13 +35,12 @@ if DEVICE == "cuda":
         vram = torch.cuda.get_device_properties(i).total_memory / 1e9
         print(f"  GPU {i}: {name} ({vram:.1f} GB)")
 else:
-    raise RuntimeError("No GPU detected — this script requires CUDA")
+    raise RuntimeError("No GPU detected")
 
-# Detect GPU capabilities
-gpu_name = torch.cuda.get_device_name(0).lower()
-USE_BF16 = torch.cuda.is_bf16_supported()
-USE_FP16 = not USE_BF16
-print(f"  bf16 supported: {USE_BF16} (using {'bf16' if USE_BF16 else 'fp16'})")
+# GV100 supports fp16 Tensor Cores but NOT bf16
+USE_FP16 = True
+COMPUTE_DTYPE = torch.float16
+print(f"  Using fp16 (Volta Tensor Cores)")
 
 # ═══════════════════════════════════════════════════════════════
 # Load Data
@@ -75,7 +49,6 @@ print(f"  bf16 supported: {USE_BF16} (using {'bf16' if USE_BF16 else 'fp16'})")
 train_df = pd.read_csv(DATA_DIR / "train.csv")
 test_df = pd.read_csv(DATA_DIR / "test.csv")
 print(f"\nTrain: {len(train_df)}, Test: {len(test_df)}")
-print(f"Columns: {list(train_df.columns)}")
 
 # ═══════════════════════════════════════════════════════════════
 # Format Training Data
@@ -108,21 +81,13 @@ val_dataset = Dataset.from_list(formatted[split_idx:])
 print(f"Train: {len(train_dataset)}, Val: {len(val_dataset)}")
 
 # ═══════════════════════════════════════════════════════════════
-# Load Model
+# Load Model — NO quantization on GV100 (32GB per GPU = 64GB total)
 # ═══════════════════════════════════════════════════════════════
 
-MODEL_NAME = os.path.expanduser("~/nemotron/model_cache")
-COMPUTE_DTYPE = torch.bfloat16 if USE_BF16 else torch.float16
+MODEL_NAME = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-Base-BF16"
 
-print(f"\nLoading {MODEL_NAME} with 4-bit quantization ({COMPUTE_DTYPE})...")
+print(f"\nLoading {MODEL_NAME} in fp16 across 2x GV100...")
 t0 = time.time()
-
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=COMPUTE_DTYPE,
-    bnb_4bit_use_double_quant=True,
-)
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 if tokenizer.pad_token is None:
@@ -130,23 +95,21 @@ if tokenizer.pad_token is None:
 
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
-    quantization_config=bnb_config,
     device_map="auto",
     trust_remote_code=True,
     torch_dtype=COMPUTE_DTYPE,
 )
-model = prepare_model_for_kbit_training(model)
 print(f"Model loaded in {time.time()-t0:.0f}s")
 
 # ═══════════════════════════════════════════════════════════════
-# Configure LoRA
+# Configure LoRA — Full rank 32 (competition maximum)
 # ═══════════════════════════════════════════════════════════════
 
 lora_config = LoraConfig(
-    r=8,
-    lora_alpha=16,
-    target_modules=["up_proj", "down_proj"],
-    lora_dropout=0.0,
+    r=32,
+    lora_alpha=64,
+    target_modules=r".*\.(in_proj|out_proj|up_proj|down_proj)$",
+    lora_dropout=0.05,
     bias="none",
     task_type="CAUSAL_LM",
 )
@@ -157,15 +120,15 @@ total = sum(p.numel() for p in model.parameters())
 print(f"Trainable: {trainable/1e6:.1f}M / {total/1e9:.1f}B ({100*trainable/total:.2f}%)")
 
 # ═══════════════════════════════════════════════════════════════
-# Train
+# Train — Volta-optimized settings
 # ═══════════════════════════════════════════════════════════════
 
 training_args = SFTConfig(
     output_dir=str(OUTPUT_DIR),
     num_train_epochs=3,
-    per_device_train_batch_size=1,
-    per_device_eval_batch_size=1,
-    gradient_accumulation_steps=8,
+    per_device_train_batch_size=2,  # Can fit batch=2 with 32GB per GPU
+    per_device_eval_batch_size=2,
+    gradient_accumulation_steps=4,  # Effective batch = 2*2*4 = 16
     learning_rate=2e-4,
     weight_decay=0.01,
     warmup_ratio=0.1,
@@ -176,10 +139,10 @@ training_args = SFTConfig(
     save_strategy="steps",
     save_steps=100,
     save_total_limit=3,
-    bf16=USE_BF16,
-    fp16=USE_FP16,
+    fp16=True,      # Volta Tensor Cores
+    bf16=False,     # Volta does NOT support bf16
     gradient_checkpointing=True,
-    max_seq_length=256,
+    max_seq_length=2048,  # Full context — 32GB GPUs can handle it
     dataset_text_field="text",
     report_to="none",
     seed=42,
@@ -222,9 +185,9 @@ total_eval = 0
 
 for item in formatted[split_idx:split_idx+50]:
     prompt_text = format_prompt(item["prompt"])
-    inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=512).to(DEVICE)
+    inputs = tokenizer(prompt_text, return_tensors="pt", truncation=True, max_length=2048).to(DEVICE)
     with torch.no_grad():
-        outputs = model.generate(**inputs, max_new_tokens=256, temperature=0.0, top_p=1.0, do_sample=False)
+        outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.0, top_p=1.0, do_sample=False)
     response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
     predicted = extract_boxed_answer(response)
     actual = item["answer"]
@@ -253,12 +216,7 @@ SUBMISSION_DIR.mkdir(exist_ok=True)
 for f in ADAPTER_DIR.iterdir():
     shutil.copy2(f, SUBMISSION_DIR / f.name)
 
-assert (SUBMISSION_DIR / "adapter_config.json").exists(), "Missing adapter_config.json!"
-
 submission_zip = OUTPUT_DIR / "submission"
 shutil.make_archive(str(submission_zip), "zip", str(SUBMISSION_DIR))
 print(f"\n{submission_zip}.zip created")
-for f in SUBMISSION_DIR.iterdir():
-    print(f"  {f.name} ({f.stat().st_size / 1e6:.1f} MB)")
-
-print(f"\n=== Done! Download submission.zip from: {submission_zip}.zip ===")
+print(f"\n=== Done! ===")
