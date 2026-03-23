@@ -10,7 +10,9 @@ import os, sys, json, time, random, math, re, logging
 from dataclasses import dataclass
 
 MINI = "--mini" in sys.argv
-GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "REDACTED")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+if not GEMINI_KEY:
+    raise ValueError("Set GEMINI_API_KEY environment variable")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("bell")
