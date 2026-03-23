@@ -16,3 +16,23 @@ pyvenv.cfg
 
 # Python generated
 *.pyd
+nemotron/kaggle.json
+.coverage
+*.b64
+# Temp generator scripts in repo root
+/_*.py
+# Large data files
+nemotron/*.zip
+nemotron/*.csv
+nemotron/kaggle_push/
+nemotron/shit-code.*
+nemotron/nemotron-out1.txt
+birdclef/data/
+birdclef/*.zip
+birdclef/precomputed/
+# Office temp files
+~$*
+# Misc
+docs/nul
+docs/_*.py
+docs/_*.txt

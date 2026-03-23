@@ -1,0 +1,1155 @@
+======================================================================
+METACOGNITION BENCHMARK v2 (with controls)
+Four Tests of Metacognitive Capacity in Moral Cognition
+Based on Bond (2026), Metacognition Track
+Parallelism: 50 initial (adaptive 2-80)
+======================================================================
+
+DESIGN NOTES:
+  M1 = CALIBRATION test (confidence vs accuracy, HEADLINE)
+  M2 = KNOWING WHAT YOU DON'T KNOW (easy vs ambiguous discrimination)
+  M3 = SELF-MONITORING (self-reported vs actual uncertainty)
+  M4 = STRATEGY SELECTION (reasoning scales with complexity)
+  All significance tests use empirical control arms (not null=0)
+  Fisher combination of ECE z-scores across 4 Gemini models for M1
+======================================================================
+
+[1/7] Loading AITA dataset...
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+  Loaded 270,709 AITA posts in 30s
+  NTA: 10
+  YTA: 10
+  ESH: 10
+  NAH: 10
+  AITA total: 40 scenarios (for M1/M2)
+
+[2/7] Loading Dear Abby scenarios (embedded)...
+  Loaded 25 Dear Abby scenarios (for M3/M4)
+
+  Gold set: 6 scenarios with hand-audited calibration annotations
+  Probes: 3 easy, 3 ambiguous
+  M4 scenarios: 8 simple, 8 complex
+
+
+[3/7] Phase 1: Pre-generating difficulty variants with google/gemini-2.0-flash
+
+[3/7] PRE-GENERATING DIFFICULTY VARIANTS
+  Transformer model: google/gemini-2.0-flash
+  This model ONLY generates text. Test models ONLY judge.
+------------------------------------------------------------
+  Generating 8 items...
+  Done: 8 generated, 0 failed
+
+
+[4/7] Phase 2: Running 4 tests across 3 full models
+  - google/gemini-2.0-flash
+  - google/gemini-2.5-flash
+  - anthropic/claude-sonnet-4-6@default
+
+
+######################################################################
+# MODEL 1/3: google/gemini-2.0-flash
+######################################################################
+
+[M1] CALIBRATION (HEADLINE TEST)
+  Testing confidence-accuracy alignment
+  ECE with 5 bins: [0-2), [2-4), [4-6), [6-8), [8-10]
+  Three tiers: gold (6) + probes (6) + AITA (40)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-audited) ---
+    [3/6] pairs collected: 3
+    [6/6] pairs collected: 6
+  --- Probes (6 synthetic scenarios) ---
+    EASY01: Clear theft: unambiguous wrongdoing...
+    EASY02: Clear self-defense: unambiguous right...
+    EASY03: Clear duty: mandatory reporter obligation...
+    AMB01: Competing duties: loyalty vs honesty...
+    AMB02: Privacy vs safety: no clear right answer...
+    AMB03: Equal claims: genuinely balanced dilemma...
+  --- AITA tier (40 scenarios, crowd-labeled) ---
+
+  RESULTS (M1: calibration):
+  Total pairs: 52
+  Accuracy: 23/52 (44%)
+  ECE (Expected Calibration Error): 0.4423
+  ECE bootstrap SE: 0.0645
+  ECE z-score (miscalibration significance): 6.9
+  Overconfidence rate (conf>8, wrong): 15/31 (48%) [95% CI: 32%-65%]
+  Control confidence SD: 0.95
+  Gold easy avg confidence: 9.0
+  Gold hard avg confidence: 9.3
+
+  ECE BIN DETAIL:
+  Bin             N   Accuracy    AvgConf    |Gap|
+  --------------------------------------------
+  [0-2)     0       --         --       --
+  [2-4)     0       --         --       --
+  [4-6)     0       --         --       --
+  [6-8)     5       60%      0.70   0.100
+  [8-10)    47       43%      0.90   0.479
+
+  Calibration score: 0.558
+  NOTE: Lower ECE = better calibrated. Perfect calibration = ECE 0.
+
+[M2] KNOWING WHAT YOU DON'T KNOW
+  Testing confidence discrimination: clear-cut vs ambiguous
+  15 clear-cut (NTA/YTA, high score) + 15 ambiguous (ESH/NAH)
+------------------------------------------------------------
+  Clear-cut: 15 scenarios
+  Ambiguous: 15 scenarios
+  --- Clear-cut scenarios ---
+    [15/15] clear scenarios done
+  --- Ambiguous scenarios ---
+    [15/15] ambiguous scenarios done
+
+  RESULTS (M2: uncertainty discrimination):
+  Mean confidence (clear-cut): 9.00 (n=15)
+  Mean confidence (ambiguous): 8.53 (n=15)
+  Discrimination (clear - ambig): +0.47
+  AUROC (rank-based): 0.682 (0.5 = chance, 1.0 = perfect)
+  T-test: t=1.52, df=28
+  Control avg confidence range: 0.73
+  Discrimination score: 0.376
+  NOTE: AUROC measures rank-order discrimination even when
+  raw confidence is compressed into a narrow range (8-10).
+
+[M3] SELF-MONITORING
+  Testing self-awareness of uncertainty
+  12 Dear Abby scenarios x 5 reps each + uncertainty ranking
+------------------------------------------------------------
+  Scenarios: 12
+    [60/60] judgments collected
+
+  Phase B: asking model to rank least certain scenarios...
+  Self-reported least certain: ['My wife wants a threesome', 'I keep money from my husband', 'My friend is in a cult']
+  Matched indices: [5, 11, 4]
+
+  SCENARIO VARIANCE (actual):
+  Rank   Title                                      Variance Verdicts
+  ---------------------------------------------------------------------------
+  1      My parents favor my sibling                   2.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  2      My wife wants a threesome                     1.55 MIXED, MIXED, MIXED, MIXED, MIXED <<<
+  3      I was adopted but didn't know                 1.45 MIXED, MIXED, MIXED, MIXED, MIXED
+  4      Partner wants me to stop talking to my        1.45 MIXED, MIXED, MIXED, MIXED, MIXED
+  5      I watched my friend cheat                     1.45 MIXED, MIXED, MIXED, MIXED, MIXED
+  6      I keep money from my husband                  1.45 MIXED, MIXED, MIXED, MIXED, MIXED <<<
+  7      I lied on my resume                           1.00 WRONG, WRONG, WRONG, WRONG, WRONG
+  8      Coworker took credit for my work              1.00 WRONG, WRONG, WRONG, WRONG, WRONG
+  9      Neighbor's dog attacked my child              1.00 MIXED, MIXED, MIXED, MIXED, MIXED
+  10     My friend is in a cult                        1.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT <<<
+  11     My daughter is dating someone I hate          1.00 MIXED, MIXED, MIXED, MIXED, MIXED
+  12     My boss is my ex-girlfriend                   1.00 UNCLEAR, UNCLEAR, UNCLEAR, UNCLEAR, UNCLEAR
+
+  RESULTS (M3: self-monitoring):
+  Spearman rho (self-reported vs actual variance): -0.143
+  Self-monitoring score: 0.428
+  NOTE: Positive rho = model correctly identifies uncertain scenarios.
+  rho > 0.3 would suggest meaningful self-monitoring ability.
+  CAUTION: Negative rho suggests model is ANTI-calibrated
+  (thinks it's least certain on scenarios where it's most consistent).
+
+[M4] STRATEGY SELECTION
+  Testing if reasoning effort scales with complexity
+  8 simple + 8 complex Dear Abby scenarios
+------------------------------------------------------------
+  --- Simple scenarios (8) ---
+  --- Complex scenarios (8) ---
+
+  RESULTS (M4: strategy selection, unconstrained reasoning):
+  Simple avg reasoning length: 2398 chars (n=8)
+  Complex avg reasoning length: 3301 chars (n=8)
+  Length ratio (complex/simple): 1.38
+  T-test (complex > simple): t=1.39
+  Simple avg confidence: 8.5
+  Complex avg confidence: 8.8
+  Strategy selection score: 0.527
+  NOTE: No length cap in prompt -- models free to vary reasoning naturally.
+  Ratio > 1 = model invests more reasoning effort in complex scenarios.
+
+######################################################################
+# MODEL 2/3: google/gemini-2.5-flash
+######################################################################
+
+[M1] CALIBRATION (HEADLINE TEST)
+  Testing confidence-accuracy alignment
+  ECE with 5 bins: [0-2), [2-4), [4-6), [6-8), [8-10]
+  Three tiers: gold (6) + probes (6) + AITA (40)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-audited) ---
+    [3/6] pairs collected: 3
+    [6/6] pairs collected: 6
+  --- Probes (6 synthetic scenarios) ---
+    EASY01: Clear theft: unambiguous wrongdoing...
+    EASY02: Clear self-defense: unambiguous right...
+    EASY03: Clear duty: mandatory reporter obligation...
+    AMB01: Competing duties: loyalty vs honesty...
+    AMB02: Privacy vs safety: no clear right answer...
+    AMB03: Equal claims: genuinely balanced dilemma...
+  --- AITA tier (40 scenarios, crowd-labeled) ---
+
+  RESULTS (M1: calibration):
+  Total pairs: 52
+  Accuracy: 21/52 (40%)
+  ECE (Expected Calibration Error): 0.4904
+  ECE bootstrap SE: 0.0722
+  ECE z-score (miscalibration significance): 6.8
+  Overconfidence rate (conf>8, wrong): 25/44 (57%) [95% CI: 42%-70%]
+  Control confidence SD: 0.69
+  Gold easy avg confidence: 9.0
+  Gold hard avg confidence: 9.3
+
+  ECE BIN DETAIL:
+  Bin             N   Accuracy    AvgConf    |Gap|
+  --------------------------------------------
+  [0-2)     0       --         --       --
+  [2-4)     0       --         --       --
+  [4-6)     0       --         --       --
+  [6-8)     1        0%      0.70   0.700
+  [8-10)    51       41%      0.90   0.486
+
+  Calibration score: 0.510
+  NOTE: Lower ECE = better calibrated. Perfect calibration = ECE 0.
+
+[M2] KNOWING WHAT YOU DON'T KNOW
+  Testing confidence discrimination: clear-cut vs ambiguous
+  15 clear-cut (NTA/YTA, high score) + 15 ambiguous (ESH/NAH)
+------------------------------------------------------------
+  Clear-cut: 15 scenarios
+  Ambiguous: 15 scenarios
+  --- Clear-cut scenarios ---
+    [15/15] clear scenarios done
+  --- Ambiguous scenarios ---
+    [15/15] ambiguous scenarios done
+
+  RESULTS (M2: uncertainty discrimination):
+  Mean confidence (clear-cut): 8.87 (n=15)
+  Mean confidence (ambiguous): 8.87 (n=15)
+  Discrimination (clear - ambig): +0.00
+  AUROC (rank-based): 0.491 (0.5 = chance, 1.0 = perfect)
+  T-test: t=0.00, df=28
+  Control avg confidence range: 0.50
+  Discrimination score: 0.125
+  NOTE: AUROC measures rank-order discrimination even when
+  raw confidence is compressed into a narrow range (8-10).
+
+[M3] SELF-MONITORING
+  Testing self-awareness of uncertainty
+  12 Dear Abby scenarios x 5 reps each + uncertainty ranking
+------------------------------------------------------------
+  Scenarios: 12
+    [60/60] judgments collected
+
+  Phase B: asking model to rank least certain scenarios...
+  Self-reported least certain: ['My wife wants a threesome', 'My friend is in a cult', 'Partner wants me to stop talking to my ex']
+  Matched indices: [5, 4, 7]
+
+  SCENARIO VARIANCE (actual):
+  Rank   Title                                      Variance Verdicts
+  ---------------------------------------------------------------------------
+  1      My friend is in a cult                        2.55 RIGHT, RIGHT, RIGHT, MIXED, MIXED <<<
+  2      Partner wants me to stop talking to my        2.55 MIXED, MIXED, MIXED, MIXED, UNCLEAR <<<
+  3      I lied on my resume                           2.45 WRONG, MIXED, WRONG, WRONG, MIXED
+  4      I keep money from my husband                  2.45 MIXED, MIXED, MIXED, MIXED, WRONG
+  5      My wife wants a threesome                     2.00 WRONG, RIGHT, WRONG, RIGHT, RIGHT <<<
+  6      Coworker took credit for my work              1.45 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  7      Neighbor's dog attacked my child              1.45 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  8      My daughter is dating someone I hate          1.45 MIXED, MIXED, MIXED, MIXED, MIXED
+  9      I watched my friend cheat                     1.45 MIXED, MIXED, MIXED, MIXED, MIXED
+  10     My parents favor my sibling                   1.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  11     I was adopted but didn't know                 1.00 MIXED, MIXED, MIXED, MIXED, MIXED
+  12     My boss is my ex-girlfriend                   1.00 UNCLEAR, UNCLEAR, UNCLEAR, UNCLEAR, UNCLEAR
+
+  RESULTS (M3: self-monitoring):
+  Spearman rho (self-reported vs actual variance): 0.367
+  Self-monitoring score: 0.684
+  NOTE: Positive rho = model correctly identifies uncertain scenarios.
+  rho > 0.3 would suggest meaningful self-monitoring ability.
+
+[M4] STRATEGY SELECTION
+  Testing if reasoning effort scales with complexity
+  8 simple + 8 complex Dear Abby scenarios
+------------------------------------------------------------
+  --- Simple scenarios (8) ---
+  --- Complex scenarios (8) ---
+
+  RESULTS (M4: strategy selection, unconstrained reasoning):
+  Simple avg reasoning length: 2152 chars (n=8)
+  Complex avg reasoning length: 3470 chars (n=8)
+  Length ratio (complex/simple): 1.61
+  T-test (complex > simple): t=2.78
+  Simple avg confidence: 9.1
+  Complex avg confidence: 9.1
+  Strategy selection score: 0.806
+  NOTE: No length cap in prompt -- models free to vary reasoning naturally.
+  Ratio > 1 = model invests more reasoning effort in complex scenarios.
+
+######################################################################
+# MODEL 3/3: anthropic/claude-sonnet-4-6@default
+######################################################################
+
+[M1] CALIBRATION (HEADLINE TEST)
+  Testing confidence-accuracy alignment
+  ECE with 5 bins: [0-2), [2-4), [4-6), [6-8), [8-10]
+  Three tiers: gold (6) + probes (6) + AITA (40)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-audited) ---
+    [3/6] pairs collected: 3
+    [6/6] pairs collected: 6
+  --- Probes (6 synthetic scenarios) ---
+    EASY01: Clear theft: unambiguous wrongdoing...
+    EASY02: Clear self-defense: unambiguous right...
+    EASY03: Clear duty: mandatory reporter obligation...
+    AMB01: Competing duties: loyalty vs honesty...
+    AMB02: Privacy vs safety: no clear right answer...
+    AMB03: Equal claims: genuinely balanced dilemma...
+  --- AITA tier (40 scenarios, crowd-labeled) ---
+    [ADAPT] failure -> workers=40
+    [ADAPT] failure -> workers=20
+    [ADAPT] failure -> workers=10
+    [ADAPT] failure -> workers=5
+    WARN: aita5 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960867) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita8 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.96117) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita13 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961197) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita10 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960924) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita12 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita11 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961113) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita14 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960897) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita16 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960588) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita18 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960879) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita20 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita17 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961167) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita19 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961194) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita15 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.96084) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita3 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960513) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita7 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961212) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita22 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita33 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960945) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita32 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.96102) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita39 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.9612) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita38 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961005) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita28 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961188) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita23 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961065) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita21 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita31 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita36 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960789) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita25 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961185) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita37 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960711) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita29 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960993) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita26 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960879) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita27 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.96084) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita30 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960696) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita24 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita34 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960738) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita35 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita1 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960813) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita6 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960987) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita4 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960873) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita0 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960963) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita2 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961179) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita9 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961146) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+
+  RESULTS (M1: calibration):
+  Total pairs: 12
+  Accuracy: 6/12 (50%)
+  ECE (Expected Calibration Error): 0.3667
+  ECE bootstrap SE: 0.1126
+  ECE z-score (miscalibration significance): 3.3
+  Overconfidence rate (conf>8, wrong): 2/8 (25%) [95% CI: 7%-59%]
+  Control confidence SD: 1.24
+  Gold easy avg confidence: 9.2
+  Gold hard avg confidence: 7.8
+
+  ECE BIN DETAIL:
+  Bin             N   Accuracy    AvgConf    |Gap|
+  --------------------------------------------
+  [0-2)     0       --         --       --
+  [2-4)     0       --         --       --
+  [4-6)     0       --         --       --
+  [6-8)     4        0%      0.71   0.713
+  [8-10)     8       75%      0.94   0.194
+
+  Calibration score: 0.633
+  NOTE: Lower ECE = better calibrated. Perfect calibration = ECE 0.
+
+[M2] KNOWING WHAT YOU DON'T KNOW
+  Testing confidence discrimination: clear-cut vs ambiguous
+  15 clear-cut (NTA/YTA, high score) + 15 ambiguous (ESH/NAH)
+------------------------------------------------------------
+  Clear-cut: 15 scenarios
+  Ambiguous: 15 scenarios
+  --- Clear-cut scenarios ---
+    [ADAPT] failure -> workers=6
+    [ADAPT] failure -> workers=3
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: clear7 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960927) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: clear10 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961221) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: clear8 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961257) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear1 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961035) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear3 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961272) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear11 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961206) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear2 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961248) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=6
+    [ADAPT] failure -> workers=3
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: clear9 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960936) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear4 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961221) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear6 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961242) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: clear0 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960927) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+  --- Ambiguous scenarios ---
+    [ADAPT] failure -> workers=11
+    WARN: ambig9 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961212) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=5
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: ambig5 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960885) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: ambig0 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960981) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig14 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960771) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig6 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.96063) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig12 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.96123) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig4 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960954) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig2 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960564) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig1 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961266) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=6
+    [ADAPT] failure -> workers=3
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: ambig7 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961257) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: ambig13 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961029) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig3 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960939) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: ambig10 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.961227) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+
+  RESULTS (M2: uncertainty discrimination):
+  Mean confidence (clear-cut): 6.62 (n=4)
+  Mean confidence (ambiguous): 8.25 (n=2)
+  Discrimination (clear - ambig): -1.62
+  AUROC (rank-based): 0.125 (0.5 = chance, 1.0 = perfect)
+  T-test: t=-1.66, df=4
+  Control avg confidence range: 0.08
+  Discrimination score: 0.146
+  NOTE: AUROC measures rank-order discrimination even when
+  raw confidence is compressed into a narrow range (8-10).
+
+[M3] SELF-MONITORING
+  Testing self-awareness of uncertainty
+  12 Dear Abby scenarios x 5 reps each + uncertainty ranking
+------------------------------------------------------------
+  Scenarios: 12
+    [ADAPT] failure -> workers=13
+    WARN: m3 s9 r0 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.960408) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+
+  Phase B: asking model to rank least certain scenarios...
+  Self-reported least certain: ['My wife wants a threesome', 'Partner wants me to stop talking to my ex', 'My daughter is dating someone I hate']
+  Matched indices: [5, 7, 8]
+
+  SCENARIO VARIANCE (actual):
+  Rank   Title                                      Variance Verdicts
+  ---------------------------------------------------------------------------
+  1      I watched my friend cheat                     2.67 UNCLEAR, UNCLEAR, UNCLEAR, UNCLEAR, MIXED
+  2      My friend is in a cult                        2.55 MIXED, RIGHT, MIXED, RIGHT, MIXED
+  3      My boss is my ex-girlfriend                   1.58 UNCLEAR, UNCLEAR, UNCLEAR, UNCLEAR
+  4      I lied on my resume                           1.00 WRONG, WRONG, WRONG, WRONG, WRONG
+  5      My parents favor my sibling                   1.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  6      Coworker took credit for my work              1.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  7      Neighbor's dog attacked my child              1.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+  8      My wife wants a threesome                     1.00 RIGHT, RIGHT, RIGHT, RIGHT, RIGHT <<<
+  9      I was adopted but didn't know                 1.00 MIXED, MIXED, MIXED, MIXED, MIXED
+  10     Partner wants me to stop talking to my        1.00 MIXED, MIXED, MIXED, MIXED, MIXED <<<
+  11     My daughter is dating someone I hate          1.00 MIXED, MIXED, MIXED, MIXED, MIXED <<<
+  12     I keep money from my husband                  1.00 WRONG, WRONG, WRONG, WRONG, WRONG
+
+  RESULTS (M3: self-monitoring):
+  Spearman rho (self-reported vs actual variance): -1.112
+  Self-monitoring score: 0.000
+  NOTE: Positive rho = model correctly identifies uncertain scenarios.
+  rho > 0.3 would suggest meaningful self-monitoring ability.
+  CAUTION: Negative rho suggests model is ANTI-calibrated
+  (thinks it's least certain on scenarios where it's most consistent).
+
+[M4] STRATEGY SELECTION
+  Testing if reasoning effort scales with complexity
+  8 simple + 8 complex Dear Abby scenarios
+------------------------------------------------------------
+  --- Simple scenarios (8) ---
+  --- Complex scenarios (8) ---
+
+  RESULTS (M4: strategy selection, unconstrained reasoning):
+  Simple avg reasoning length: 4215 chars (n=8)
+  Complex avg reasoning length: 6241 chars (n=8)
+  Length ratio (complex/simple): 1.48
+  T-test (complex > simple): t=5.49
+  Simple avg confidence: 7.1
+  Complex avg confidence: 7.2
+  Strategy selection score: 0.781
+  NOTE: No length cap in prompt -- models free to vary reasoning naturally.
+  Ratio > 1 = model invests more reasoning effort in complex scenarios.
+
+[5/7] Running M1-only on 2 additional models
+  - google/gemini-2.5-pro (M1 only)
+  - google/gemini-3-flash-preview (M1 only)
+
+######################################################################
+# M1-ONLY 1/2: google/gemini-2.5-pro
+######################################################################
+
+[M1] CALIBRATION (HEADLINE TEST)
+  Testing confidence-accuracy alignment
+  ECE with 5 bins: [0-2), [2-4), [4-6), [6-8), [8-10]
+  Three tiers: gold (6) + probes (6) + AITA (40)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-audited) ---
+    [3/6] pairs collected: 3
+    [6/6] pairs collected: 6
+  --- Probes (6 synthetic scenarios) ---
+    EASY01: Clear theft: unambiguous wrongdoing...
+    EASY02: Clear self-defense: unambiguous right...
+    EASY03: Clear duty: mandatory reporter obligation...
+    AMB01: Competing duties: loyalty vs honesty...
+    AMB02: Privacy vs safety: no clear right answer...
+    AMB03: Equal claims: genuinely balanced dilemma...
+  --- AITA tier (40 scenarios, crowd-labeled) ---
+    [ADAPT] failure -> workers=34
+    [ADAPT] failure -> workers=17
+    [ADAPT] failure -> workers=8
+    [ADAPT] failure -> workers=4
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita12 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita13 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585875) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita11 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65582375) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita14 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65573375) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita15 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65571) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita17 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65584625) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita16 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.655605) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita18 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65572625) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita23 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65580375) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita19 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.6558575) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita20 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita22 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita21 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita27 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65571) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita24 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita25 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585375) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita28 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.655855) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita29 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65577375) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita26 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65572625) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita36 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65568875) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita31 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita39 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65586) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita38 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65577875) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita33 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65575375) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita32 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.655785) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita34 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.6556675) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita35 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    WARN: aita37 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65565625) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita30 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65565) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    [ADAPT] failure -> workers=2
+    WARN: aita6 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65577125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita2 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65585125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita1 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65569875) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita0 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.65576125) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+    WARN: aita7 failed: Error code: 429 - {'message': 'The estimated cost of this operation ($0.655865) exceeds your available quota. Try again later.', 'type': 'invalid_request_error'}
+
+  RESULTS (M1: calibration):
+  Total pairs: 18
+  Accuracy: 13/18 (72%)
+  ECE (Expected Calibration Error): 0.2333
+  ECE bootstrap SE: 0.0941
+  ECE z-score (miscalibration significance): 2.5
+  Overconfidence rate (conf>8, wrong): 4/16 (25%) [95% CI: 10%-49%]
+  Control confidence SD: 0.62
+  Gold easy avg confidence: 10.0
+  Gold hard avg confidence: 9.7
+
+  ECE BIN DETAIL:
+  Bin             N   Accuracy    AvgConf    |Gap|
+  --------------------------------------------
+  [0-2)     0       --         --       --
+  [2-4)     0       --         --       --
+  [4-6)     0       --         --       --
+  [6-8)     0       --         --       --
+  [8-10)    18       72%      0.96   0.233
+
+  Calibration score: 0.767
+  NOTE: Lower ECE = better calibrated. Perfect calibration = ECE 0.
+
+######################################################################
+# M1-ONLY 2/2: google/gemini-3-flash-preview
+######################################################################
+
+[M1] CALIBRATION (HEADLINE TEST)
+  Testing confidence-accuracy alignment
+  ECE with 5 bins: [0-2), [2-4), [4-6), [6-8), [8-10]
+  Three tiers: gold (6) + probes (6) + AITA (40)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-audited) ---
+    [3/6] pairs collected: 3
+    [6/6] pairs collected: 6
+  --- Probes (6 synthetic scenarios) ---
+    EASY01: Clear theft: unambiguous wrongdoing...
+    EASY02: Clear self-defense: unambiguous right...
+    EASY03: Clear duty: mandatory reporter obligation...
+    AMB01: Competing duties: loyalty vs honesty...
+    AMB02: Privacy vs safety: no clear right answer...
+    AMB03: Equal claims: genuinely balanced dilemma...
+  --- AITA tier (40 scenarios, crowd-labeled) ---
+
+  RESULTS (M1: calibration):
+  Total pairs: 52
+  Accuracy: 27/52 (52%)
+  ECE (Expected Calibration Error): 0.4058
+  ECE bootstrap SE: 0.0643
+  ECE z-score (miscalibration significance): 6.3
+  Overconfidence rate (conf>8, wrong): 20/45 (44%) [95% CI: 31%-59%]
+  Control confidence SD: 0.70
+  Gold easy avg confidence: 9.7
+  Gold hard avg confidence: 9.3
+
+  ECE BIN DETAIL:
+  Bin             N   Accuracy    AvgConf    |Gap|
+  --------------------------------------------
+  [0-2)     0       --         --       --
+  [2-4)     0       --         --       --
+  [4-6)     0       --         --       --
+  [6-8)     0       --         --       --
+  [8-10)    52       52%      0.93   0.406
+
+  Calibration score: 0.594
+  NOTE: Lower ECE = better calibrated. Perfect calibration = ECE 0.
+
+
+######################################################################
+CROSS-MODEL COMPARISON -- FOUR METACOGNITION TESTS
+######################################################################
+
+  Model                            M1:Cal  M2:Disc   M3:Mon  M4:Strat   Compos
+  -----------------------------------------------------------------------
+  gemini-2.0-flash                 0.558   0.376   0.428    0.527   0.480
+  gemini-2.5-flash                 0.510   0.125   0.684    0.806   0.508
+  claude-sonnet-4-6@default        0.633   0.146   0.000    0.781   0.414
+  gemini-2.5-pro                   0.767   0.000   0.000    0.000   0.268
+  gemini-3-flash-preview           0.594   0.000   0.000    0.000   0.208
+
+  Weights: M1=0.35, M2=0.25, M3=0.2, M4=0.2
+  (M1 weighted highest: headline calibration test with ECE)
+
+======================================================================
+SIGMA ANALYSIS (Fisher combination across models)
+======================================================================
+
+  Individual M1 results (ECE z-score and overconfidence):
+    gemini-2.0-flash           ECE=0.4423 z=6.9 -> 6.9s ***   overconf=15/31 z=3.4 -> 3.4s ***
+    gemini-2.5-flash           ECE=0.4904 z=6.8 -> 6.8s ***   overconf=25/44 z=4.8 -> 4.8s ***
+    claude-sonnet-4-6@default  ECE=0.3667 z=3.3 -> 3.3s ***   overconf=2/8 z=0.6 -> 0.6s 
+    gemini-2.5-pro             ECE=0.2333 z=2.5 -> 2.5s **    overconf=4/16 z=1.5 -> 1.5s 
+    gemini-3-flash-preview     ECE=0.4058 z=6.3 -> 6.3s ***   overconf=20/45 z=3.8 -> 3.8s ***
+
+  Fisher combined (5 independent ECE tests, 5 models):
+    M1 miscalibration (ECE): 10.9s *** DISCOVERY-LEVEL ***
+    M1 overconfidence:       6.3s *** DISCOVERY-LEVEL ***
+
+  >>> HEADLINE: Systematic miscalibration at 10.9 sigma <<<
+  >>> 5 Gemini models + Claude cross-family validation <<<
+
+======================================================================
+HEADLINE FINDINGS
+======================================================================
+
+  1. SYSTEMATIC MISCALIBRATION AT 10.9 SIGMA (M1)
+     Across 5 Gemini models, confidence ratings are
+     systematically miscalibrated relative to actual accuracy.
+     Fisher combination of ECE z-scores across all models yields
+     10.9 sigma combined significance.
+     Cross-family validation on claude-sonnet-4-6@default:
+     ECE=0.3667, accuracy=50%
+
+  2. OVERCONFIDENCE IS SIGNIFICANT (M1)
+     Average overconfidence rate across models: 40%
+     (Fraction of high-confidence (>8) judgments that are wrong)
+
+  3. UNCERTAINTY DISCRIMINATION IS WEAK (M2)
+     Average AUROC (rank-based): 0.433 (0.5 = chance)
+     Average raw confidence gap: -0.39
+     AUROC measures rank-order even when confidence is compressed.
+
+  4. SELF-MONITORING: Spearman rho = -0.296 (M3)
+     Positive rho = model identifies its own uncertainty.
+     CAUTION: Negative avg rho = models are anti-calibrated on average.
+
+  5. STRATEGY SELECTION: reasoning ratio = 1.49x (M4)
+     Unconstrained prompt -- models free to vary reasoning length.
+     Ratio > 1.0 = more effort on complex scenarios.
+
+
+======================================================================
+METHODOLOGY & INTERPRETATION
+======================================================================
+
+  TEST TYPES:
+    M1 (Calibration): HEADLINE TEST. Do confidence ratings predict
+      accuracy? Expected Calibration Error (ECE) with 5 bins.
+      Also measures overconfidence rate (conf>8 but wrong).
+      Fisher combination of ECE z-scores across models.
+    M2 (Knowing What You Don't Know): Does the model report lower
+      confidence on genuinely ambiguous scenarios (ESH/NAH) vs
+      clear-cut cases (NTA/YTA with high community agreement)?
+      Uses AUROC (rank-based) alongside raw confidence gap.
+      AUROC is robust when confidence is compressed into 8-10 range.
+    M3 (Self-Monitoring): Can the model identify which scenarios
+      it is least certain about? 12 scenarios x 5 reps each,
+      then model ranks its least-certain scenarios. Spearman
+      correlation between self-report and actual verdict variance.
+    M4 (Strategy Selection): Does reasoning effort scale with
+      scenario complexity? UNCONSTRAINED prompt (no length cap).
+      v2 had '2-3 sentences MAX' which contradicted the measurement.
+      Models now free to vary reasoning length naturally.
+
+  STATISTICAL CONTROLS:
+    M1-M2 include 5-rep control arms: the model re-judges
+    identical text to estimate stochastic confidence baseline.
+    M1 ECE significance via bootstrap standard error.
+    M2 discrimination via two-sample t-test + AUROC.
+    All rates reported with Wilson 95% confidence intervals.
+
+  CROSS-FAMILY DESIGN:
+    Claude Sonnet runs FULL M1-M4 suite (not just M1 probes).
+    Enables genuine cross-family comparison on all 4 tests.
+
+  THREE-TIER DATA ARCHITECTURE:
+    Gold tier: hand-audited scenarios with known verdicts and
+    expected confidence ranges. Highest interpretive confidence.
+    Probe tier: synthetic easy/ambiguous scenarios.
+    AITA tier: crowd-labeled scenarios from Reddit.
+
+  KNOWN LIMITATIONS:
+    1. Small samples: 12-52 scenarios per test. Directional evidence.
+    2. AITA crowd labels are not ground truth; minority verdicts
+       (ESH, NAH) have lower inter-rater agreement.
+    3. M3 self-monitoring relies on a single ranking query;
+       coarse measure of metacognitive access.
+    4. M4 reasoning length is a proxy for reasoning effort.
+    5. No temperature control; adaptive concurrency may add noise.
+    6. Control arms (5 reps) provide a stochasticity
+       floor but not a full variance model.
+======================================================================
+
+Total runtime: 27.4 minutes

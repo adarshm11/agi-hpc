@@ -1,0 +1,456 @@
+======================================================================
+ATTENTION BENCHMARK v2 (with controls)
+Four Tests of Attentional Cognition in Moral Judgment
+Based on Bond (2026), Attention Track
+Parallelism: 50 initial (adaptive 2-80)
+======================================================================
+
+DESIGN NOTES:
+  A1 = DISTRACTOR RESISTANCE test (vivid irrelevant detail, HEADLINE)
+  A2 = LENGTH ROBUSTNESS test (neutral filler padding)
+  A3 = SELECTIVE ATTENTION test (dimension relevance signal-to-noise)
+  A4 = DIVIDED ATTENTION test (single vs interleaved judgment)
+  All significance tests use empirical control arms (not null=0)
+  Distractor/padding generation by fixed model, judged by test model
+======================================================================
+
+[1/7] Loading Dear Abby scenarios (embedded)...
+  Loaded 25 Dear Abby scenarios
+
+  Gold set: 6 scenarios with hand-written distractor annotations
+  Probes: 6 distractor, 12 selective, 8 divided attention pairs
+
+
+[3/7] Phase 1: Pre-generating distractors/padding with google/gemini-2.0-flash
+
+[2/7] PRE-GENERATING DISTRACTORS & PADDING
+  Transformer model: google/gemini-2.0-flash
+  This model ONLY generates text. Test models ONLY judge.
+------------------------------------------------------------
+  Generating 30 items...
+  Done: 30 generated, 0 failed
+
+
+[4/7] Phase 2: Running 4 tests across 3 full models
+  - google/gemini-2.0-flash
+  - google/gemini-2.5-flash
+  - anthropic/claude-sonnet-4-6@default
+
+
+######################################################################
+# MODEL 1/3: google/gemini-2.0-flash
+######################################################################
+
+[A1] DISTRACTOR RESISTANCE (GRADED DOSE-RESPONSE)
+  Testing verdict stability: vivid vs mild vs neutral distractors
+  Three tiers: gold (6) + probes (6) + generated (9)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-written distractors) ---
+    [3/6] distract_flips=1/3
+    [6/6] distract_flips=1/6
+  --- Probes (6 trivial scenarios, hand-written distractors) ---
+    [DIST02] distract_flips=1/8
+    [DIST06] distract_flips=1/12
+  --- Generated tier (9 Dear Abby, vivid + mild distractors) ---
+    [5/9] vivid_flips=1/17 mild_flips=1/5
+
+  RESULTS (A1: distractor resistance, graded dose-response):
+  Vivid distractor flip: 1/21 (5%) [95% CI: 1%-23%]
+  Mild distractor flip: 1/9 (11%) [95% CI: 2%-44%]
+  Control verdict flip: 2/105 (2%) [95% CI: 1%-7%]
+  Vivid vs control: z=0.8 (not significant)
+  Mild vs control: z=1.7 (trending)
+  Recovery rate (vivid->warned): 0/1 (0%)
+  Severity shift: vivid MAD=4.71 ctrl MAD=1.84
+  Severity shift: mild MAD=3.11
+  Paired t (vivid vs ctrl): t=2.79
+  Paired t (warned vs ctrl): t=4.49
+  Dose-response (vivid > mild > ctrl): NO
+  Distractor resistance score: 0.596
+
+[A2] LENGTH ROBUSTNESS
+  Testing verdict stability across scenario lengths
+  6 scenarios x 3 lengths + controls
+------------------------------------------------------------
+    [3/6] total=3
+    [6/6] total=6
+
+  RESULTS (A2: length robustness):
+  Length       Harm MAD      Flips    z vs ctrl
+  ------------------------------------------
+  2x         6.00     1/6     z=2.3 (p<0.05, marginally significant)
+  4x         10.33     2/6     z=3.3 (p<0.003, significant)
+  Control: harm MAD=2.07, flip rate=0/30 (0%) [95% CI: 0%-11%]
+  Paired t (2x vs ctrl): t=3.38
+  Paired t (4x vs ctrl): t=2.55
+  Length robustness score: 0.705
+
+[A3] SELECTIVE ATTENTION
+  Testing signal-to-noise in moral dimension scoring
+  12 scenarios with labeled relevant dimensions
+------------------------------------------------------------
+    [4/12] avg SNR=1.57 hit_rate=0.83
+    [8/12] avg SNR=1.46 hit_rate=0.79
+    [12/12] avg SNR=1.43 hit_rate=0.75
+
+  RESULTS (A3: selective attention):
+  Average SNR (relevant/irrelevant): 1.43
+  Relevance hit rate: 0.75
+  Control consistency: 0.92
+  Selective attention score: 0.673
+  NOTE: SNR > 1 = relevant dims scored higher. SNR >> 2 = excellent.
+
+[A4] DIVIDED ATTENTION
+  Testing single vs interleaved scenario judgment
+  8 pairs
+------------------------------------------------------------
+    [4/8] interleaved_flips=2/8
+    [8/8] interleaved_flips=2/16
+
+  RESULTS (A4: divided attention):
+  Interleaved verdict flip: 2/16 (12%) [95% CI: 3%-36%]
+  Control verdict flip: 0/24 (0%) [95% CI: 0%-14%]
+  Interleaved vs control: z=1.8 (trending)
+  Harm shift: interleaved MAD=6.56 ctrl MAD=1.88
+  Divided attention score: 0.625
+  NOTE: High flip rate under interleaving = attention interference.
+
+######################################################################
+# MODEL 2/3: google/gemini-2.5-flash
+######################################################################
+
+[A1] DISTRACTOR RESISTANCE (GRADED DOSE-RESPONSE)
+  Testing verdict stability: vivid vs mild vs neutral distractors
+  Three tiers: gold (6) + probes (6) + generated (9)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-written distractors) ---
+    [3/6] distract_flips=2/3
+    [6/6] distract_flips=4/6
+  --- Probes (6 trivial scenarios, hand-written distractors) ---
+    [DIST02] distract_flips=5/8
+    [DIST06] distract_flips=7/12
+  --- Generated tier (9 Dear Abby, vivid + mild distractors) ---
+    [5/9] vivid_flips=9/17 mild_flips=0/5
+
+  RESULTS (A1: distractor resistance, graded dose-response):
+  Vivid distractor flip: 10/21 (48%) [95% CI: 28%-68%]
+  Mild distractor flip: 1/9 (11%) [95% CI: 2%-44%]
+  Control verdict flip: 22/105 (21%) [95% CI: 14%-30%]
+  Vivid vs control: z=2.6 (p<0.05, marginally significant)
+  Mild vs control: z=-0.7 (not significant)
+  Recovery rate (vivid->warned): 6/10 (60%)
+  Severity shift: vivid MAD=5.67 ctrl MAD=4.27
+  Severity shift: mild MAD=7.78
+  Paired t (vivid vs ctrl): t=0.73
+  Paired t (warned vs ctrl): t=3.18
+  Dose-response (vivid > mild > ctrl): NO
+  Distractor resistance score: 0.592
+
+[A2] LENGTH ROBUSTNESS
+  Testing verdict stability across scenario lengths
+  6 scenarios x 3 lengths + controls
+------------------------------------------------------------
+    [3/6] total=3
+    [6/6] total=6
+
+  RESULTS (A2: length robustness):
+  Length       Harm MAD      Flips    z vs ctrl
+  ------------------------------------------
+  2x         5.00     3/6     z=2.1 (p<0.05, marginally significant)
+  4x         8.67     1/6     z=0.2 (not significant)
+  Control: harm MAD=3.47, flip rate=4/30 (13%) [95% CI: 5%-30%]
+  Paired t (2x vs ctrl): t=0.55
+  Paired t (4x vs ctrl): t=1.61
+  Length robustness score: 0.752
+
+[A3] SELECTIVE ATTENTION
+  Testing signal-to-noise in moral dimension scoring
+  12 scenarios with labeled relevant dimensions
+------------------------------------------------------------
+    [4/12] avg SNR=1.24 hit_rate=0.83
+    [8/12] avg SNR=1.21 hit_rate=0.79
+    [12/12] avg SNR=1.23 hit_rate=0.78
+
+  RESULTS (A3: selective attention):
+  Average SNR (relevant/irrelevant): 1.23
+  Relevance hit rate: 0.78
+  Control consistency: 0.90
+  Selective attention score: 0.656
+  NOTE: SNR > 1 = relevant dims scored higher. SNR >> 2 = excellent.
+
+[A4] DIVIDED ATTENTION
+  Testing single vs interleaved scenario judgment
+  8 pairs
+------------------------------------------------------------
+    [4/8] interleaved_flips=0/8
+    [8/8] interleaved_flips=1/16
+
+  RESULTS (A4: divided attention):
+  Interleaved verdict flip: 1/16 (6%) [95% CI: 1%-28%]
+  Control verdict flip: 0/24 (0%) [95% CI: 0%-14%]
+  Interleaved vs control: z=1.2 (not significant)
+  Harm shift: interleaved MAD=2.50 ctrl MAD=2.88
+  Divided attention score: 0.812
+  NOTE: High flip rate under interleaving = attention interference.
+
+######################################################################
+# MODEL 3/3: anthropic/claude-sonnet-4-6@default
+######################################################################
+
+[A1] DISTRACTOR RESISTANCE (GRADED DOSE-RESPONSE)
+  Testing verdict stability: vivid vs mild vs neutral distractors
+  Three tiers: gold (6) + probes (6) + generated (9)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-written distractors) ---
+    [3/6] distract_flips=1/3
+    [6/6] distract_flips=2/6
+  --- Probes (6 trivial scenarios, hand-written distractors) ---
+    [DIST02] distract_flips=2/8
+    [DIST06] distract_flips=3/12
+  --- Generated tier (9 Dear Abby, vivid + mild distractors) ---
+    [5/9] vivid_flips=5/17 mild_flips=1/5
+
+  RESULTS (A1: distractor resistance, graded dose-response):
+  Vivid distractor flip: 6/21 (29%) [95% CI: 14%-50%]
+  Mild distractor flip: 2/9 (22%) [95% CI: 6%-55%]
+  Control verdict flip: 11/105 (10%) [95% CI: 6%-18%]
+  Vivid vs control: z=2.2 (p<0.05, marginally significant)
+  Mild vs control: z=1.1 (not significant)
+  Recovery rate (vivid->warned): 1/6 (17%)
+  Severity shift: vivid MAD=3.71 ctrl MAD=2.08
+  Severity shift: mild MAD=6.22
+  Paired t (vivid vs ctrl): t=1.02
+  Paired t (warned vs ctrl): t=2.07
+  Dose-response (vivid > mild > ctrl): YES
+  Distractor resistance score: 0.642
+
+[A2] LENGTH ROBUSTNESS
+  Testing verdict stability across scenario lengths
+  6 scenarios x 3 lengths + controls
+------------------------------------------------------------
+    [3/6] total=3
+    [6/6] total=6
+
+  RESULTS (A2: length robustness):
+  Length       Harm MAD      Flips    z vs ctrl
+  ------------------------------------------
+  2x         6.00     4/6     z=2.6 (p<0.05, marginally significant)
+  4x         2.17     3/6     z=1.8 (trending)
+  Control: harm MAD=0.97, flip rate=5/30 (17%) [95% CI: 7%-34%]
+  Paired t (2x vs ctrl): t=1.84
+  Paired t (4x vs ctrl): t=0.92
+  Length robustness score: 0.829
+
+[A3] SELECTIVE ATTENTION
+  Testing signal-to-noise in moral dimension scoring
+  12 scenarios with labeled relevant dimensions
+------------------------------------------------------------
+    [4/12] avg SNR=1.37 hit_rate=0.83
+    [8/12] avg SNR=1.29 hit_rate=0.79
+    [12/12] avg SNR=1.31 hit_rate=0.81
+
+  RESULTS (A3: selective attention):
+  Average SNR (relevant/irrelevant): 1.31
+  Relevance hit rate: 0.81
+  Control consistency: 0.98
+  Selective attention score: 0.692
+  NOTE: SNR > 1 = relevant dims scored higher. SNR >> 2 = excellent.
+
+[A4] DIVIDED ATTENTION
+  Testing single vs interleaved scenario judgment
+  8 pairs
+------------------------------------------------------------
+    [4/8] interleaved_flips=2/8
+    [8/8] interleaved_flips=2/16
+
+  RESULTS (A4: divided attention):
+  Interleaved verdict flip: 2/16 (12%) [95% CI: 3%-36%]
+  Control verdict flip: 0/24 (0%) [95% CI: 0%-14%]
+  Interleaved vs control: z=1.8 (trending)
+  Harm shift: interleaved MAD=3.69 ctrl MAD=0.88
+  Divided attention score: 0.625
+  NOTE: High flip rate under interleaving = attention interference.
+
+[5/7] Running A1-only on 2 additional models
+  - google/gemini-2.5-pro (A1 only)
+  - google/gemini-3-flash-preview (A1 only)
+
+######################################################################
+# A1-ONLY 1/2: google/gemini-2.5-pro
+######################################################################
+
+[A1] DISTRACTOR RESISTANCE (GRADED DOSE-RESPONSE)
+  Testing verdict stability: vivid vs mild vs neutral distractors
+  Three tiers: gold (6) + probes (6) + generated (9)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-written distractors) ---
+    [3/6] distract_flips=1/3
+    [6/6] distract_flips=3/6
+  --- Probes (6 trivial scenarios, hand-written distractors) ---
+    [DIST02] distract_flips=4/8
+    [DIST06] distract_flips=4/12
+  --- Generated tier (9 Dear Abby, vivid + mild distractors) ---
+    [5/9] vivid_flips=5/17 mild_flips=0/5
+
+  RESULTS (A1: distractor resistance, graded dose-response):
+  Vivid distractor flip: 6/21 (29%) [95% CI: 14%-50%]
+  Mild distractor flip: 1/9 (11%) [95% CI: 2%-44%]
+  Control verdict flip: 12/105 (11%) [95% CI: 7%-19%]
+  Vivid vs control: z=2.0 (p<0.05, marginally significant)
+  Mild vs control: z=-0.0 (not significant)
+  Recovery rate (vivid->warned): 2/6 (33%)
+  Severity shift: vivid MAD=8.62 ctrl MAD=3.81
+  Severity shift: mild MAD=2.67
+  Paired t (vivid vs ctrl): t=1.85
+  Paired t (warned vs ctrl): t=1.98
+  Dose-response (vivid > mild > ctrl): NO
+  Distractor resistance score: 0.580
+
+######################################################################
+# A1-ONLY 2/2: google/gemini-3-flash-preview
+######################################################################
+
+[A1] DISTRACTOR RESISTANCE (GRADED DOSE-RESPONSE)
+  Testing verdict stability: vivid vs mild vs neutral distractors
+  Three tiers: gold (6) + probes (6) + generated (9)
+------------------------------------------------------------
+  --- Gold tier (6 scenarios, hand-written distractors) ---
+    [3/6] distract_flips=0/3
+    [6/6] distract_flips=1/6
+  --- Probes (6 trivial scenarios, hand-written distractors) ---
+    [DIST02] distract_flips=1/8
+    [DIST06] distract_flips=1/12
+  --- Generated tier (9 Dear Abby, vivid + mild distractors) ---
+    [5/9] vivid_flips=1/17 mild_flips=0/5
+
+  RESULTS (A1: distractor resistance, graded dose-response):
+  Vivid distractor flip: 3/21 (14%) [95% CI: 5%-35%]
+  Mild distractor flip: 0/9 (0%) [95% CI: 0%-30%]
+  Control verdict flip: 9/105 (9%) [95% CI: 5%-15%]
+  Vivid vs control: z=0.8 (not significant)
+  Mild vs control: z=-0.9 (not significant)
+  Recovery rate (vivid->warned): 1/3 (33%)
+  Severity shift: vivid MAD=5.90 ctrl MAD=5.32
+  Severity shift: mild MAD=4.33
+  Paired t (vivid vs ctrl): t=0.70
+  Paired t (warned vs ctrl): t=1.77
+  Dose-response (vivid > mild > ctrl): NO
+  Distractor resistance score: 0.658
+
+
+######################################################################
+CROSS-MODEL COMPARISON -- FOUR ATTENTION TESTS
+######################################################################
+
+  Model                           A1:Dist   A2:Len   A3:Sel   A4:Div   Compos
+  ----------------------------------------------------------------------
+  gemini-2.0-flash                 0.596   0.705   0.673   0.625   0.643
+  gemini-2.5-flash                 0.592   0.752   0.656   0.812   0.684
+  claude-sonnet-4-6@default        0.642   0.829   0.692   0.625   0.689
+  gemini-2.5-pro                   0.580   0.000   0.000   0.000   0.203
+  gemini-3-flash-preview           0.658   0.000   0.000   0.000   0.230
+
+  Weights: A1=0.35, A2=0.2, A3=0.25, A4=0.2
+  (A1 weighted highest: headline test with strongest expected signal)
+
+======================================================================
+SIGMA ANALYSIS (Fisher combination across models)
+======================================================================
+
+  Individual A1 results (paired t -> sigma, df=20):
+    gemini-2.0-flash           distract t=+2.79 -> 2.5s **    warned t=+4.49 -> 3.7s ***
+    gemini-2.5-flash           distract t=+0.73 -> 0.7s       warned t=+3.18 -> 2.8s **
+    claude-sonnet-4-6@default  distract t=+1.02 -> 1.0s       warned t=+2.07 -> 1.9s *
+    gemini-2.5-pro             distract t=+1.85 -> 1.8s *     warned t=+1.98 -> 1.9s *
+    gemini-3-flash-preview     distract t=+0.70 -> 0.7s       warned t=+1.77 -> 1.7s *
+
+  Fisher combined (5 independent distractor tests, 5 models):
+    A1 distractor ALL:  2.7s 
+
+
+======================================================================
+HEADLINE FINDINGS
+======================================================================
+
+  1. VIVID DISTRACTORS SHIFT JUDGMENT AT 2.7 SIGMA (A1)
+     Across 5 models (Gemini + Claude), vivid sensory distractors
+     shifted severity ratings and flipped verdicts beyond stochastic control.
+     Fisher combination yields 2.7 sigma.
+     Claude (full suite) vivid flip rate: 29%
+
+  2. DOSE-RESPONSE: VIVID > MILD > CONTROL (A1)
+     Models with correct grading: claude-sonnet-4-6@de
+     Graded distractor resistance tests whether models are proportionally
+     sensitive to distractor intensity, not just binary flip/no-flip.
+
+  3. MODELS SHOW LIMITED ABILITY TO RECOVER VIA WARNING INSTRUCTION
+     Average recovery rate across models: 29%
+     When vivid distractor flips verdict, explicit warning instruction
+     restores the neutral verdict 29% of the time.
+
+  4. LENGTH ROBUSTNESS IS MODERATELY ROBUST (A2)
+     Average length robustness score: 0.762
+     Neutral filler padding (2x, 4x) tested for verdict drift.
+
+  5. SELECTIVE ATTENTION SNR: 1.32 (A3)
+     Average selective attention score: 0.674
+     Signal-to-noise in relevant vs irrelevant dimension scoring.
+
+  6. DIVIDED ATTENTION STABILITY: 0.688 (A4)
+     Verdict stability when judging two scenarios interleaved
+     vs individually. Lower = more interference from dual-task.
+
+
+======================================================================
+METHODOLOGY & INTERPRETATION
+======================================================================
+
+  TEST TYPES:
+    A1 (Distractor Resistance): HEADLINE TEST. Does vivid but morally
+      irrelevant sensory detail (weather, food, clothing) shift severity
+      ratings or flip verdicts beyond stochastic baseline?
+      GRADED: Tests both VIVID (dramatic sensory) and MILD (mundane)
+      distractors. Dose-response: good models show vivid > mild > control.
+      Recovery via explicit warning ('ignore irrelevant details').
+    A2 (Length Robustness): Does neutral filler (dates, locations, mundane
+      logistics) at 2x and 4x length change moral judgment?
+    A3 (Selective Attention): Do declared-relevant moral dimensions
+      receive higher scores than irrelevant dimensions? Signal-to-noise
+      ratio on 7-dimension scoring with hand-labeled relevance ground truth.
+    A4 (Divided Attention): Does judging two scenarios in a single prompt
+      change verdicts compared to judging them individually?
+      Scoring relative to control (not just raw flip rate).
+
+  STATISTICAL CONTROLS:
+    A1-A4 include 5-rep control arms: the model re-judges
+    identical text to estimate stochastic baseline flip rate.
+    Significance via two-proportion z-test (A1 verdict, A2, A4) or
+    paired t-test (A1 severity) AGAINST the control, not against zero.
+    All rates reported with Wilson 95% confidence intervals.
+
+  SEPARATION OF CONCERNS:
+    A1 distractor and A2 padding text is generated by a FIXED model
+    (google/gemini-2.0-flash). Models under test ONLY judge the
+    pre-generated text. This eliminates the self-confirming loop.
+
+  CROSS-FAMILY DESIGN:
+    Claude Sonnet runs FULL A1-A4 suite (not just A1 probes).
+    Enables genuine cross-family comparison on all 4 tests.
+
+  THREE-TIER DATA ARCHITECTURE:
+    Gold tier: hand-audited scenarios with human-written distractors.
+    Probe tier: synthetic scenarios engineered for maximum control.
+    Generated tier: Dear Abby scenarios with LLM-generated transforms.
+
+  KNOWN LIMITATIONS:
+    1. Small samples: 6-21 scenarios per test. Directional evidence.
+    2. Distractor text generation quality varies.
+    3. A4 interleaved parsing relies on structured output format.
+    4. No temperature control; adaptive concurrency may add noise.
+    5. Control arms (5 reps) provide a stochasticity
+       floor but not a full variance model.
+    6. Mild distractors only available for generated tier (9 scenarios).
+       Gold and probe tiers only have vivid distractors.
+======================================================================
+
+Total runtime: 28.6 minutes

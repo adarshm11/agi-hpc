@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESCC — Expedient Subterranean Command and Control | DARPA Concept Proposal</title>
+<style>
+  :root {
+    --navy: #1a2332;
+    --dark-blue: #2c3e50;
+    --accent: #3498db;
+    --accent-dark: #2980b9;
+    --gold: #d4a843;
+    --light-gray: #f4f6f8;
+    --text: #2c3e50;
+    --soil-light: #c4a265;
+    --soil-mid: #a0845c;
+    --soil-dark: #7a6244;
+    --rock: #8a8a7a;
+    --concrete: #b0b0b0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text);
+    line-height: 1.6;
+    background: #fff;
+  }
+
+  /* Cover page */
+  .cover {
+    min-height: 100vh;
+    background: linear-gradient(135deg, var(--navy) 0%, var(--dark-blue) 60%, #1a3a4a 100%);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 40px,
+      rgba(255,255,255,0.02) 40px,
+      rgba(255,255,255,0.02) 41px
+    );
+  }
+
+  .cover-badge {
+    border: 2px solid var(--gold);
+    padding: 0.5rem 2rem;
+    font-size: 0.85rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 2rem;
+    position: relative;
+  }
+
+  .cover h1 {
+    font-size: 3.5rem;
+    font-weight: 300;
+    letter-spacing: 2px;
+    margin-bottom: 0.5rem;
+    position: relative;
+  }
+
+  .cover h1 strong {
+    font-weight: 700;
+    color: var(--gold);
+  }
+
+  .cover .subtitle {
+    font-size: 1.3rem;
+    font-weight: 300;
+    opacity: 0.85;
+    margin-bottom: 3rem;
+    position: relative;
+  }
+
+  .cover-meta {
+    position: relative;
+    font-size: 0.95rem;
+    opacity: 0.75;
+    line-height: 2;
+  }
+
+  .cover-classification {
+    position: absolute;
+    bottom: 2rem;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    opacity: 0.5;
+  }
+
+  /* Main content */
+  .content {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+  }
+
+  h2 {
+    font-size: 1.8rem;
+    color: var(--navy);
+    border-bottom: 3px solid var(--gold);
+    padding-bottom: 0.5rem;
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  h2:first-child { margin-top: 0; }
+
+  h3 {
+    font-size: 1.25rem;
+    color: var(--dark-blue);
+    margin: 2rem 0 1rem 0;
+  }
+
+  h4 {
+    font-size: 1.05rem;
+    color: var(--accent-dark);
+    margin: 1.5rem 0 0.75rem 0;
+  }
+
+  p { margin-bottom: 1rem; }
+
+  ul, ol {
+    margin: 0 0 1rem 1.5rem;
+  }
+
+  li { margin-bottom: 0.4rem; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--navy);
+    color: white;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+  }
+
+  td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  tr:nth-child(even) td {
+    background: var(--light-gray);
+  }
+
+  .callout {
+    background: linear-gradient(135deg, #eef5ff 0%, #f0f7ff 100%);
+    border-left: 4px solid var(--accent);
+    padding: 1.25rem 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+
+  .callout-warn {
+    background: linear-gradient(135deg, #fff8ee 0%, #fffaf0 100%);
+    border-left-color: var(--gold);
+  }
+
+  .callout strong {
+    color: var(--navy);
+  }
+
+  /* Figures */
+  .figure {
+    margin: 2.5rem 0;
+    text-align: center;
+  }
+
+  .figure svg {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: white;
+  }
+
+  .figure-caption {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 0.75rem;
+    font-style: italic;
+  }
+
+  .figure-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Phase timeline */
+  .timeline {
+    position: relative;
+    padding-left: 2rem;
+    margin: 1.5rem 0;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+
+  .timeline-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+    padding-left: 1rem;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -1.75rem;
+    top: 0.4rem;
+    width: 12px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .timeline-item h4 {
+    margin-top: 0;
+    color: var(--accent-dark);
+  }
+
+  /* Risk matrix colors */
+  .risk-high { color: #c0392b; font-weight: 600; }
+  .risk-med { color: #d4a843; font-weight: 600; }
+  .risk-low { color: #27ae60; font-weight: 600; }
+
+  /* Exchange ratio box */
+  .exchange-box {
+    background: var(--navy);
+    color: white;
+    padding: 1.5rem 2rem;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    text-align: center;
+  }
+
+  .exchange-box .big-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--gold);
+  }
+
+  .exchange-box .label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+  }
+
+  /* Page break helper for printing */
+  .page-break {
+    page-break-before: always;
+    margin-top: 3rem;
+  }
+
+  @media print {
+    .cover { min-height: 100vh; }
+    .page-break { page-break-before: always; }
+    body { font-size: 11pt; }
+  }
+
+  @media (max-width: 768px) {
+    .cover h1 { font-size: 2.2rem; }
+    .content { padding: 1.5rem 1rem; }
+    h2 { font-size: 1.4rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============== COVER PAGE ============== -->
+<div class="cover">
+  <div class="cover-badge">DARPA Concept Proposal</div>
+  <h1><strong>ESCC</strong></h1>
+  <h1 style="font-size:1.8rem; font-weight:300; margin-bottom:0.5rem;">Expedient Subterranean</h1>
+  <h1 style="font-size:1.8rem; font-weight:300;">Command &amp; Control</h1>
+  <p class="subtitle">Rapid-construction deep underground C2 for the drone-contested battlespace</p>
+  <div class="cover-meta">
+    <div>Principal Investigator: [Name], Sr. Member IEEE (since 1989)</div>
+    <div>San Jose State University &bull; Sonoma State University &bull; AT&amp;T Federal</div>
+    <div>March 2026</div>
+  </div>
+  <div class="cover-classification">DISTRIBUTION A: Approved for Public Release</div>
+</div>
+
+<!-- ============== CONTENT ============== -->
+<div class="content">
+
+<h2>1. The Problem: Surface C2 Is a Death Trap</h2>
+
+<p>The proliferation of low-cost autonomous aerial systems has fundamentally altered the survivability of military command and control infrastructure. In current conflicts, any concentration of vehicles, antennas, generators, or personnel is identified through persistent ISR and engaged with loitering munitions or FPV drones within minutes of detection.</p>
+
+<table>
+  <tr><th>Current Approach</th><th>Critical Limitation</th></tr>
+  <tr><td>Mobile C2 vehicles</td><td>Visible signatures; constant relocation disrupts planning; vulnerable during setup/teardown</td></tr>
+  <tr><td>Existing structures</td><td>Known locations; easily targetable; not positioned where operationally needed</td></tr>
+  <tr><td>Permanent deep bunkers</td><td>Fixed positions; $100M+; 2-5 year construction timelines</td></tr>
+  <tr><td>Dispersed/distributed C2</td><td>Degrades coordination; increases communications complexity and latency</td></tr>
+</table>
+
+<div class="callout callout-warn">
+  <strong>Capability Gap:</strong> There is no current capability to rapidly construct hardened, deep underground C2 facilities at operationally relevant timescales — days, not months or years.
+</div>
+
+<!-- ============== FIGURE 1: THE PROBLEM ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 1 — The Threat Environment</div>
+  <svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg">
+    <!-- Sky -->
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#87CEEB"/>
+        <stop offset="100%" stop-color="#d4e8f0"/>
+      </linearGradient>
+      <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#6d8a3e"/>
+        <stop offset="100%" stop-color="#4a6b2a"/>
+      </linearGradient>
+      <!-- Explosion -->
+      <radialGradient id="explosion" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ff6600" stop-opacity="0.9"/>
+        <stop offset="60%" stop-color="#ff3300" stop-opacity="0.5"/>
+        <stop offset="100%" stop-color="#ff0000" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <rect width="900" height="280" fill="url(#sky)"/>
+    <rect y="280" width="900" height="100" fill="url(#ground)"/>
+
+    <!-- C2 vehicles (targets) -->
+    <!-- Vehicle 1 - command truck -->
+    <rect x="180" y="255" width="80" height="35" rx="3" fill="#5a6b4a"/>
+    <rect x="190" y="245" width="60" height="15" rx="2" fill="#4a5a3a"/>
+    <!-- Antenna mast -->
+    <line x1="220" y1="245" x2="220" y2="190" stroke="#555" stroke-width="2"/>
+    <circle cx="220" cy="188" r="4" fill="#c0392b"/>
+    <!-- Antenna dishes -->
+    <line x1="220" y1="200" x2="210" y2="195" stroke="#555" stroke-width="1.5"/>
+    <line x1="220" y1="210" x2="230" y2="205" stroke="#555" stroke-width="1.5"/>
+
+    <!-- Vehicle 2 - generator -->
+    <rect x="290" y="262" width="50" height="28" rx="2" fill="#6a6a5a"/>
+    <text x="315" y="280" font-size="8" fill="white" text-anchor="middle">GEN</text>
+
+    <!-- Vehicle 3 -->
+    <rect x="360" y="258" width="70" height="32" rx="3" fill="#5a6b4a"/>
+    <rect x="370" y="250" width="50" height="12" rx="2" fill="#4a5a3a"/>
+
+    <!-- Tent -->
+    <polygon points="470,260 510,240 550,260" fill="#7a7a5a" stroke="#5a5a4a"/>
+    <rect x="475" y="260" width="70" height="30" fill="#7a7a5a" stroke="#5a5a4a"/>
+
+    <!-- Drones attacking -->
+    <!-- Drone 1 -->
+    <g transform="translate(250, 100)">
+      <rect x="-8" y="-3" width="16" height="6" rx="2" fill="#333"/>
+      <line x1="-18" y1="0" x2="-8" y2="0" stroke="#333" stroke-width="2"/>
+      <line x1="8" y1="0" x2="18" y2="0" stroke="#333" stroke-width="2"/>
+      <circle cx="-18" cy="0" r="4" fill="#333" opacity="0.3"/>
+      <circle cx="18" cy="0" r="4" fill="#333" opacity="0.3"/>
+      <text x="0" y="-10" font-size="9" fill="#c0392b" text-anchor="middle" font-weight="bold">FPV</text>
+    </g>
+    <!-- Attack line from drone -->
+    <line x1="250" y1="106" x2="225" y2="186" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+    <!-- Drone 2 - loitering munition -->
+    <g transform="translate(450, 70)">
+      <ellipse cx="0" cy="0" rx="12" ry="4" fill="#444"/>
+      <line x1="-20" y1="0" x2="20" y2="0" stroke="#444" stroke-width="1"/>
+      <polygon points="-5,-8 5,-8 0,-4" fill="#444"/>
+      <text x="0" y="-14" font-size="9" fill="#c0392b" text-anchor="middle" font-weight="bold">Loitering Munition</text>
+    </g>
+    <line x1="450" y1="74" x2="400" y2="248" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+    <!-- Drone 3 - ISR -->
+    <g transform="translate(650, 60)">
+      <rect x="-10" y="-4" width="20" height="8" rx="3" fill="#555"/>
+      <line x1="-22" y1="0" x2="-10" y2="0" stroke="#555" stroke-width="2"/>
+      <line x1="10" y1="0" x2="22" y2="0" stroke="#555" stroke-width="2"/>
+      <text x="0" y="-10" font-size="9" fill="#e67e22" text-anchor="middle" font-weight="bold">ISR UAS</text>
+    </g>
+    <!-- ISR cone -->
+    <polygon points="650,68 580,280 720,280" fill="#e67e22" opacity="0.08"/>
+    <line x1="650" y1="68" x2="580" y2="280" stroke="#e67e22" stroke-width="0.5" stroke-dasharray="4,4" opacity="0.4"/>
+    <line x1="650" y1="68" x2="720" y2="280" stroke="#e67e22" stroke-width="0.5" stroke-dasharray="4,4" opacity="0.4"/>
+
+    <!-- Explosion on vehicle -->
+    <circle cx="395" cy="250" r="30" fill="url(#explosion)"/>
+    <circle cx="395" cy="250" r="15" fill="#ffcc00" opacity="0.7"/>
+
+    <!-- Labels -->
+    <text x="310" y="320" font-size="12" fill="white" text-anchor="middle" font-weight="bold">CONVENTIONAL SURFACE C2</text>
+    <text x="310" y="338" font-size="10" fill="white" text-anchor="middle" opacity="0.8">Detected in minutes. Destroyed in minutes.</text>
+
+    <!-- Vulnerability callouts -->
+    <rect x="30" y="30" width="200" height="80" rx="6" fill="white" opacity="0.9" stroke="#c0392b"/>
+    <text x="130" y="52" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="bold">SURFACE VULNERABILITIES</text>
+    <text x="40" y="70" font-size="9" fill="#333">&#8226; Thermal signatures from vehicles/generators</text>
+    <text x="40" y="83" font-size="9" fill="#333">&#8226; RF emissions from antennas</text>
+    <text x="40" y="96" font-size="9" fill="#333">&#8226; Visual concentration of assets</text>
+  </svg>
+  <div class="figure-caption">Figure 1: Current surface C2 positions are rapidly detected by persistent ISR and engaged by low-cost autonomous munitions, creating an untenable survivability environment.</div>
+</div>
+
+
+<h2>2. Proposed Solution: ESCC System</h2>
+
+<p>ESCC (Expedient Subterranean Command and Control) is an integrated military engineering system that enables construction of a functional underground command post at 20–30m depth within 5–7 days, using a convoy of 5 military-deployable vehicles.</p>
+
+<p>The system employs a <strong>multi-shaft architecture</strong>: a primary 1m-diameter personnel shaft, a secondary egress shaft, and multiple small-diameter utility boreholes for ventilation, power, communications, and drainage — all feeding into a shotcrete-lined command chamber excavated laterally at depth.</p>
+
+<!-- ============== FIGURE 2: CROSS-SECTION ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 2 — Bunker Cross-Section (Side View)</div>
+  <svg viewBox="0 0 900 700" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="soil1" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#7cb342"/>
+        <stop offset="3%" stop-color="#8d6e3f"/>
+        <stop offset="20%" stop-color="#a0845c"/>
+        <stop offset="50%" stop-color="#8a7550"/>
+        <stop offset="80%" stop-color="#7a6244"/>
+        <stop offset="100%" stop-color="#6a5538"/>
+      </linearGradient>
+      <pattern id="soilPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+        <circle cx="3" cy="7" r="1" fill="#6a5538" opacity="0.3"/>
+        <circle cx="14" cy="3" r="0.8" fill="#6a5538" opacity="0.2"/>
+        <circle cx="8" cy="16" r="1.2" fill="#6a5538" opacity="0.25"/>
+        <circle cx="17" cy="12" r="0.6" fill="#6a5538" opacity="0.2"/>
+      </pattern>
+      <linearGradient id="shaft-wall" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#888"/>
+        <stop offset="50%" stop-color="#aaa"/>
+        <stop offset="100%" stop-color="#888"/>
+      </linearGradient>
+      <linearGradient id="chamber-wall" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#999"/>
+        <stop offset="100%" stop-color="#777"/>
+      </linearGradient>
+    </defs>
+
+    <!-- Sky -->
+    <rect width="900" height="100" fill="#c8dde8"/>
+
+    <!-- Ground surface -->
+    <rect x="0" y="100" width="900" height="600" fill="url(#soil1)"/>
+    <rect x="0" y="100" width="900" height="600" fill="url(#soilPattern)"/>
+
+    <!-- Grass line -->
+    <rect x="0" y="97" width="900" height="8" fill="#6d8a3e" rx="0"/>
+
+    <!-- Depth markers -->
+    <line x1="30" y1="100" x2="30" y2="650" stroke="white" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+    <text x="25" y="115" font-size="9" fill="white" text-anchor="end" opacity="0.8">0m</text>
+    <text x="25" y="210" font-size="9" fill="white" text-anchor="end" opacity="0.8">5m</text>
+    <text x="25" y="310" font-size="9" fill="white" text-anchor="end" opacity="0.8">10m</text>
+    <text x="25" y="410" font-size="9" fill="white" text-anchor="end" opacity="0.8">15m</text>
+    <text x="25" y="510" font-size="9" fill="white" text-anchor="end" opacity="0.8">20m</text>
+    <text x="25" y="610" font-size="9" fill="white" text-anchor="end" opacity="0.8">25m</text>
+    <line x1="35" y1="200" x2="45" y2="200" stroke="white" stroke-width="0.5" opacity="0.5"/>
+    <line x1="35" y1="300" x2="45" y2="300" stroke="white" stroke-width="0.5" opacity="0.5"/>
+    <line x1="35" y1="400" x2="45" y2="400" stroke="white" stroke-width="0.5" opacity="0.5"/>
+    <line x1="35" y1="500" x2="45" y2="500" stroke="white" stroke-width="0.5" opacity="0.5"/>
+    <line x1="35" y1="600" x2="45" y2="600" stroke="white" stroke-width="0.5" opacity="0.5"/>
+
+    <!-- ====== VENTILATION SHAFT (leftmost, 40cm) ====== -->
+    <rect x="170" y="100" width="12" height="430" fill="#555" opacity="0.6"/>
+    <rect x="172" y="100" width="8" height="430" fill="#444"/>
+    <!-- Vent cap on surface -->
+    <rect x="165" y="90" width="22" height="14" rx="2" fill="#5a6b5a"/>
+    <!-- Air flow arrows -->
+    <polygon points="176,160 180,170 172,170" fill="#87CEEB" opacity="0.6"/>
+    <polygon points="176,230 180,240 172,240" fill="#87CEEB" opacity="0.6"/>
+    <polygon points="176,300 180,310 172,310" fill="#87CEEB" opacity="0.6"/>
+    <polygon points="176,370 180,380 172,380" fill="#87CEEB" opacity="0.6"/>
+    <polygon points="176,440 180,450 172,450" fill="#87CEEB" opacity="0.6"/>
+    <text x="176" y="82" font-size="9" fill="#333" text-anchor="middle" font-weight="bold">VENT IN</text>
+    <text x="176" y="70" font-size="8" fill="#666" text-anchor="middle">40cm</text>
+
+    <!-- ====== POWER/COMMS SHAFT (30cm) ====== -->
+    <rect x="260" y="100" width="10" height="430" fill="#555" opacity="0.6"/>
+    <rect x="262" y="100" width="6" height="430" fill="#d4a843" opacity="0.4"/>
+    <!-- Cables drawn inside -->
+    <line x1="264" y1="100" x2="264" y2="530" stroke="#c0392b" stroke-width="1.5"/>
+    <line x1="266" y1="100" x2="266" y2="530" stroke="#2980b9" stroke-width="1.5"/>
+    <rect x="255" y="90" width="20" height="14" rx="2" fill="#5a5a5a"/>
+    <text x="265" y="82" font-size="9" fill="#333" text-anchor="middle" font-weight="bold">PWR/COMMS</text>
+    <text x="265" y="70" font-size="8" fill="#666" text-anchor="middle">30cm</text>
+
+    <!-- ====== PRIMARY SHAFT (1m) ====== -->
+    <!-- Shaft walls (steel casing) -->
+    <rect x="380" y="100" width="50" height="430" fill="url(#shaft-wall)" opacity="0.8"/>
+    <!-- Shaft interior -->
+    <rect x="385" y="100" width="40" height="430" fill="#2c2c2c"/>
+    <!-- Elevator platform -->
+    <rect x="387" y="320" width="36" height="4" fill="#d4a843"/>
+    <!-- Elevator cable -->
+    <line x1="405" y1="95" x2="405" y2="320" stroke="#aaa" stroke-width="1.5"/>
+    <!-- Person on elevator -->
+    <circle cx="405" cy="308" r="5" fill="#3498db"/>
+    <line x1="405" y1="313" x2="405" y2="318" stroke="#3498db" stroke-width="2"/>
+    <!-- Elevator motor housing on surface -->
+    <rect x="375" y="82" width="60" height="22" rx="3" fill="#5a6b5a"/>
+    <text x="405" y="96" font-size="8" fill="white" text-anchor="middle">ELEVATOR</text>
+    <text x="405" y="72" font-size="10" fill="#333" text-anchor="middle" font-weight="bold">PRIMARY ACCESS</text>
+    <text x="405" y="62" font-size="8" fill="#666" text-anchor="middle">1m diameter</text>
+
+    <!-- ====== DRAINAGE SHAFT (30cm) ====== -->
+    <rect x="530" y="100" width="10" height="450" fill="#555" opacity="0.6"/>
+    <rect x="532" y="100" width="6" height="450" fill="#2980b9" opacity="0.3"/>
+    <!-- Pump arrows (upward) -->
+    <polygon points="535,450 539,440 531,440" fill="#2980b9" opacity="0.6"/>
+    <polygon points="535,380 539,370 531,370" fill="#2980b9" opacity="0.6"/>
+    <polygon points="535,310 539,300 531,300" fill="#2980b9" opacity="0.6"/>
+    <polygon points="535,240 539,230 531,230" fill="#2980b9" opacity="0.6"/>
+    <rect x="525" y="90" width="20" height="14" rx="2" fill="#5a5a5a"/>
+    <text x="535" y="82" font-size="9" fill="#333" text-anchor="middle" font-weight="bold">DRAINAGE</text>
+    <text x="535" y="70" font-size="8" fill="#666" text-anchor="middle">30cm</text>
+
+    <!-- ====== EXHAUST SHAFT (40cm) ====== -->
+    <rect x="620" y="100" width="12" height="430" fill="#555" opacity="0.6"/>
+    <rect x="622" y="100" width="8" height="430" fill="#444"/>
+    <!-- Air flow arrows (upward - exhaust) -->
+    <polygon points="626,440 630,450 622,450" fill="#e74c3c" opacity="0.4" transform="rotate(180,626,445)"/>
+    <polygon points="626,370 630,380 622,380" fill="#e74c3c" opacity="0.4" transform="rotate(180,626,375)"/>
+    <polygon points="626,300 630,310 622,310" fill="#e74c3c" opacity="0.4" transform="rotate(180,626,305)"/>
+    <polygon points="626,230 630,240 622,240" fill="#e74c3c" opacity="0.4" transform="rotate(180,626,235)"/>
+    <rect x="615" y="90" width="22" height="14" rx="2" fill="#5a5a5a"/>
+    <text x="626" y="82" font-size="9" fill="#333" text-anchor="middle" font-weight="bold">VENT OUT</text>
+    <text x="626" y="70" font-size="8" fill="#666" text-anchor="middle">40cm</text>
+
+    <!-- ====== EMERGENCY EGRESS (1m) — offset right ====== -->
+    <rect x="760" y="100" width="50" height="430" fill="url(#shaft-wall)" opacity="0.6"/>
+    <rect x="765" y="100" width="40" height="430" fill="#2c2c2c" opacity="0.8"/>
+    <!-- Ladder rungs -->
+    <line x1="772" y1="140" x2="798" y2="140" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="170" x2="798" y2="170" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="200" x2="798" y2="200" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="230" x2="798" y2="230" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="260" x2="798" y2="260" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="290" x2="798" y2="290" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="320" x2="798" y2="320" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="350" x2="798" y2="350" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="380" x2="798" y2="380" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="410" x2="798" y2="410" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="440" x2="798" y2="440" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="470" x2="798" y2="470" stroke="#aaa" stroke-width="1"/>
+    <line x1="772" y1="500" x2="798" y2="500" stroke="#aaa" stroke-width="1"/>
+    <!-- Hatch on surface -->
+    <rect x="755" y="90" width="60" height="14" rx="3" fill="#5a6b5a"/>
+    <text x="785" y="82" font-size="9" fill="#333" text-anchor="middle" font-weight="bold">EMERGENCY EGRESS</text>
+    <text x="785" y="70" font-size="8" fill="#666" text-anchor="middle">1m diameter</text>
+
+    <!-- ====== COMMAND CHAMBER ====== -->
+    <!-- Chamber outline (shotcrete walls) -->
+    <rect x="120" y="520" width="730" height="130" rx="10" fill="#888" opacity="0.7"/>
+    <!-- Chamber interior -->
+    <rect x="130" y="528" width="710" height="114" rx="8" fill="#e8e4dc"/>
+
+    <!-- Chamber interior details -->
+    <!-- Command table -->
+    <rect x="300" y="555" width="120" height="50" rx="3" fill="#6d4c2a"/>
+    <rect x="310" y="560" width="40" height="20" rx="1" fill="#3498db" opacity="0.7"/>
+    <rect x="355" y="560" width="55" height="20" rx="1" fill="#2ecc71" opacity="0.5"/>
+    <text x="360" y="600" font-size="8" fill="#333" text-anchor="middle">COMMAND TABLE</text>
+
+    <!-- Comms racks -->
+    <rect x="160" y="545" width="40" height="65" rx="2" fill="#444"/>
+    <rect x="163" y="548" width="34" height="8" fill="#2ecc71" opacity="0.5"/>
+    <rect x="163" y="559" width="34" height="8" fill="#3498db" opacity="0.5"/>
+    <rect x="163" y="570" width="34" height="8" fill="#2ecc71" opacity="0.5"/>
+    <rect x="163" y="581" width="34" height="8" fill="#e67e22" opacity="0.5"/>
+    <rect x="163" y="592" width="34" height="8" fill="#3498db" opacity="0.5"/>
+    <text x="180" y="625" font-size="8" fill="#333" text-anchor="middle">COMMS</text>
+
+    <!-- Displays on wall -->
+    <rect x="470" y="540" width="80" height="45" rx="2" fill="#222"/>
+    <rect x="473" y="543" width="74" height="39" fill="#1a3a5a"/>
+    <text x="510" y="567" font-size="9" fill="#3498db" text-anchor="middle">MAP DISPLAY</text>
+
+    <!-- Server rack -->
+    <rect x="600" y="545" width="35" height="65" rx="2" fill="#333"/>
+    <rect x="603" y="548" width="29" height="5" fill="#27ae60" opacity="0.6"/>
+    <rect x="603" y="556" width="29" height="5" fill="#27ae60" opacity="0.6"/>
+    <rect x="603" y="564" width="29" height="5" fill="#3498db" opacity="0.6"/>
+    <rect x="603" y="572" width="29" height="5" fill="#27ae60" opacity="0.6"/>
+    <text x="617" y="625" font-size="8" fill="#333" text-anchor="middle">SERVERS</text>
+
+    <!-- Personnel silhouettes -->
+    <circle cx="340" cy="545" r="5" fill="#2c3e50" opacity="0.6"/>
+    <circle cx="380" cy="548" r="5" fill="#2c3e50" opacity="0.6"/>
+    <circle cx="500" cy="548" r="5" fill="#2c3e50" opacity="0.6"/>
+    <circle cx="700" cy="558" r="5" fill="#2c3e50" opacity="0.6"/>
+
+    <!-- Cots/rest area -->
+    <rect x="700" y="570" width="50" height="15" rx="2" fill="#8e735b"/>
+    <rect x="700" y="590" width="50" height="15" rx="2" fill="#8e735b"/>
+    <text x="725" y="625" font-size="8" fill="#333" text-anchor="middle">REST AREA</text>
+
+    <!-- Chamber label -->
+    <text x="420" y="660" font-size="13" fill="white" text-anchor="middle" font-weight="bold">COMMAND CHAMBER — ~12m × 6m × 2.5m (shotcrete-lined)</text>
+
+    <!-- Connecting passages from shafts to chamber -->
+    <!-- Primary shaft connects to chamber -->
+    <rect x="400" y="528" width="10" height="5" fill="#e8e4dc"/>
+    <!-- Vent connects -->
+    <rect x="173" y="528" width="6" height="5" fill="#e8e4dc"/>
+    <!-- Power connects -->
+    <rect x="263" y="528" width="4" height="5" fill="#e8e4dc"/>
+    <!-- Drainage connects -->
+    <rect x="533" y="528" width="4" height="10" fill="#e8e4dc"/>
+    <!-- Exhaust connects -->
+    <rect x="623" y="528" width="6" height="5" fill="#e8e4dc"/>
+    <!-- Egress connects — horizontal tunnel -->
+    <rect x="780" y="528" width="10" height="5" fill="#e8e4dc"/>
+
+    <!-- Surface distance markers -->
+    <line x1="176" y1="45" x2="785" y2="45" stroke="#666" stroke-width="0.5"/>
+    <line x1="176" y1="42" x2="176" y2="48" stroke="#666" stroke-width="0.5"/>
+    <line x1="785" y1="42" x2="785" y2="48" stroke="#666" stroke-width="0.5"/>
+    <text x="480" y="42" font-size="9" fill="#666" text-anchor="middle">~60m surface footprint</text>
+
+    <!-- Generator offset -->
+    <rect x="80" y="82" width="40" height="22" rx="3" fill="#6a6a5a"/>
+    <text x="100" y="96" font-size="7" fill="white" text-anchor="middle">GEN</text>
+    <text x="100" y="120" font-size="8" fill="#666" text-anchor="middle">offset 30m+</text>
+    <line x1="120" y1="93" x2="170" y2="100" stroke="#666" stroke-width="1" stroke-dasharray="3,3"/>
+  </svg>
+  <div class="figure-caption">Figure 2: Cross-section showing the multi-shaft architecture. Primary access (1m) provides elevator access, utility shafts (30-40cm) handle ventilation, power, comms, and drainage. Emergency egress shaft offset for redundancy. Command chamber at 20-25m depth with shotcrete lining.</div>
+</div>
+
+
+<!-- ============== FIGURE 3: SURFACE LAYOUT (TOP-DOWN) ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 3 — Surface Layout (Plan View)</div>
+  <svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="camo" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+        <rect width="60" height="60" fill="#6d8a3e"/>
+        <ellipse cx="15" cy="15" rx="18" ry="12" fill="#5a7a30" transform="rotate(20,15,15)"/>
+        <ellipse cx="45" cy="40" rx="15" ry="10" fill="#7a9a48" transform="rotate(-15,45,40)"/>
+        <ellipse cx="30" cy="50" rx="20" ry="8" fill="#4a6b28" transform="rotate(10,30,50)"/>
+      </pattern>
+      <radialGradient id="camo-net" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#5a7a30" stop-opacity="0.4"/>
+        <stop offset="100%" stop-color="#5a7a30" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Ground -->
+    <rect width="900" height="600" fill="url(#camo)"/>
+
+    <!-- Camouflage netting over central area -->
+    <ellipse cx="420" cy="280" rx="200" ry="150" fill="url(#camo-net)" stroke="#4a6b28" stroke-width="1" stroke-dasharray="8,4" opacity="0.6"/>
+    <text x="420" y="155" font-size="10" fill="#2c3e50" text-anchor="middle" font-style="italic" opacity="0.7">camouflage netting</text>
+
+    <!-- Primary shaft -->
+    <circle cx="420" cy="280" r="18" fill="#444" stroke="#888" stroke-width="3"/>
+    <circle cx="420" cy="280" r="12" fill="#222"/>
+    <text x="420" y="284" font-size="8" fill="white" text-anchor="middle">1m</text>
+    <text x="420" y="315" font-size="10" fill="#1a2332" text-anchor="middle" font-weight="bold">PRIMARY</text>
+    <text x="420" y="327" font-size="9" fill="#1a2332" text-anchor="middle">SHAFT</text>
+
+    <!-- Vent intake shaft -->
+    <circle cx="310" cy="230" r="10" fill="#444" stroke="#87CEEB" stroke-width="2"/>
+    <circle cx="310" cy="230" r="5" fill="#222"/>
+    <text x="310" y="255" font-size="9" fill="#1a2332" text-anchor="middle">Vent In</text>
+    <text x="310" y="265" font-size="8" fill="#666" text-anchor="middle">40cm</text>
+
+    <!-- Power/Comms shaft -->
+    <circle cx="350" cy="340" r="8" fill="#444" stroke="#d4a843" stroke-width="2"/>
+    <circle cx="350" cy="340" r="4" fill="#222"/>
+    <text x="350" y="365" font-size="9" fill="#1a2332" text-anchor="middle">Pwr/Comms</text>
+    <text x="350" y="375" font-size="8" fill="#666" text-anchor="middle">30cm</text>
+
+    <!-- Drainage shaft -->
+    <circle cx="500" cy="340" r="8" fill="#444" stroke="#2980b9" stroke-width="2"/>
+    <circle cx="500" cy="340" r="4" fill="#222"/>
+    <text x="500" y="365" font-size="9" fill="#1a2332" text-anchor="middle">Drainage</text>
+    <text x="500" y="375" font-size="8" fill="#666" text-anchor="middle">30cm</text>
+
+    <!-- Vent exhaust shaft -->
+    <circle cx="520" cy="230" r="10" fill="#444" stroke="#e74c3c" stroke-width="2"/>
+    <circle cx="520" cy="230" r="5" fill="#222"/>
+    <text x="520" y="255" font-size="9" fill="#1a2332" text-anchor="middle">Vent Out</text>
+    <text x="520" y="265" font-size="8" fill="#666" text-anchor="middle">40cm</text>
+
+    <!-- Emergency egress — offset 40m -->
+    <circle cx="720" cy="280" r="18" fill="#444" stroke="#c0392b" stroke-width="3"/>
+    <circle cx="720" cy="280" r="12" fill="#222"/>
+    <text x="720" y="284" font-size="8" fill="white" text-anchor="middle">1m</text>
+    <text x="720" y="315" font-size="10" fill="#c0392b" text-anchor="middle" font-weight="bold">EMERGENCY</text>
+    <text x="720" y="327" font-size="9" fill="#c0392b" text-anchor="middle">EGRESS</text>
+
+    <!-- Distance line: primary to egress -->
+    <line x1="440" y1="280" x2="700" y2="280" stroke="#333" stroke-width="1" stroke-dasharray="4,4"/>
+    <text x="570" y="275" font-size="9" fill="#333" text-anchor="middle">~40m</text>
+
+    <!-- Generator (offset) -->
+    <rect x="80" y="440" width="60" height="40" rx="4" fill="#5a5a4a" stroke="#666" stroke-width="2"/>
+    <text x="110" y="462" font-size="9" fill="white" text-anchor="middle" font-weight="bold">GENERATOR</text>
+    <text x="110" y="474" font-size="7" fill="white" text-anchor="middle">60kW</text>
+    <!-- Power cable to comms shaft -->
+    <line x1="140" y1="455" x2="345" y2="342" stroke="#d4a843" stroke-width="2" stroke-dasharray="6,3"/>
+    <text x="220" y="405" font-size="8" fill="#666" text-anchor="middle" transform="rotate(-20,220,405)">buried cable</text>
+
+    <!-- Antenna (dispersed) -->
+    <g transform="translate(160, 120)">
+      <line x1="0" y1="0" x2="0" y2="-30" stroke="#666" stroke-width="2"/>
+      <line x1="-8" y1="-25" x2="8" y2="-25" stroke="#666" stroke-width="1.5"/>
+      <line x1="-6" y1="-20" x2="6" y2="-20" stroke="#666" stroke-width="1.5"/>
+      <circle cx="0" cy="-30" r="3" fill="#c0392b"/>
+    </g>
+    <text x="160" y="135" font-size="9" fill="#1a2332" text-anchor="middle">ANTENNA</text>
+    <text x="160" y="145" font-size="8" fill="#666" text-anchor="middle">(dispersed)</text>
+    <line x1="160" y1="120" x2="310" y2="230" stroke="#2980b9" stroke-width="1" stroke-dasharray="3,3"/>
+    <text x="210" y="170" font-size="7" fill="#666" text-anchor="middle" transform="rotate(30,210,170)">hardline</text>
+
+    <!-- Second dispersed antenna -->
+    <g transform="translate(780, 130)">
+      <line x1="0" y1="0" x2="0" y2="-30" stroke="#666" stroke-width="2"/>
+      <line x1="-8" y1="-25" x2="8" y2="-25" stroke="#666" stroke-width="1.5"/>
+      <line x1="-6" y1="-20" x2="6" y2="-20" stroke="#666" stroke-width="1.5"/>
+      <circle cx="0" cy="-30" r="3" fill="#c0392b"/>
+    </g>
+    <text x="780" y="145" font-size="9" fill="#1a2332" text-anchor="middle">ANTENNA 2</text>
+    <text x="780" y="155" font-size="8" fill="#666" text-anchor="middle">(redundant)</text>
+    <line x1="780" y1="130" x2="720" y2="280" stroke="#2980b9" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- Underground chamber outline (dashed) -->
+    <rect x="270" y="200" width="300" height="180" rx="8" fill="none" stroke="#333" stroke-width="2" stroke-dasharray="8,4" opacity="0.4"/>
+    <text x="420" y="400" font-size="9" fill="#333" text-anchor="middle" opacity="0.5">chamber footprint below</text>
+
+    <!-- Legend -->
+    <rect x="630" y="430" width="250" height="150" rx="6" fill="white" opacity="0.85" stroke="#ccc"/>
+    <text x="755" y="452" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">Legend</text>
+    <circle cx="655" cy="470" r="6" fill="#444" stroke="#888" stroke-width="2"/>
+    <text x="675" y="474" font-size="9" fill="#333">Primary shaft (1m)</text>
+    <circle cx="655" cy="490" r="5" fill="#444" stroke="#87CEEB" stroke-width="2"/>
+    <text x="675" y="494" font-size="9" fill="#333">Ventilation shaft (40cm)</text>
+    <circle cx="655" cy="510" r="4" fill="#444" stroke="#d4a843" stroke-width="2"/>
+    <text x="675" y="514" font-size="9" fill="#333">Utility shaft (30cm)</text>
+    <circle cx="655" cy="530" r="6" fill="#444" stroke="#c0392b" stroke-width="2"/>
+    <text x="675" y="534" font-size="9" fill="#333">Emergency egress (1m)</text>
+    <line x1="645" y1="550" x2="665" y2="550" stroke="#333" stroke-width="2" stroke-dasharray="4,3"/>
+    <text x="675" y="554" font-size="9" fill="#333">Chamber outline (below grade)</text>
+    <line x1="645" y1="567" x2="665" y2="567" stroke="#2980b9" stroke-width="1" stroke-dasharray="3,3"/>
+    <text x="675" y="571" font-size="9" fill="#333">Hardline comms</text>
+  </svg>
+  <div class="figure-caption">Figure 3: Surface plan view showing minimal above-ground footprint. Shaft heads are easily camouflaged. Generator and antennas are offset and dispersed to reduce signature. After construction, engineering vehicles depart — leaving no vehicle concentration to target.</div>
+</div>
+
+
+<h2>3. System Architecture</h2>
+
+<h3>3.1 Vehicle Package</h3>
+
+<table>
+  <tr><th>#</th><th>Vehicle</th><th>Function</th><th>Weight</th><th>TRL</th></tr>
+  <tr><td>1</td><td>Primary Drill Rig</td><td>1m shaft boring (auger/rotary)</td><td>25–40t tracked</td><td>7–8</td></tr>
+  <tr><td>2</td><td>Light Drill Rig</td><td>30–50cm utility boreholes</td><td>10–15t truck</td><td>8–9</td></tr>
+  <tr><td>3</td><td>Concrete Mixer/Pump</td><td>Surface mixing; pump to depth</td><td>Standard</td><td>9</td></tr>
+  <tr><td>4</td><td>Support Vehicle</td><td>Excavation robot, formwork, elevator</td><td>Standard</td><td>3–5</td></tr>
+  <tr><td>5</td><td>Generator / Power</td><td>Surface power for all systems</td><td>Trailer</td><td>9</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key insight:</strong> 4 of 5 vehicles are COTS or near-COTS, requiring only military hardening and packaging. The only novel development is the compact excavation robot carried on Vehicle 4.
+</div>
+
+
+<!-- ============== FIGURE 4: VEHICLE PACKAGE ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 4 — ESCC Vehicle Package</div>
+  <svg viewBox="0 0 900 500" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="900" height="500" fill="#f4f6f8" rx="8"/>
+
+    <!-- Vehicle 1: Primary Drill Rig -->
+    <g transform="translate(90, 80)">
+      <!-- Tracks -->
+      <rect x="0" y="80" width="120" height="20" rx="8" fill="#444"/>
+      <rect x="5" y="82" width="110" height="16" rx="6" fill="#555"/>
+      <!-- Body -->
+      <rect x="10" y="40" width="100" height="45" rx="4" fill="#5a7a30"/>
+      <rect x="15" y="30" width="40" height="15" rx="2" fill="#4a6a25"/>
+      <!-- Drill mast -->
+      <rect x="85" y="-30" width="12" height="75" rx="2" fill="#d4a843"/>
+      <rect x="82" y="-35" width="18" height="10" rx="2" fill="#b8932f"/>
+      <!-- Drill bit -->
+      <polygon points="88,-35 94,-35 91,-50" fill="#888"/>
+      <!-- Label -->
+      <text x="60" y="120" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">V1: Primary Drill</text>
+      <text x="60" y="134" font-size="9" fill="#666" text-anchor="middle">25-40t tracked</text>
+      <text x="60" y="148" font-size="9" fill="#666" text-anchor="middle">1m shaft boring</text>
+      <!-- TRL badge -->
+      <rect x="92" y="45" width="30" height="14" rx="3" fill="#2980b9"/>
+      <text x="107" y="55" font-size="8" fill="white" text-anchor="middle">TRL 7-8</text>
+    </g>
+
+    <!-- Vehicle 2: Light Drill Rig -->
+    <g transform="translate(300, 100)">
+      <!-- Wheels -->
+      <circle cx="20" cy="85" r="12" fill="#333"/>
+      <circle cx="80" cy="85" r="12" fill="#333"/>
+      <circle cx="105" cy="85" r="12" fill="#333"/>
+      <!-- Truck body -->
+      <rect x="5" y="45" width="115" height="35" rx="3" fill="#5a7a30"/>
+      <!-- Cab -->
+      <rect x="0" y="40" width="35" height="30" rx="3" fill="#4a6a25"/>
+      <rect x="3" y="44" width="15" height="12" rx="1" fill="#87CEEB" opacity="0.5"/>
+      <!-- Drill mast (smaller) -->
+      <rect x="85" y="-10" width="8" height="58" rx="2" fill="#d4a843"/>
+      <polygon points="86,-10 92,-10 89,-22" fill="#888"/>
+      <!-- Label -->
+      <text x="60" y="118" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">V2: Light Drill</text>
+      <text x="60" y="132" font-size="9" fill="#666" text-anchor="middle">10-15t truck</text>
+      <text x="60" y="146" font-size="9" fill="#666" text-anchor="middle">30-50cm boreholes</text>
+      <rect x="88" y="50" width="30" height="14" rx="3" fill="#27ae60"/>
+      <text x="103" y="60" font-size="8" fill="white" text-anchor="middle">TRL 8-9</text>
+    </g>
+
+    <!-- Vehicle 3: Concrete Mixer/Pump -->
+    <g transform="translate(510, 100)">
+      <!-- Wheels -->
+      <circle cx="20" cy="85" r="12" fill="#333"/>
+      <circle cx="55" cy="85" r="12" fill="#333"/>
+      <circle cx="90" cy="85" r="12" fill="#333"/>
+      <circle cx="115" cy="85" r="12" fill="#333"/>
+      <!-- Truck body -->
+      <rect x="5" y="35" width="130" height="45" rx="3" fill="#888"/>
+      <!-- Cab -->
+      <rect x="0" y="30" width="35" height="35" rx="3" fill="#777"/>
+      <rect x="3" y="34" width="15" height="12" rx="1" fill="#87CEEB" opacity="0.5"/>
+      <!-- Mixer drum -->
+      <ellipse cx="85" cy="35" rx="35" ry="22" fill="#aaa" stroke="#888" stroke-width="2"/>
+      <line x1="85" y1="13" x2="85" y2="57" stroke="#999" stroke-width="1" stroke-dasharray="3,3"/>
+      <!-- Pump boom -->
+      <line x1="55" y1="20" x2="120" y2="-10" stroke="#c0392b" stroke-width="4"/>
+      <line x1="120" y1="-10" x2="135" y2="10" stroke="#c0392b" stroke-width="3"/>
+      <!-- Label -->
+      <text x="70" y="118" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">V3: Concrete Pump</text>
+      <text x="70" y="132" font-size="9" fill="#666" text-anchor="middle">Standard construction</text>
+      <text x="70" y="146" font-size="9" fill="#666" text-anchor="middle">Mix + pump to depth</text>
+      <rect x="102" y="40" width="26" height="14" rx="3" fill="#27ae60"/>
+      <text x="115" y="50" font-size="8" fill="white" text-anchor="middle">TRL 9</text>
+    </g>
+
+    <!-- Vehicle 4: Support Vehicle -->
+    <g transform="translate(160, 310)">
+      <!-- Wheels -->
+      <circle cx="20" cy="85" r="12" fill="#333"/>
+      <circle cx="60" cy="85" r="12" fill="#333"/>
+      <circle cx="115" cy="85" r="12" fill="#333"/>
+      <!-- Truck flatbed -->
+      <rect x="5" y="50" width="135" height="30" rx="3" fill="#5a6b4a"/>
+      <!-- Cab -->
+      <rect x="0" y="40" width="35" height="35" rx="3" fill="#4a5a3a"/>
+      <rect x="3" y="44" width="15" height="12" rx="1" fill="#87CEEB" opacity="0.5"/>
+      <!-- Robot on bed (folded) -->
+      <rect x="50" y="35" width="40" height="18" rx="3" fill="#d4a843" stroke="#b8932f" stroke-width="1"/>
+      <text x="70" y="48" font-size="7" fill="#333" text-anchor="middle">ROBOT</text>
+      <!-- Equipment boxes -->
+      <rect x="95" y="38" width="25" height="15" rx="2" fill="#666"/>
+      <rect x="95" y="56" width="25" height="12" rx="2" fill="#777"/>
+      <!-- Label -->
+      <text x="70" y="118" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">V4: Support Vehicle</text>
+      <text x="70" y="132" font-size="9" fill="#666" text-anchor="middle">Excavation robot + elevator kit</text>
+      <text x="70" y="146" font-size="9" fill="#666" text-anchor="middle">Formwork + rebar mesh</text>
+      <rect x="50" y="55" width="26" height="14" rx="3" fill="#e67e22"/>
+      <text x="63" y="65" font-size="8" fill="white" text-anchor="middle">TRL 3-5</text>
+    </g>
+
+    <!-- Vehicle 5: Generator -->
+    <g transform="translate(480, 320)">
+      <!-- Trailer wheels -->
+      <circle cx="40" cy="75" r="10" fill="#333"/>
+      <circle cx="100" cy="75" r="10" fill="#333"/>
+      <!-- Trailer bed -->
+      <rect x="10" y="40" width="120" height="35" rx="3" fill="#5a5a5a"/>
+      <!-- Generator housing -->
+      <rect x="20" y="18" width="100" height="28" rx="4" fill="#666" stroke="#555" stroke-width="2"/>
+      <!-- Exhaust -->
+      <rect x="108" y="8" width="8" height="14" rx="2" fill="#555"/>
+      <!-- Fuel tank -->
+      <rect x="25" y="48" width="40" height="12" rx="2" fill="#444"/>
+      <text x="45" y="57" font-size="6" fill="#aaa" text-anchor="middle">FUEL</text>
+      <!-- Hitch -->
+      <line x1="10" y1="58" x2="-10" y2="58" stroke="#555" stroke-width="3"/>
+      <circle cx="-10" cy="58" r="4" fill="#555"/>
+      <!-- Label -->
+      <text x="70" y="108" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">V5: Generator</text>
+      <text x="70" y="122" font-size="9" fill="#666" text-anchor="middle">60kW trailer-mounted</text>
+      <text x="70" y="136" font-size="9" fill="#666" text-anchor="middle">Powers all systems</text>
+      <rect x="95" y="23" width="26" height="14" rx="3" fill="#27ae60"/>
+      <text x="108" y="33" font-size="8" fill="white" text-anchor="middle">TRL 9</text>
+    </g>
+
+    <!-- Connecting arrow -->
+    <text x="450" y="470" font-size="12" fill="#1a2332" text-anchor="middle" font-weight="bold">5-vehicle convoy = complete expedient bunker capability</text>
+  </svg>
+  <div class="figure-caption">Figure 4: The ESCC vehicle package. Four of five platforms are commercial off-the-shelf or near-COTS. Only the excavation robot (Vehicle 4, TRL 3–5) requires significant development.</div>
+</div>
+
+
+<h3>3.2 Construction Sequence</h3>
+
+<div class="timeline">
+  <div class="timeline-item">
+    <h4>Phase 1 — Site Prep &amp; Utility Shafts (Day 1)</h4>
+    <p>Rapid geological assessment (ground-penetrating radar, soil sampling auger). Light rig bores 2–3 utility shafts in hours. Establish initial ventilation and dewatering.</p>
+  </div>
+  <div class="timeline-item">
+    <h4>Phase 2 — Primary Shaft (Days 1–2)</h4>
+    <p>Primary rig bores 1m shaft to target depth (20–30m). Steel casing or shotcrete lining advances with bore. Spoil removal: ~31m³ at 40m — one dump truck load.</p>
+  </div>
+  <div class="timeline-item">
+    <h4>Phase 3 — Chamber Excavation (Days 2–5)</h4>
+    <p>Deploy foldable excavation robot through primary shaft. Robot excavates laterally in 1–2m advances. Shotcrete sprayed immediately after cutting. Concrete pumped from surface. Rebar mesh positioned by robot.</p>
+  </div>
+  <div class="timeline-item">
+    <h4>Phase 4 — Fitout (Days 5–7)</h4>
+    <p>Install cable elevator. Run power, comms, ventilation ducting through utility shafts. Install C2 equipment. Bore emergency egress shaft in parallel.</p>
+  </div>
+  <div class="timeline-item">
+    <h4>Phase 5 — Operational</h4>
+    <p>Engineering vehicles depart. Surface reduced to camouflaged shaft heads and offset generator. Dispersed antenna elements connected via buried hardline.</p>
+  </div>
+</div>
+
+
+<!-- ============== FIGURE 5: CONSTRUCTION SEQUENCE ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 5 — Construction Sequence</div>
+  <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="420" fill="#f4f6f8" rx="8"/>
+
+    <!-- Phase labels across top -->
+    <text x="100" y="30" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">DAY 1</text>
+    <text x="280" y="30" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">DAYS 1-2</text>
+    <text x="460" y="30" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">DAYS 2-5</text>
+    <text x="640" y="30" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">DAYS 5-7</text>
+    <text x="810" y="30" font-size="11" fill="#1a2332" text-anchor="middle" font-weight="bold">OPERATIONAL</text>
+
+    <!-- Arrows between phases -->
+    <polygon points="175,200 185,190 185,210" fill="#3498db"/>
+    <polygon points="355,200 365,190 365,210" fill="#3498db"/>
+    <polygon points="545,200 555,190 555,210" fill="#3498db"/>
+    <polygon points="725,200 735,190 735,210" fill="#3498db"/>
+
+    <!-- Phase 1: Utility shafts -->
+    <g transform="translate(30, 50)">
+      <rect x="0" y="0" width="150" height="340" rx="6" fill="white" stroke="#3498db" stroke-width="2"/>
+      <rect x="0" y="0" width="150" height="30" rx="6" fill="#3498db"/>
+      <rect x="0" y="15" width="150" height="15" fill="#3498db"/>
+      <text x="75" y="20" font-size="10" fill="white" text-anchor="middle" font-weight="bold">SITE PREP</text>
+
+      <!-- Ground -->
+      <rect x="10" y="100" width="130" height="180" fill="#a0845c" rx="4"/>
+      <!-- Small drill rig on surface -->
+      <rect x="55" y="75" width="30" height="20" rx="2" fill="#5a7a30"/>
+      <rect x="67" y="55" width="6" height="25" fill="#d4a843"/>
+      <!-- Utility borehole being drilled -->
+      <rect x="68" y="100" width="4" height="80" fill="#444"/>
+      <text x="85" y="145" font-size="8" fill="white">30cm</text>
+      <!-- Second borehole -->
+      <rect x="100" y="100" width="4" height="50" fill="#444"/>
+      <!-- GPR on surface -->
+      <rect x="15" y="85" width="25" height="10" rx="2" fill="#e67e22"/>
+      <text x="27" y="93" font-size="5" fill="white" text-anchor="middle">GPR</text>
+
+      <text x="75" y="310" font-size="8" fill="#333" text-anchor="middle">Geological survey</text>
+      <text x="75" y="322" font-size="8" fill="#333" text-anchor="middle">Utility boreholes (hours)</text>
+      <text x="75" y="334" font-size="8" fill="#333" text-anchor="middle">Begin dewatering</text>
+    </g>
+
+    <!-- Phase 2: Primary shaft -->
+    <g transform="translate(200, 50)">
+      <rect x="0" y="0" width="150" height="340" rx="6" fill="white" stroke="#3498db" stroke-width="2"/>
+      <rect x="0" y="0" width="150" height="30" rx="6" fill="#3498db"/>
+      <rect x="0" y="15" width="150" height="15" fill="#3498db"/>
+      <text x="75" y="20" font-size="10" fill="white" text-anchor="middle" font-weight="bold">PRIMARY SHAFT</text>
+
+      <!-- Ground -->
+      <rect x="10" y="100" width="130" height="180" fill="#a0845c" rx="4"/>
+      <!-- Big drill rig -->
+      <rect x="40" y="60" width="50" height="30" rx="3" fill="#5a7a30"/>
+      <rect x="30" y="55" width="20" height="15" rx="2" fill="#4a6a25"/>
+      <rect x="62" y="35" width="10" height="58" fill="#d4a843"/>
+      <polygon points="64,35 70,35 67,20" fill="#888"/>
+      <!-- 1m shaft being bored -->
+      <rect x="59" y="100" width="20" height="160" fill="#444"/>
+      <rect x="62" y="100" width="14" height="160" fill="#222"/>
+      <!-- Casing -->
+      <text x="90" y="180" font-size="8" fill="white">1m</text>
+      <!-- Spoil pile -->
+      <ellipse cx="120" cy="97" rx="18" ry="8" fill="#8a7550"/>
+
+      <text x="75" y="310" font-size="8" fill="#333" text-anchor="middle">Bore to 20-30m depth</text>
+      <text x="75" y="322" font-size="8" fill="#333" text-anchor="middle">Steel casing installed</text>
+      <text x="75" y="334" font-size="8" fill="#333" text-anchor="middle">~31m³ spoil removed</text>
+    </g>
+
+    <!-- Phase 3: Chamber excavation -->
+    <g transform="translate(385, 50)">
+      <rect x="0" y="0" width="150" height="340" rx="6" fill="white" stroke="#d4a843" stroke-width="2"/>
+      <rect x="0" y="0" width="150" height="30" rx="6" fill="#d4a843"/>
+      <rect x="0" y="15" width="150" height="15" fill="#d4a843"/>
+      <text x="75" y="20" font-size="10" fill="white" text-anchor="middle" font-weight="bold">EXCAVATION</text>
+
+      <!-- Ground -->
+      <rect x="10" y="100" width="130" height="180" fill="#a0845c" rx="4"/>
+      <!-- Shaft -->
+      <rect x="62" y="100" width="14" height="120" fill="#222"/>
+      <!-- Concrete pump on surface -->
+      <rect x="90" y="75" width="40" height="20" rx="2" fill="#888"/>
+      <text x="110" y="88" font-size="6" fill="white" text-anchor="middle">PUMP</text>
+      <!-- Concrete line down -->
+      <line x1="100" y1="95" x2="100" y2="100" stroke="#c0392b" stroke-width="2"/>
+      <rect x="98" y="100" width="4" height="120" fill="#c0392b" opacity="0.6"/>
+      <!-- Chamber being excavated -->
+      <rect x="20" y="220" width="120" height="40" rx="6" fill="#e8e4dc" stroke="#888" stroke-width="2"/>
+      <!-- Robot inside -->
+      <rect x="30" y="228" width="20" height="15" rx="3" fill="#d4a843" stroke="#b8932f"/>
+      <text x="40" y="238" font-size="5" fill="#333" text-anchor="middle">BOT</text>
+      <!-- Shotcrete spray lines -->
+      <line x1="50" y1="232" x2="65" y2="225" stroke="#888" stroke-width="1" stroke-dasharray="2,2"/>
+      <line x1="50" y1="236" x2="65" y2="240" stroke="#888" stroke-width="1" stroke-dasharray="2,2"/>
+      <!-- Excavation face -->
+      <rect x="20" y="220" width="5" height="40" rx="2" fill="#7a6244"/>
+
+      <text x="75" y="310" font-size="8" fill="#333" text-anchor="middle">Robot excavates laterally</text>
+      <text x="75" y="322" font-size="8" fill="#333" text-anchor="middle">Shotcrete lining follows</text>
+      <text x="75" y="334" font-size="8" fill="#333" text-anchor="middle">Concrete pumped from surface</text>
+    </g>
+
+    <!-- Phase 4: Fitout -->
+    <g transform="translate(565, 50)">
+      <rect x="0" y="0" width="150" height="340" rx="6" fill="white" stroke="#27ae60" stroke-width="2"/>
+      <rect x="0" y="0" width="150" height="30" rx="6" fill="#27ae60"/>
+      <rect x="0" y="15" width="150" height="15" fill="#27ae60"/>
+      <text x="75" y="20" font-size="10" fill="white" text-anchor="middle" font-weight="bold">FITOUT</text>
+
+      <!-- Ground -->
+      <rect x="10" y="100" width="130" height="180" fill="#a0845c" rx="4"/>
+      <!-- Shaft with elevator -->
+      <rect x="62" y="100" width="14" height="120" fill="#222"/>
+      <!-- Elevator cable -->
+      <line x1="69" y1="100" x2="69" y2="215" stroke="#aaa" stroke-width="1"/>
+      <!-- Elevator platform -->
+      <rect x="63" y="200" width="12" height="3" fill="#d4a843"/>
+      <!-- Chamber complete -->
+      <rect x="20" y="220" width="120" height="40" rx="6" fill="#e8e4dc" stroke="#888" stroke-width="2"/>
+      <!-- Equipment inside -->
+      <rect x="30" y="228" width="12" height="18" rx="1" fill="#444"/>
+      <rect x="50" y="232" width="25" height="10" rx="1" fill="#6d4c2a"/>
+      <rect x="85" y="228" width="30" height="15" rx="1" fill="#333"/>
+      <!-- Cables in utility shaft -->
+      <rect x="100" y="100" width="3" height="120" fill="#d4a843" opacity="0.6"/>
+      <!-- Vent duct -->
+      <rect x="38" y="100" width="3" height="120" fill="#87CEEB" opacity="0.4"/>
+      <!-- Surface - minimal -->
+      <rect x="60" y="82" width="20" height="14" rx="2" fill="#5a6b5a"/>
+
+      <text x="75" y="310" font-size="8" fill="#333" text-anchor="middle">Install elevator</text>
+      <text x="75" y="322" font-size="8" fill="#333" text-anchor="middle">Run power/comms/vent</text>
+      <text x="75" y="334" font-size="8" fill="#333" text-anchor="middle">C2 equipment installed</text>
+    </g>
+
+    <!-- Phase 5: Operational -->
+    <g transform="translate(740, 50)">
+      <rect x="0" y="0" width="150" height="340" rx="6" fill="white" stroke="#1a2332" stroke-width="2"/>
+      <rect x="0" y="0" width="150" height="30" rx="6" fill="#1a2332"/>
+      <rect x="0" y="15" width="150" height="15" fill="#1a2332"/>
+      <text x="75" y="20" font-size="10" fill="white" text-anchor="middle" font-weight="bold">OPERATIONAL</text>
+
+      <!-- Ground with grass -->
+      <rect x="10" y="95" width="130" height="5" fill="#6d8a3e"/>
+      <rect x="10" y="100" width="130" height="180" fill="#a0845c" rx="4"/>
+      <!-- Camouflaged shaft heads (tiny) -->
+      <circle cx="69" cy="96" r="4" fill="#5a6b5a"/>
+      <circle cx="100" cy="96" r="2" fill="#5a6b5a"/>
+      <circle cx="40" cy="96" r="2" fill="#5a6b5a"/>
+      <!-- Shaft -->
+      <rect x="66" y="100" width="6" height="120" fill="#222" opacity="0.5"/>
+      <!-- Chamber fully operational -->
+      <rect x="20" y="220" width="120" height="40" rx="6" fill="#e8e4dc" stroke="#888" stroke-width="2"/>
+      <!-- Active C2 -->
+      <rect x="30" y="225" width="10" height="15" rx="1" fill="#444"/>
+      <rect x="30" y="226" width="8" height="3" fill="#27ae60" opacity="0.8"/>
+      <rect x="30" y="231" width="8" height="3" fill="#3498db" opacity="0.8"/>
+      <rect x="30" y="236" width="8" height="3" fill="#27ae60" opacity="0.8"/>
+      <!-- Map display -->
+      <rect x="50" y="225" width="20" height="12" rx="1" fill="#1a3a5a"/>
+      <!-- People -->
+      <circle cx="80" cy="235" r="3" fill="#2c3e50"/>
+      <circle cx="95" cy="230" r="3" fill="#2c3e50"/>
+      <circle cx="110" cy="238" r="3" fill="#2c3e50"/>
+      <circle cx="125" cy="232" r="3" fill="#2c3e50"/>
+      <!-- Dispersed antenna (offset) -->
+      <line x1="135" y1="96" x2="135" y2="78" stroke="#666" stroke-width="1"/>
+      <circle cx="135" cy="76" r="2" fill="#c0392b"/>
+
+      <text x="75" y="310" font-size="8" fill="#333" text-anchor="middle">Vehicles departed</text>
+      <text x="75" y="322" font-size="8" fill="#333" text-anchor="middle">Minimal surface signature</text>
+      <text x="75" y="334" font-size="8" fill="#333" text-anchor="middle">Full C2 capability</text>
+    </g>
+  </svg>
+  <div class="figure-caption">Figure 5: The five-phase construction sequence from site preparation to operational command post in 5–7 days.</div>
+</div>
+
+
+<h2 class="page-break">4. Key Innovation: Foldable Excavation Robot</h2>
+
+<p>The single novel development item in ESCC is a compact, electrically powered excavation and shotcrete robot designed to fit through a 1m shaft and unfold for lateral chamber excavation at depth.</p>
+
+<!-- ============== FIGURE 6: EXCAVATION ROBOT ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 6 — Foldable Excavation Robot Concept</div>
+  <svg viewBox="0 0 900 450" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="450" fill="#f4f6f8" rx="8"/>
+
+    <!-- LEFT: Folded configuration -->
+    <text x="225" y="35" font-size="14" fill="#1a2332" text-anchor="middle" font-weight="bold">TRANSPORT MODE</text>
+    <text x="225" y="52" font-size="10" fill="#666" text-anchor="middle">&lt; 0.9m envelope — fits through 1m shaft</text>
+
+    <g transform="translate(140, 70)">
+      <!-- 1m shaft outline -->
+      <rect x="30" y="0" width="110" height="320" fill="none" stroke="#888" stroke-width="2" stroke-dasharray="6,4" rx="4"/>
+      <text x="150" y="160" font-size="9" fill="#888" transform="rotate(90,150,160)">1m shaft</text>
+
+      <!-- Robot body (compact) -->
+      <rect x="50" y="40" width="70" height="240" rx="8" fill="#d4a843" stroke="#b8932f" stroke-width="2"/>
+
+      <!-- Tracks folded alongside -->
+      <rect x="42" y="60" width="10" height="80" rx="3" fill="#555"/>
+      <rect x="118" y="60" width="10" height="80" rx="3" fill="#555"/>
+
+      <!-- Cutting head (retracted on top) -->
+      <circle cx="85" cy="58" r="18" fill="#888" stroke="#666" stroke-width="2"/>
+      <circle cx="85" cy="58" r="8" fill="#666"/>
+      <line x1="85" y1="40" x2="85" y2="76" stroke="#555" stroke-width="1"/>
+      <line x1="67" y1="58" x2="103" y2="58" stroke="#555" stroke-width="1"/>
+      <text x="85" y="62" font-size="6" fill="white" text-anchor="middle">CUT</text>
+
+      <!-- Arms folded against body -->
+      <rect x="55" y="150" width="60" height="8" rx="3" fill="#b8932f"/>
+      <rect x="55" y="165" width="60" height="8" rx="3" fill="#b8932f"/>
+
+      <!-- Shotcrete nozzle (stowed) -->
+      <rect x="60" y="200" width="50" height="10" rx="3" fill="#c0392b" opacity="0.7"/>
+      <text x="85" y="208" font-size="5" fill="white" text-anchor="middle">SHOTCRETE</text>
+
+      <!-- Scoop (folded under) -->
+      <rect x="55" y="230" width="60" height="15" rx="4" fill="#777"/>
+      <text x="85" y="241" font-size="6" fill="white" text-anchor="middle">SCOOP</text>
+
+      <!-- Power cable connection -->
+      <circle cx="85" cy="290" r="6" fill="#c0392b"/>
+      <text x="85" y="293" font-size="5" fill="white" text-anchor="middle">PWR</text>
+
+      <!-- Camera/sensors at top -->
+      <rect x="70" y="42" width="8" height="5" rx="1" fill="#333"/>
+      <rect x="92" y="42" width="8" height="5" rx="1" fill="#333"/>
+      <text x="85" y="39" font-size="6" fill="#333" text-anchor="middle">CAM</text>
+
+      <!-- Dimensions -->
+      <line x1="35" y1="38" x2="35" y2="295" stroke="#c0392b" stroke-width="0.5"/>
+      <text x="30" y="170" font-size="8" fill="#c0392b" text-anchor="end" transform="rotate(-90,30,170)">~2.5m length</text>
+      <line x1="42" y1="30" x2="128" y2="30" stroke="#c0392b" stroke-width="0.5"/>
+      <text x="85" y="26" font-size="8" fill="#c0392b" text-anchor="middle">&lt;0.9m</text>
+    </g>
+
+    <!-- Arrow -->
+    <g transform="translate(410, 200)">
+      <polygon points="0,0 40,-15 40,15" fill="#3498db"/>
+      <text x="20" y="30" font-size="9" fill="#3498db" text-anchor="middle">UNFOLD</text>
+    </g>
+
+    <!-- RIGHT: Deployed configuration -->
+    <text x="660" y="35" font-size="14" fill="#1a2332" text-anchor="middle" font-weight="bold">WORKING MODE</text>
+    <text x="660" y="52" font-size="10" fill="#666" text-anchor="middle">Unfolded for lateral chamber excavation</text>
+
+    <g transform="translate(480, 120)">
+      <!-- Robot body (horizontal now) -->
+      <rect x="60" y="80" width="120" height="70" rx="8" fill="#d4a843" stroke="#b8932f" stroke-width="2"/>
+
+      <!-- Tracks (deployed, wider stance) -->
+      <rect x="65" y="155" width="110" height="18" rx="6" fill="#555"/>
+      <rect x="70" y="157" width="100" height="14" rx="5" fill="#666"/>
+      <!-- Track treads -->
+      <line x1="80" y1="157" x2="80" y2="171" stroke="#555" stroke-width="1"/>
+      <line x1="95" y1="157" x2="95" y2="171" stroke="#555" stroke-width="1"/>
+      <line x1="110" y1="157" x2="110" y2="171" stroke="#555" stroke-width="1"/>
+      <line x1="125" y1="157" x2="125" y2="171" stroke="#555" stroke-width="1"/>
+      <line x1="140" y1="157" x2="140" y2="171" stroke="#555" stroke-width="1"/>
+      <line x1="155" y1="157" x2="155" y2="171" stroke="#555" stroke-width="1"/>
+
+      <!-- Cutting head arm (extended forward) -->
+      <rect x="0" y="90" width="65" height="15" rx="4" fill="#b8932f"/>
+      <!-- Cutting head -->
+      <circle cx="0" cy="98" r="28" fill="#888" stroke="#666" stroke-width="2"/>
+      <circle cx="0" cy="98" r="14" fill="#666"/>
+      <circle cx="0" cy="98" r="5" fill="#555"/>
+      <!-- Cutting teeth -->
+      <line x1="-28" y1="98" x2="28" y2="98" stroke="#444" stroke-width="1"/>
+      <line x1="0" y1="70" x2="0" y2="126" stroke="#444" stroke-width="1"/>
+      <line x1="-20" y1="78" x2="20" y2="118" stroke="#444" stroke-width="1"/>
+      <line x1="-20" y1="118" x2="20" y2="78" stroke="#444" stroke-width="1"/>
+
+      <!-- Shotcrete arm (articulated, pointing up) -->
+      <rect x="140" y="50" width="12" height="40" rx="3" fill="#c0392b" opacity="0.8"/>
+      <rect x="135" y="35" width="22" height="18" rx="4" fill="#c0392b"/>
+      <!-- Spray lines -->
+      <line x1="146" y1="35" x2="130" y2="15" stroke="#888" stroke-width="1" stroke-dasharray="3,2"/>
+      <line x1="146" y1="35" x2="146" y2="10" stroke="#888" stroke-width="1" stroke-dasharray="3,2"/>
+      <line x1="146" y1="35" x2="162" y2="15" stroke="#888" stroke-width="1" stroke-dasharray="3,2"/>
+      <text x="146" y="8" font-size="7" fill="#888" text-anchor="middle">shotcrete spray</text>
+
+      <!-- Scoop (deployed under, forward) -->
+      <rect x="30" y="145" width="60" height="12" rx="3" fill="#777"/>
+      <path d="M 25,145 Q 20,155 30,157" fill="none" stroke="#777" stroke-width="2"/>
+      <text x="60" y="142" font-size="7" fill="#666" text-anchor="middle">SPOIL SCOOP</text>
+
+      <!-- Camera mast -->
+      <rect x="115" y="60" width="4" height="25" fill="#333"/>
+      <rect x="110" y="55" width="14" height="8" rx="2" fill="#333"/>
+      <circle cx="117" cy="58" r="3" fill="#2980b9"/>
+      <text x="117" y="50" font-size="6" fill="#333" text-anchor="middle">360° CAM</text>
+
+      <!-- LIDAR -->
+      <rect x="85" y="74" width="16" height="8" rx="2" fill="#2980b9"/>
+      <text x="93" y="81" font-size="5" fill="white" text-anchor="middle">LiDAR</text>
+
+      <!-- Power cable trailing behind -->
+      <path d="M 175,120 Q 200,130 210,120 Q 225,108 240,115 Q 260,125 280,120" fill="none" stroke="#c0392b" stroke-width="3"/>
+      <text x="250" y="140" font-size="7" fill="#c0392b">to surface power</text>
+
+      <!-- Ground line -->
+      <line x1="-40" y1="175" x2="300" y2="175" stroke="#a0845c" stroke-width="2"/>
+
+      <!-- Excavation face -->
+      <rect x="-40" y="50" width="10" height="130" fill="#7a6244" rx="2"/>
+      <text x="-35" y="40" font-size="7" fill="#7a6244" text-anchor="middle">face</text>
+
+      <!-- Dimensions -->
+      <line x1="-35" y1="185" x2="180" y2="185" stroke="#c0392b" stroke-width="0.5"/>
+      <text x="70" y="197" font-size="8" fill="#c0392b" text-anchor="middle">~2.2m working length</text>
+    </g>
+
+    <!-- Specs box -->
+    <rect x="480" y="350" width="380" height="80" rx="6" fill="white" stroke="#d4a843" stroke-width="2"/>
+    <text x="670" y="372" font-size="10" fill="#1a2332" text-anchor="middle" font-weight="bold">ROBOT SPECIFICATIONS</text>
+    <text x="500" y="390" font-size="9" fill="#333">Transport envelope: &lt; 0.9m diameter × ~2.5m</text>
+    <text x="500" y="405" font-size="9" fill="#333">Power: electric via surface cable (no exhaust)</text>
+    <text x="500" y="420" font-size="9" fill="#333">Functions: cut, scoop, shotcrete, rebar place</text>
+    <text x="750" y="390" font-size="9" fill="#333">Sensors: LiDAR, 360° camera, IMU</text>
+    <text x="750" y="405" font-size="9" fill="#333">Control: teleoperated → autonomous</text>
+    <text x="750" y="420" font-size="9" fill="#333">Est. weight: ~1,500 kg</text>
+  </svg>
+  <div class="figure-caption">Figure 6: The foldable excavation robot in transport mode (left, &lt;0.9m to fit through 1m shaft) and working mode (right, unfolded for lateral excavation). Integrates cutting head, spoil removal, shotcrete application, and autonomous navigation.</div>
+</div>
+
+<h3>4.1 Robot Subsystems</h3>
+
+<table>
+  <tr><th>Subsystem</th><th>Function</th><th>Technology Basis</th></tr>
+  <tr><td>Cutting head</td><td>Excavate soil/soft rock face</td><td>Roadheader / continuous miner technology, scaled down</td></tr>
+  <tr><td>Spoil mucking</td><td>Move excavated material to shaft for removal</td><td>Compact LHD (load-haul-dump) from mining</td></tr>
+  <tr><td>Shotcrete arm</td><td>Spray concrete lining immediately after excavation</td><td>Robotic shotcrete systems (Putzmeister, Normet)</td></tr>
+  <tr><td>Rebar positioning</td><td>Place light mesh reinforcement</td><td>Articulated manipulator arm</td></tr>
+  <tr><td>Sensors</td><td>Navigation, ground assessment, quality control</td><td>LiDAR, 360° camera, IMU — proven in DARPA SubT</td></tr>
+  <tr><td>Foldable chassis</td><td>Compact for shaft transit, expand for work</td><td>Space robotics deployment mechanisms</td></tr>
+  <tr><td>Power</td><td>All-electric via umbilical cable</td><td>Battery electric mining vehicles (Epiroc, Sandvik)</td></tr>
+</table>
+
+<h3>4.2 Relevant Prior Art</h3>
+
+<ul>
+  <li><strong>DARPA Subterranean Challenge</strong> — demonstrated autonomous robot navigation in underground environments with degraded conditions</li>
+  <li><strong>Epiroc Scooptram ST7 Battery</strong> — autonomous underground loader (larger scale, but proven autonomy)</li>
+  <li><strong>Sandvik AutoMine</strong> — full autonomous underground mining operations</li>
+  <li><strong>Herrenknecht micro-TBMs</strong> — small-diameter tunnel boring technology</li>
+  <li><strong>The Boring Company</strong> — demonstrated cost and size reduction in tunnel boring</li>
+  <li><strong>NASA/JPL foldable robotics</strong> — deployment mechanisms for space applications in constrained volumes</li>
+</ul>
+
+
+<h2>5. Survivability Analysis</h2>
+
+<p>At 20–30m depth in consolidated earth, an ESCC bunker provides protection against virtually all threats except dedicated strategic bunker-buster munitions:</p>
+
+<table>
+  <tr><th>Threat</th><th>Penetration</th><th>ESCC at 25m</th></tr>
+  <tr><td>FPV drone / loitering munition</td><td>Surface only</td><td style="color:#27ae60; font-weight:bold;">IMMUNE</td></tr>
+  <tr><td>155mm artillery</td><td>~2m earth</td><td style="color:#27ae60; font-weight:bold;">IMMUNE</td></tr>
+  <tr><td>Cruise missile (conventional)</td><td>~5m earth</td><td style="color:#27ae60; font-weight:bold;">IMMUNE</td></tr>
+  <tr><td>GBU-31 JDAM (2,000 lb)</td><td>~6m earth</td><td style="color:#27ae60; font-weight:bold;">IMMUNE</td></tr>
+  <tr><td>GBU-28 (5,000 lb penetrator)</td><td>~30m earth</td><td style="color:#d4a843; font-weight:bold;">MARGINAL</td></tr>
+  <tr><td>GBU-57 MOP (30,000 lb)</td><td>~60m earth</td><td style="color:#c0392b; font-weight:bold;">VULNERABLE</td></tr>
+</table>
+
+<div class="exchange-box">
+  <div class="label">Forcing the adversary from a $500 FPV drone to a</div>
+  <div class="big-number">$4,000,000+ GBU-28</div>
+  <div class="label">delivered by a manned aircraft (targetable by air defense) is an<br/>extremely favorable exchange ratio against an expedient, rebuildable facility</div>
+</div>
+
+<h3>5.1 Signature Reduction</h3>
+<ul>
+  <li><strong>Thermal:</strong> Underground is naturally temperature-stable; no vehicle heat signatures after construction</li>
+  <li><strong>Visual:</strong> Shaft heads are 30cm–1m diameter and easily camouflaged; no vehicle concentration</li>
+  <li><strong>RF:</strong> Antenna elements dispersed and offset; connected via buried hardline, not co-located with facility</li>
+  <li><strong>Acoustic:</strong> Generator offset 30m+ and can be baffled/buried</li>
+</ul>
+
+
+<h2>6. Feasibility &amp; Risk Assessment</h2>
+
+<h3>6.1 Technology Readiness</h3>
+
+<div class="callout">
+  <strong>80% COTS, 20% novel:</strong> The drill rigs, concrete pump, generator, elevator, and ventilation systems are all commercially available today. Only the foldable excavation robot requires new development — and its constituent technologies (autonomous underground navigation, electric mining equipment, compact cutting heads, robotic shotcrete) all exist individually at high TRL.
+</div>
+
+<h3>6.2 Risk Matrix</h3>
+
+<table>
+  <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+  <tr><td>Variable geology at deployment sites</td><td class="risk-high">HIGH</td><td>Pre-survey likely theaters; rapid GPR on arrival; modular cutting heads</td></tr>
+  <tr><td>Foldable mechanism reliability</td><td class="risk-med">MEDIUM</td><td>Proven deployment mechanisms from space robotics; extensive test program</td></tr>
+  <tr><td>Water table interference</td><td class="risk-med">MEDIUM</td><td>Dedicated dewatering shaft; grouting capability; site selection criteria</td></tr>
+  <tr><td>Chamber stability during excavation</td><td class="risk-med">MEDIUM</td><td>Immediate shotcrete application; conservative geometry; ground monitoring sensors</td></tr>
+  <tr><td>Spoil removal through 1m shaft</td><td class="risk-low">LOW</td><td>Bucket hoist or pneumatic conveyance; volumes manageable (~100–200m³)</td></tr>
+</table>
+
+<h3>6.3 Geological Applicability</h3>
+
+<p>ESCC is optimized for consolidated soil, clay, and soft sedimentary rock — covering the majority of terrain in European, Middle Eastern, and Indo-Pacific deployment zones. Hard crystalline rock (granite, basalt) would require alternative cutting approaches or pre-selected sites.</p>
+
+
+<h2 class="page-break">7. Program Structure</h2>
+
+<!-- ============== FIGURE 7: PROGRAM TIMELINE ============== -->
+<div class="figure">
+  <div class="figure-title">Figure 7 — Proposed Program Timeline</div>
+  <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="300" fill="#f4f6f8" rx="8"/>
+
+    <!-- Timeline axis -->
+    <line x1="80" y1="250" x2="850" y2="250" stroke="#333" stroke-width="2"/>
+    <!-- Month markers -->
+    <line x1="80" y1="245" x2="80" y2="255" stroke="#333" stroke-width="2"/>
+    <text x="80" y="270" font-size="9" fill="#333" text-anchor="middle">0</text>
+    <line x1="262" y1="245" x2="262" y2="255" stroke="#333" stroke-width="2"/>
+    <text x="262" y="270" font-size="9" fill="#333" text-anchor="middle">12 mo</text>
+    <line x1="535" y1="245" x2="535" y2="255" stroke="#333" stroke-width="2"/>
+    <text x="535" y="270" font-size="9" fill="#333" text-anchor="middle">30 mo</text>
+    <line x1="717" y1="245" x2="717" y2="255" stroke="#333" stroke-width="2"/>
+    <text x="717" y="270" font-size="9" fill="#333" text-anchor="middle">42 mo</text>
+
+    <!-- Phase 1 bar -->
+    <rect x="80" y="60" width="182" height="50" rx="6" fill="#3498db"/>
+    <text x="171" y="82" font-size="11" fill="white" text-anchor="middle" font-weight="bold">Phase 1: Concept Development</text>
+    <text x="171" y="98" font-size="10" fill="white" text-anchor="middle">12 months — $2M</text>
+
+    <!-- Phase 1 deliverables -->
+    <text x="85" y="130" font-size="8" fill="#333">&#8226; Engineering analysis &amp; simulation</text>
+    <text x="85" y="142" font-size="8" fill="#333">&#8226; Geological survey of representative terrain</text>
+    <text x="85" y="154" font-size="8" fill="#333">&#8226; Robot conceptual design &amp; kinematic sim</text>
+    <text x="85" y="166" font-size="8" fill="#333">&#8226; Foldable mechanism lab prototype</text>
+
+    <!-- Phase 2 bar -->
+    <rect x="262" y="60" width="273" height="50" rx="6" fill="#d4a843"/>
+    <text x="398" y="82" font-size="11" fill="white" text-anchor="middle" font-weight="bold">Phase 2: Prototype Development</text>
+    <text x="398" y="98" font-size="10" fill="white" text-anchor="middle">18 months — $8M</text>
+
+    <!-- Phase 2 deliverables -->
+    <text x="267" y="130" font-size="8" fill="#333">&#8226; Full excavation robot prototype</text>
+    <text x="267" y="142" font-size="8" fill="#333">&#8226; Integration with commercial drill rig + pump</text>
+    <text x="267" y="154" font-size="8" fill="#333">&#8226; Controlled test-site demonstration (known geology)</text>
+    <text x="267" y="166" font-size="8" fill="#333">&#8226; Teleoperation interface + initial autonomy</text>
+
+    <!-- Phase 3 bar -->
+    <rect x="535" y="60" width="182" height="50" rx="6" fill="#27ae60"/>
+    <text x="626" y="82" font-size="11" fill="white" text-anchor="middle" font-weight="bold">Phase 3: Field Demo</text>
+    <text x="626" y="98" font-size="10" fill="white" text-anchor="middle">12 months — $5M</text>
+
+    <!-- Phase 3 deliverables -->
+    <text x="540" y="130" font-size="8" fill="#333">&#8226; Full 5-vehicle system integration</text>
+    <text x="540" y="142" font-size="8" fill="#333">&#8226; Multi-site geological testing</text>
+    <text x="540" y="154" font-size="8" fill="#333">&#8226; 7-day operational timeline validation</text>
+    <text x="540" y="166" font-size="8" fill="#333">&#8226; Military user evaluation (USACE, Signal)</text>
+
+    <!-- Transition arrow -->
+    <rect x="717" y="60" width="130" height="50" rx="6" fill="none" stroke="#1a2332" stroke-width="2" stroke-dasharray="6,4"/>
+    <text x="782" y="82" font-size="10" fill="#1a2332" text-anchor="middle" font-weight="bold">Transition to</text>
+    <text x="782" y="98" font-size="10" fill="#1a2332" text-anchor="middle">Acquisition</text>
+
+    <!-- Total budget -->
+    <rect x="300" y="200" width="300" height="35" rx="6" fill="#1a2332"/>
+    <text x="450" y="222" font-size="13" fill="white" text-anchor="middle" font-weight="bold">Total: 42 months | ~$15M</text>
+
+    <!-- Milestone diamonds -->
+    <polygon points="262,240 270,250 262,260 254,250" fill="#3498db"/>
+    <text x="262" y="288" font-size="7" fill="#3498db" text-anchor="middle">CDR</text>
+    <polygon points="535,240 543,250 535,260 527,250" fill="#d4a843"/>
+    <text x="535" y="288" font-size="7" fill="#d4a843" text-anchor="middle">First Bore</text>
+    <polygon points="717,240 725,250 717,260 709,250" fill="#27ae60"/>
+    <text x="717" y="288" font-size="7" fill="#27ae60" text-anchor="middle">IOC Demo</text>
+  </svg>
+  <div class="figure-caption">Figure 7: Three-phase program from concept development through field demonstration, with transition to acquisition at 42 months.</div>
+</div>
+
+
+<h2>8. Team and Qualifications</h2>
+
+<h3>Principal Investigator</h3>
+<ul>
+  <li><strong>Senior Member, IEEE</strong> — continuous membership since 1989 (37 years)</li>
+  <li><strong>Lead Consultant, AT&amp;T</strong> — networks, infrastructure, and federal systems</li>
+  <li><strong>Faculty, San Jose State University</strong> — Computer Engineering, Data Science</li>
+  <li><strong>Faculty, Sonoma State University</strong></li>
+  <li>Research: autonomous systems, cognitive architectures, high-performance computing</li>
+</ul>
+
+<h3>Organizational Advantages</h3>
+
+<div class="callout">
+  <strong>AT&amp;T Federal</strong> is one of the largest telecommunications and IT service providers to the U.S. Department of Defense and Intelligence Community. AT&amp;T's federal division provides networking, cybersecurity, and cloud services to DoD through major contract vehicles including Enterprise Infrastructure Solutions (EIS) and FirstNet. For ESCC, AT&amp;T Federal can contribute:
+  <ul style="margin-top:0.5rem;">
+    <li>Secure communications architecture for subterranean C2 networking</li>
+    <li>Existing DoD contract vehicles and cleared facilities</li>
+    <li>Program management infrastructure for defense R&amp;D</li>
+    <li>Transition pathway from prototype to fielded capability</li>
+  </ul>
+</div>
+
+<p><strong>SJSU and SSU</strong> provide access to graduate research students, laboratory facilities, and a talent pipeline for autonomous systems engineering.</p>
+
+<h3>Proposed Team (to be confirmed)</h3>
+<table>
+  <tr><th>Role</th><th>Organization Type</th><th>Contribution</th></tr>
+  <tr><td>PI / Systems Integration</td><td>PI (AT&amp;T / SJSU / SSU)</td><td>System architecture, comms, autonomy, program management</td></tr>
+  <tr><td>Excavation Robot Design</td><td>University robotics lab</td><td>Foldable mechanism, manipulation, autonomous navigation</td></tr>
+  <tr><td>Boring / Tunneling</td><td>Commercial partner</td><td>Drill rig military adaptation, field testing, operational procedures</td></tr>
+  <tr><td>Military Engineering SME</td><td>Advisor / consultant</td><td>Operational requirements, doctrine, user evaluation</td></tr>
+  <tr><td>Secure C2 Communications</td><td>AT&amp;T Federal</td><td>Underground networking, hardened comms, EIS integration</td></tr>
+</table>
+
+
+<h2>9. Conclusion</h2>
+
+<p>The proliferation of low-cost autonomous aerial threats has created an urgent operational need for expedient deep underground command and control facilities. Current options — mobile vehicles, existing structures, or permanent bunkers — all present unacceptable tradeoffs between survivability, cost, timeline, and operational flexibility.</p>
+
+<p><strong>ESCC addresses this gap</strong> by integrating proven commercial boring and concrete technologies with a novel foldable autonomous excavation robot, packaged as a 5-vehicle military engineering convoy capable of constructing a functional command bunker at 20–30m depth within 5–7 days.</p>
+
+<p>The system's key properties:</p>
+
+<ul>
+  <li><strong>80% commercial technology</strong> — only the excavation robot requires significant new development</li>
+  <li><strong>Favorable exchange ratio</strong> — forces adversary from $500 drones to $4M+ strategic munitions delivered by targetable manned aircraft</li>
+  <li><strong>Operationally relevant timescale</strong> — 5-7 days aligns with forward HQ establishment timeline</li>
+  <li><strong>Scalable</strong> — from minimal relay posts to full division-level command centers</li>
+  <li><strong>Rebuildable</strong> — expedient construction means facilities can be abandoned and rebuilt at low marginal cost</li>
+</ul>
+
+<p>The proposed 42-month, $15M program provides a clear, low-risk path from concept development through field demonstration, leveraging AT&amp;T Federal's established defense relationships for transition to acquisition.</p>
+
+<div class="exchange-box" style="margin-top:2rem;">
+  <div class="label" style="font-size:1.1rem;">ESCC converts the adversary's drone advantage into a<br/> strategic-level targeting problem — at expedient cost and timescale.</div>
+</div>
+
+<hr style="margin-top:3rem; border:none; border-top:1px solid #ccc;">
+<p style="text-align:center; color:#888; font-size:0.85rem; margin-top:1rem;">
+  ESCC — Expedient Subterranean Command and Control<br/>
+  DARPA Concept Proposal | March 2026<br/>
+  Distribution Statement A: Approved for Public Release
+</p>
+
+</div>
+</body>
+</html>

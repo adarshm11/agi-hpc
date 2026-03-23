@@ -1,0 +1,13 @@
+{
+  "id": "andrewhbond/moral-geometry-benchmark",
+  "title": "Moral Geometry Benchmark - Social Cognition",
+  "code_file": "moral_geometry_benchmark.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "competition_sources": [],
+  "kernel_sources": [],
+  "dataset_sources": []
+}
