@@ -113,7 +113,9 @@ class TestMPCController:
 
     def test_compute_clamped(self):
         """Actions are clipped to [control_min, control_max]."""
-        cfg = MPCConfig(control_dim=2, control_min=-1.0, control_max=1.0, q_weight=100.0)
+        cfg = MPCConfig(
+            control_dim=2, control_min=-1.0, control_max=1.0, q_weight=100.0
+        )
         mpc = MPCController(config=cfg)
         state = np.zeros(6)
         reference = np.array([5.0, -5.0, 0.0, 0.0, 0.0, 0.0])
@@ -150,7 +152,9 @@ class TestImpedanceController:
         ic = ImpedanceController(config=cfg)
         desired = np.array([1.0, 0.0, 0.0])
         z = np.zeros(3)
-        force = ic.compute(desired_pos=desired, desired_vel=z, current_pos=z, current_vel=z)
+        force = ic.compute(
+            desired_pos=desired, desired_vel=z, current_pos=z, current_vel=z
+        )
         np.testing.assert_allclose(force, np.array([50.0, 0.0, 0.0]))
 
     def test_force_limit_clamping(self):
@@ -159,7 +163,9 @@ class TestImpedanceController:
         ic = ImpedanceController(config=cfg)
         desired = np.array([10.0, 0.0, 0.0])
         z = np.zeros(3)
-        force = ic.compute(desired_pos=desired, desired_vel=z, current_pos=z, current_vel=z)
+        force = ic.compute(
+            desired_pos=desired, desired_vel=z, current_pos=z, current_vel=z
+        )
         assert np.linalg.norm(force) == pytest.approx(10.0, abs=1e-9)
 
     def test_set_stiffness(self):

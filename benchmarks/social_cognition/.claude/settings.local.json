@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/source/agi-hpc/benchmarks/executive_functions/**)",
+      "Bash(python3 -c \":*)",
+      "Bash(python:*)"
+    ]
+  }
+}

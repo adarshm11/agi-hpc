@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add DHT, LLM, and Environment sprint plans\n\n- DHT_SPRINT_PLAN.md: Distributed Hash Table for HPC deployments\n  with consistent hashing, replication, and gossip protocol\n- LLM_SPRINT_PLAN.md: Shared LLM infrastructure with provider\n  abstraction, caching, rate limiting, and prompt management\n- ENVIRONMENT_SPRINT_PLAN.md: Environment interface for sensors,\n  actuators, and simulation backends \\(MuJoCo, PyBullet, ROS2\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add Master Implementation Plan for all sprint plans\n\nComprehensive high-level plan covering 65+ sprints across 10 subsystems:\n- 6 phases: Foundation, Core Cognitive, Integration, Advanced, Testing, Production\n- Dependency graph showing critical path\n- Phase exit criteria and success metrics\n- Resource requirements and risk mitigation\n- Sprint cross-reference matrix\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: implement Phase 1 and Phase 2 sprint infrastructure\n\nPhase 1 \\(Foundation\\):\n- Event Fabric: ZMQ XPUB/XSUB broker, Redis Streams backend with DLQ\n- LLM Infrastructure: Provider abstraction \\(Anthropic, OpenAI, Ollama\\),\n  middleware stack with retry/logging, streaming support\n- Environment Interface: Gymnasium-compatible API, structured observations\n  \\(Camera, LiDAR, IMU, Joint\\), structured actions \\(Joint, Cartesian, Gripper\\)\n\nPhase 2 \\(Core Cognitive\\):\n- Semantic Memory: Qdrant vector store, embedding models\n  \\(SentenceTransformer, OpenAI\\), SemanticMemoryClient\n- Episodic Memory: PostgreSQL store with Decision Proof chain,\n  EpisodicMemoryClient with episode lifecycle management\n- DHT: Consistent hashing ring with virtual nodes, pluggable storage\n  backends \\(in-memory, Redis\\), DHTClient with configurable replication\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(findstr:*)",
+      "Bash(cd:*)",
+      "Bash(dir:*)",
+      "Bash(python -m black:*)",
+      "Bash(python -m ruff check:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat\\(sprint-2\\): complete Sprint 2 implementation across all subsystems\n\nSprint 2 Implementation:\n\nLH Subsystem:\n- Semantic/similarity search with streaming responses\n- Safety client proto serialization\n- PlanService action sequences\n\nRH Subsystem:\n- Full ControlService with Environment integration\n- WorldModel action rollout with risk estimation\n- Perception pipeline with state tracking\n\nMemory Subsystem:\n- Episodic memory with decision proofs \\(hash chains\\)\n- Semantic memory batch operations\n\nSafety Subsystem:\n- YAML rule engine with hierarchical categories\n- Constraint and precondition checking\n\nMetacognition:\n- ReasoningAnalyzer with pattern detection\n- Confidence calibration and issue tracking\n\nIntegration:\n- EventFabric with Redis pub/sub\n- Standard event schemas for all subsystems\n\nEnvironment:\n- MuJoCo and Isaac Gym backends\n- Async action execution\n\nDHT:\n- State manager with consistency protocols\n- Server implementation\n\nLLM:\n- Caching middleware \\(in-memory and Redis\\)\n- Rate limiting with token bucket\n\nTests:\n- RH unit tests \\(perception, world_model, control_service\\)\n- Fixed safety_client tests for proper mock behavior\n\nLinting:\n- Fixed all black formatting issues \\(32 files\\)\n- Fixed all ruff errors \\(B904, B905, F841\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(python:*)",
+      "Bash(git commit:*)",
+      "Bash(gh run:*)",
+      "Bash(test:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(git reset:*)",
+      "Bash(ruff:*)",
+      "Bash(pip install:*)",
+      "Bash(black:*)",
+      "Bash(xargs:*)",
+      "Bash(ls:*)",
+      "Bash(for f in src/agi/rh/control/primitives.py src/agi/rh/control/trajectory.py src/agi/rh/control/realtime.py src/agi/rh/control/robot_interface.py src/agi/rh/control/simulation.py)",
+      "Bash(do python -m py_compile \"$f\")",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(for f in tests/unit/test_safety_learning.py tests/unit/test_llm_reflection.py tests/unit/test_nats_backend.py tests/unit/test_dht_observability.py tests/unit/test_dht_hpc.py tests/unit/test_dht_security.py tests/unit/test_llm_integration.py tests/lh/test_performance.py tests/lh/test_hpc_deploy.py tests/rh/test_primitives.py tests/rh/test_trajectory.py tests/rh/test_realtime.py tests/rh/test_robot_interface.py)",
+      "Bash(for f in tests/env/test_base.py tests/env/test_mujoco.py tests/env/test_pybullet.py tests/env/test_observations.py tests/env/test_actions.py tests/memory/test_lh_memory_integration.py tests/memory/test_safety_episodic_integration.py tests/memory/test_rh_memory_integration.py tests/integration/test_e2e_scenarios.py)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(sort:*)",
+      "WebSearch",
+      "Bash(git push:*)"
+    ]
+  }
+}

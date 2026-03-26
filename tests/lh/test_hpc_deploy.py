@@ -357,7 +357,12 @@ class TestApptainerRunner:
 
         assert result is True
         mock_run.assert_called_once_with(
-            ["apptainer", "pull", "/images/pt.sif", "docker://nvcr.io/nvidia/pytorch:latest"],
+            [
+                "apptainer",
+                "pull",
+                "/images/pt.sif",
+                "docker://nvcr.io/nvidia/pytorch:latest",
+            ],
             capture_output=True,
             text=True,
             check=False,

@@ -82,9 +82,7 @@ class TestMTLSCredentials:
         key_file.write_bytes(b"KEY-DATA")
         ca_file.write_bytes(b"CA-DATA")
 
-        creds = MTLSCredentials.from_files(
-            str(cert_file), str(key_file), str(ca_file)
-        )
+        creds = MTLSCredentials.from_files(str(cert_file), str(key_file), str(ca_file))
         assert creds.cert_data == b"CERT-DATA"
         assert creds.key_data == b"KEY-DATA"
         assert creds.ca_data == b"CA-DATA"

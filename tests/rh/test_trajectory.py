@@ -91,9 +91,7 @@ class TestTrajectory:
         assert traj.cost == 0.0
 
     def test_single_waypoint_length_is_zero(self):
-        traj = Trajectory(
-            waypoints=[Waypoint(position=np.array([1.0, 0.0, 0.0]))]
-        )
+        traj = Trajectory(waypoints=[Waypoint(position=np.array([1.0, 0.0, 0.0]))])
         assert traj.num_waypoints == 1
         assert traj.length == pytest.approx(0.0)
 
@@ -217,9 +215,7 @@ class TestCHOMPPlanner:
 
     def test_optimize_with_collision_fn(self):
         planner = CHOMPPlanner()
-        traj = Trajectory(
-            waypoints=[Waypoint(position=np.array([0.0, 0.0, 0.0]))]
-        )
+        traj = Trajectory(waypoints=[Waypoint(position=np.array([0.0, 0.0, 0.0]))])
         result = planner.optimize(traj, collision_fn=lambda p: False)
         assert result is traj
 
@@ -248,9 +244,7 @@ class TestTrajectoryOptimizer:
         assert result is traj  # fewer than 3 waypoints returns as-is
 
     def test_smooth_reduces_waypoints(self):
-        opt = TrajectoryOptimizer(
-            config=TrajectoryConfig(smoothing_iterations=500)
-        )
+        opt = TrajectoryOptimizer(config=TrajectoryConfig(smoothing_iterations=500))
         # Build a zig-zag path with many collinear shortcuts available
         positions = []
         for i in range(20):
