@@ -68,6 +68,15 @@ from agi.core.llm.middleware import (
     create_default_middleware,
 )
 
+# Integration (Sprint 6)
+from agi.core.llm.integration import (
+    LLMIntegrationConfig,
+    LHPlannerIntegration,
+    MetacognitionIntegration,
+    MemoryEmbeddingIntegration,
+    SafetyFallbackIntegration,
+)
+
 # Re-export providers
 from agi.core.llm.providers import (
     LLMProvider,
@@ -118,4 +127,10 @@ __all__ = [
     "AnthropicProvider",
     "OpenAIProvider",
     "OllamaProvider",
+    # Integration (Sprint 6)
+    "LLMIntegrationConfig",
+    "LHPlannerIntegration",
+    "MetacognitionIntegration",
+    "MemoryEmbeddingIntegration",
+    "SafetyFallbackIntegration",
 ]

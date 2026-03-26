@@ -10,7 +10,7 @@ Andrew H. Bond^1,2^ and Lucas Thiele^3^
 
 ## Abstract
 
-Large language models are increasingly deployed in contexts requiring moral judgment — content moderation, clinical decision support, legal analysis — yet our understanding of how their moral judgment responds to surface-level variation remains rudimentary. We introduce a geometric evaluation framework that treats moral judgment as a point in a task-specific 7-dimensional harm space and measures displacement under perturbations defined as morally irrelevant within the benchmark's equivalence classes. Applying this framework across five cognitive domains — learning, metacognition, attention, executive functions, and social cognition — using 5 models spanning 2 architecture families, we report three linked findings. First, *invariance violations*: perturbations that preserve moral content but alter surface presentation (emotional tone, linguistic framing, irrelevant sensory detail) displace moral judgments at 4.6–8.9 sigma (Fisher-combined, 5 models each). Second, *susceptibility to socially delivered invalid correction*: models accept fabricated corrections at rates ranging from 0% to 56%, with a sycophancy gradient that scales inversely with model stability (13.3σ combined across 4 models for correction integration overall, though this conflates legitimate and illegitimate belief updating). Third, a *metacognitive calibration deficit*: confidence ratings fail to track accuracy (9.3σ, 4 models), co-occurring with a ~38% ceiling on prompt-level recovery from perturbation-induced displacement. We further identify partially dissociable robustness profiles showing that no single score captures a model's vulnerability structure. These findings demonstrate that moral judgment in current LLMs possesses some invariances (gender swap, evaluation order) but lacks others (framing, emotional tone), providing a structured diagnostic for alignment that scalar benchmarks cannot deliver.
+Large language models are increasingly deployed in contexts requiring moral judgment — content moderation, clinical decision support, legal analysis — yet our understanding of how their moral judgment responds to surface-level variation remains rudimentary. We introduce a geometric evaluation framework that treats moral judgment as a point in a task-specific 7-dimensional harm space and measures displacement under perturbations defined as morally irrelevant within the benchmark's equivalence classes. Applying this framework across five cognitive domains — learning, metacognition, attention, executive functions, and social cognition — using 5 models spanning 2 architecture families, we report three linked findings. First, *invariance violations*: perturbations that preserve moral content but alter surface presentation (emotional tone, linguistic framing, irrelevant sensory detail) displace moral judgments at 5.0–8.9 sigma (Fisher-combined, 5 models each). Second, *susceptibility to socially delivered invalid correction*: models accept fabricated corrections at rates ranging from 0% to 56%, with a sycophancy gradient that scales inversely with model stability (13.3σ combined across 4 models for correction integration overall, though this conflates legitimate and illegitimate belief updating). Third, a *metacognitive calibration deficit*: confidence ratings fail to track accuracy (9.3σ, 4 models), co-occurring with a ~38% ceiling on prompt-level recovery from perturbation-induced displacement. We further identify partially dissociable robustness profiles showing that no single score captures a model's vulnerability structure. These findings demonstrate that moral judgment in current LLMs possesses some invariances (gender swap, evaluation order) but lacks others (framing, emotional tone), providing a structured diagnostic for alignment that scalar benchmarks cannot deliver.
 
 ---
 
@@ -96,7 +96,7 @@ Table 1a summarizes the three perturbation-based invariance tests where the pert
 |---|---|---|---|---|
 | Social Cognition | Linguistic framing (T5) | Harm shift under euphemistic/dramatic rewriting | 8.9 | 5 |
 | Executive Functions | Emotional tone (E2) | Severity shift under emotional anchoring | 6.8 | 5 |
-| Attention | Irrelevant detail (A1) | Verdict flip under vivid sensory distractors | 4.6 | 5 |
+| Attention | Irrelevant detail (A1) | Verdict flip under vivid sensory distractors | 5.0 | 5 |
 
 These three perturbation types share a clean interpretation: the transformation is morally irrelevant by construction (same facts, different presentation), so any displacement beyond stochastic baselines is an operational invariance violation.
 
@@ -223,7 +223,7 @@ The recovery ceiling (~38%) sets a practical bound on prompt-level interventions
 
 We have demonstrated three linked findings about LLM moral judgment, tested across 5 models spanning 2 architecture families using empirical stochastic controls:
 
-1. *Selective invariance violations.* Three morally irrelevant perturbation types (linguistic framing, emotional anchoring, irrelevant sensory detail) displace the judgment vector at 4.6–8.9 sigma (Fisher-combined, 5 models each), while two others (gender swap, evaluation order) produce no displacement beyond stochastic baselines. The failure is specific to perturbations that manipulate salience.
+1. *Selective invariance violations.* Three morally irrelevant perturbation types (linguistic framing, emotional anchoring, irrelevant sensory detail) displace the judgment vector at 5.0–8.9 sigma (Fisher-combined, 5 models each), while two others (gender swap, evaluation order) produce no displacement beyond stochastic baselines. The failure is specific to perturbations that manipulate salience.
 
 2. *Susceptibility to invalid correction.* Within the tested Gemini variants, later versions showed higher wrong-correction flip rates (33–56%), though confidence intervals are wide (n = 9 per model). Claude showed zero susceptibility, demonstrating the problem is addressable.
 
@@ -271,7 +271,7 @@ For the metacognition track, where model costs vary significantly (Gemini 2.5 Pr
 |---|---|---|---|---|---|---|
 | T5 framing (8.9σ) | Social Cognition | 6 gold + 6 probe + 9 gen = 21 | 3 | 5 (all) | — | 5 |
 | E2 anchoring (6.8σ) | Executive Functions | 6 gold + 8 probe + 9 gen = 23 | 3 | 5 (all) | — | 5 |
-| A1 distractors (4.6σ) | Attention | 6 gold + 6 probe + 9 gen = 21 | 5 | 5 (all) | — | 5 |
+| A1 distractors (5.0σ) | Attention | 6 gold + 6 probe + 9 gen = 21 | 5 | 5 (all) | — | 5 |
 | L2 correction (13.3σ) | Learning | 6 gold + 6 probe + 25 gen = 37 | 5 | 3 Gemini (L1–L4) | Claude (L2 only) | 4 |
 | M1 calibration (9.3σ) | Metacognition | 6 gold + 6 probe + 8–40 AITA | 0–3 (budget-scaled) | 2 (M1–M4) | 2 (M1 only) + Claude (M1 gold) | 4 |
 
@@ -353,11 +353,11 @@ This work was conducted as part of the Measuring AGI competition on Kaggle. API 
 
 | Model | A1: Distract | A2: Length | A3: Selective | A4: Divided | Composite |
 |---|---|---|---|---|---|
-| Gemini 2.5 Pro | 0.669 | 0.852 | 0.687 | 1.000 | 0.776 |
-| Gemini 3 Flash | 0.678 | 0.714 | 0.667 | 1.000 | 0.747 |
-| Gemini 2.5 Flash | 0.720 | 0.786 | 0.644 | 0.875 | 0.745 |
-| Claude Sonnet 4.6 | 0.646 | 0.829 | 0.692 | 0.571 | 0.679 |
-| Gemini 2.0 Flash | 0.581 | 0.667 | 0.669 | 0.812 | 0.666 |
+| Gemini 3 Flash | 0.753 | 0.857 | 0.698 | 0.975 | 0.805 |
+| Gemini 2.0 Flash | 0.607 | 0.905 | 0.674 | 0.925 | 0.747 |
+| Claude Sonnet 4.6 | 0.690 | 0.857 | 0.707 | 0.700 | 0.730 |
+| Gemini 2.5 Pro | 0.625 | 0.676 | 0.669 | 1.000 | 0.721 |
+| Gemini 2.5 Flash | 0.634 | 0.738 | 0.651 | 0.775 | 0.687 |
 
 **Executive Functions Track**
 

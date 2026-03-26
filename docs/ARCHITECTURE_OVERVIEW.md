@@ -25,7 +25,7 @@ This document describes the high-level architecture of the AGI-HPC system—a co
 │   │  │  - Plan review  │   │         │  │  - Object recog │    │          │
 │   │  └─────────────────┘   │         │  └─────────────────┘    │          │
 │   │                         │         │                         │          │
-│   │  Port: 50051            │         │  Port: 50057            │          │
+│   │  Port: 50100            │         │  Port: 50057            │          │
 │   └───────────┬─────────────┘         └───────────┬─────────────┘          │
 │               │                                   │                        │
 │               └───────────────┬───────────────────┘                        │
@@ -75,11 +75,14 @@ The Left Hemisphere handles high-level reasoning, planning, and goal management.
 | Metacognition | `metacog_client.py` | Self-monitoring and plan review |
 | LLM Integration | `llm/` | Language model backends (OpenAI, Anthropic, local) |
 | Observability | `observability.py` | Metrics, logging, request context |
+| Performance | `performance.py` | LRU cache with TTL, async operation batcher |
+| HPC Deploy | `hpc_deploy.py` | Slurm launcher, Apptainer container runner |
+| Resilience | `resilience.py` | Circuit breaker, retry, graceful degradation |
 
 **Key Data Structures:**
 - `PlanGraph`: Hierarchical plan representation
 - `PlanStep`: Individual action with safety tags, tool references
-- `PlanRequest/Response`: gRPC API messages
+- `PlanRequest/Response`: gRPC API messages (defined in `plan.proto`, generated in `proto_gen/`)
 
 ### Right Hemisphere (RH) - Reactive Processing
 
@@ -92,6 +95,16 @@ The Right Hemisphere handles perception, world modeling, and motor control.
 | Perception | `perception/` | Sensor fusion, object recognition |
 | World Model | `world_model/` | Physics simulation, state prediction |
 | Control | `control/` | Motor control, trajectory execution |
+
+**RH Control Submodules** (`src/agi/rh/control/`):
+
+| Module | File | Description |
+|--------|------|-------------|
+| Motor Primitives | `primitives.py` | Protocol-based primitive system (reach, grasp, place, navigate) with PrimitiveLibrary |
+| Trajectory Planning | `trajectory.py` | RRT and CHOMP planners, trajectory optimization, waypoint management |
+| Realtime Control | `realtime.py` | PID, MPC, and impedance controllers for real-time motor control |
+| Robot Interface | `robot_interface.py` | ROS2 bridge, URDF loader, hardware abstraction layer |
+| Simulation | `simulation.py` | MuJoCo, Isaac Sim, Unity, and Gazebo simulation wrappers |
 
 ### Safety Subsystem
 
@@ -109,6 +122,9 @@ Three-layer safety architecture ensuring safe operation at all timescales.
 - `erisml/service.py`: gRPC service for ethical evaluation
 - `erisml/facts_builder.py`: Converts PlanStep → EthicalFacts
 - `gateway.py`: Safety Gateway with pre/in/post-action checking
+
+**Safety Learning** (`src/agi/safety/learning/`):
+- `service.py`: Bayesian rule weight updates based on outcome feedback, anomaly detection, rule performance tracking
 
 ### Memory Services
 
@@ -129,15 +145,32 @@ Distributed memory architecture for different types of knowledge.
 | Component | Directory | Description |
 |-----------|-----------|-------------|
 | gRPC Server | `api/` | Base gRPC server infrastructure |
-| Event Fabric | `events/` | Pub/sub event system (local or distributed) |
-| DHT | `dht/` | Distributed hash table for HPC deployments |
-| LLM | `llm/` | Shared LLM client infrastructure |
+| Event Fabric | `events/` | Pub/sub event system (`local`, `zmq`, `redis`, `nats` modes) |
+| DHT | `dht/` | Distributed hash table with observability, HPC transport, security |
+| LLM | `llm/` | Shared LLM client with subsystem integration points |
+
+**Event Fabric Backends:**
+- `fabric.py` (`LocalBackend`): In-process pub/sub for testing
+- `fabric.py` (`ZmqBackend`): ZeroMQ XPUB/XSUB for multi-process
+- `redis_backend.py`: Redis Streams for persistence
+- `nats_backend.py`: NATS JetStream for production (at-least-once delivery, durable consumers)
+
+**DHT Production Modules:**
+- `observability.py`: Prometheus metrics (reuses Counter/Histogram/Gauge from `agi.lh.observability`), distributed tracing with SpanContext
+- `hpc.py`: UCX transport for RDMA, shared memory store, batch operations
+- `security.py`: mTLS credentials, per-peer access control, HMAC-based encryption, audit logging
+
+**LLM Integration Points** (`llm/integration.py`):
+- `LHPlannerIntegration`: LLM-powered plan generation and refinement
+- `MetacognitionIntegration`: Plan critique, explanation, confidence assessment
+- `MemoryEmbeddingIntegration`: Embedding generation for semantic memory
+- `SafetyFallbackIntegration`: LLM-based safety assessment and violation explanation
 
 ## Service Ports
 
 | Service | Port | Proto File |
 |---------|------|------------|
-| LH (Plan Service) | 50051 | `plan.proto`, `lh.proto` |
+| LH (Plan Service) | 50100 | `plan.proto`, `lh.proto` |
 | Episodic Memory | 50052 | `memory.proto` |
 | Semantic Memory | 50053 | `memory.proto` |
 | Procedural Memory | 50054 | `memory.proto` |
@@ -231,15 +264,16 @@ All inter-service communication uses gRPC with Protocol Buffers.
 
 Configuration files are in `configs/`:
 
-| File | Description |
-|------|-------------|
-| `lh.yaml` | Left Hemisphere service config |
-| `lh_config.yaml` | LH detailed parameters |
-| `rh_config.yaml` | Right Hemisphere config |
-| `memory_config.yaml` | Memory services config |
-| `safety_config.yaml` | Safety thresholds and policies |
-| `meta_config.yaml` | Metacognition parameters |
-| `env_config.yaml` | Environment interface config |
+| File | Status | Description |
+|------|--------|-------------|
+| `lh.yaml` | Populated | LH service config (port, downstream addresses, fabric, logging) |
+| `rh.yaml` | Populated | RH service config |
+| `lh_config.yaml` | Placeholder | LH detailed parameters |
+| `rh_config.yaml` | Placeholder | Right Hemisphere config |
+| `memory_config.yaml` | Placeholder | Memory services config |
+| `safety_config.yaml` | Placeholder | Safety thresholds and policies |
+| `meta_config.yaml` | Placeholder | Metacognition parameters |
+| `env_config.yaml` | Placeholder | Environment interface config |
 
 ## Key Design Principles
 

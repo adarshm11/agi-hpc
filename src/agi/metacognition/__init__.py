@@ -86,3 +86,15 @@ __all__ = [
     "CoherenceChecker",
     "EvidenceValidator",
 ]
+
+# Sprint 6: LLM-based reflection
+try:
+    from agi.meta.llm_reflection import (
+        LLMReflector,
+        PlanCritique,
+        ReflectionConfig,
+    )
+
+    __all__.extend(["LLMReflector", "PlanCritique", "ReflectionConfig"])
+except ImportError:
+    pass

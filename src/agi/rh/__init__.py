@@ -66,3 +66,23 @@ __all__ = [
     "SimulationService",
     "RHEventLoop",
 ]
+
+# Sprint 6: Advanced Control
+try:
+    from agi.rh.control.primitives import (
+        MotorPrimitive,
+        ExecutionContext,
+        PrimitiveResult,
+        PrimitiveLibrary,
+    )
+
+    __all__.extend(
+        [
+            "MotorPrimitive",
+            "ExecutionContext",
+            "PrimitiveResult",
+            "PrimitiveLibrary",
+        ]
+    )
+except ImportError:
+    pass

@@ -29,3 +29,23 @@ __all__ = [
     "PlanStepToEthicalFacts",
     "SafetyGateway",
 ]
+
+# Sprint 6: Safety Learning
+try:
+    from agi.safety.learning.service import (
+        SafetyLearner,
+        SafetyLearnerConfig,
+        OutcomeFeedback,
+        RuleStats,
+    )
+
+    __all__.extend(
+        [
+            "SafetyLearner",
+            "SafetyLearnerConfig",
+            "OutcomeFeedback",
+            "RuleStats",
+        ]
+    )
+except ImportError:
+    pass

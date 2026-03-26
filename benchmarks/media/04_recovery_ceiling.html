@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #16161d; color: #e0e0e0; margin: 0; padding: 40px; }
+  .container { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin: 0 0 6px; }
+  .sub { font-size: 14px; text-align: center; color: #999; margin-bottom: 32px; }
+  .note { text-align: center; color: #777; font-size: 11px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>The ~38% Recovery Ceiling</h1>
+  <p class="sub">Explicit warnings recover displaced verdicts about one-third of the time — consistent across perturbation types</p>
+
+  <svg viewBox="0 0 840 340" xmlns="http://www.w3.org/2000/svg">
+    <g transform="translate(90, 20)">
+      <!-- Y axis -->
+      <line x1="0" y1="0" x2="0" y2="250" stroke="#444" stroke-width="1"/>
+      <line x1="0" y1="250" x2="680" y2="250" stroke="#444" stroke-width="1"/>
+
+      <!-- Y gridlines -->
+      <line x1="0" y1="187.5" x2="680" y2="187.5" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="125" x2="680" y2="125" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="62.5" x2="680" y2="62.5" stroke="#2a2a35" stroke-width="0.5"/>
+
+      <text x="-10" y="254" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0%</text>
+      <text x="-10" y="192" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">25%</text>
+      <text x="-10" y="129" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">50%</text>
+      <text x="-10" y="67" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">75%</text>
+      <text x="-10" y="4" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">100%</text>
+
+      <text x="-55" y="125" text-anchor="middle" fill="#bbb" font-size="12" font-family="Segoe UI, sans-serif" transform="rotate(-90,-55,125)">Recovery Rate</text>
+
+      <!-- ~38% ceiling line -->
+      <line x1="0" y1="155" x2="680" y2="155" stroke="#fdae61" stroke-width="2" stroke-dasharray="8,5"/>
+      <text x="690" y="159" fill="#fdae61" font-size="12" font-weight="600" font-family="Segoe UI, sans-serif">~38%</text>
+
+      <!-- Group labels -->
+      <text x="155" y="280" text-anchor="middle" fill="#bbb" font-size="13" font-weight="500" font-family="Segoe UI, sans-serif">Emotional Anchoring (E2)</text>
+      <text x="510" y="280" text-anchor="middle" fill="#bbb" font-size="13" font-weight="500" font-family="Segoe UI, sans-serif">Distractor Warning (A1)</text>
+
+      <!-- E2 bars — Dark2 palette -->
+      <!-- Claude 20% -->
+      <rect x="40" y="200" width="36" height="50" fill="#1b9e77" rx="2" opacity="0.85"/>
+      <text x="58" y="195" text-anchor="middle" fill="#1b9e77" font-size="10" font-family="Segoe UI, sans-serif">20%</text>
+      <text x="58" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Claude</text>
+
+      <!-- Flash 2.5: 29% -->
+      <rect x="90" y="178" width="36" height="72" fill="#e7298a" rx="2" opacity="0.85"/>
+      <text x="108" y="173" text-anchor="middle" fill="#e7298a" font-size="10" font-family="Segoe UI, sans-serif">29%</text>
+      <text x="108" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Fl 2.5</text>
+
+      <!-- Pro: 20% -->
+      <rect x="140" y="200" width="36" height="50" fill="#7570b3" rx="2" opacity="0.85"/>
+      <text x="158" y="195" text-anchor="middle" fill="#7570b3" font-size="10" font-family="Segoe UI, sans-serif">20%</text>
+      <text x="158" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Pro</text>
+
+      <!-- Flash 3: 40% -->
+      <rect x="190" y="150" width="36" height="100" fill="#66a61e" rx="2" opacity="0.85"/>
+      <text x="208" y="145" text-anchor="middle" fill="#66a61e" font-size="10" font-family="Segoe UI, sans-serif">40%</text>
+      <text x="208" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Fl 3</text>
+
+      <!-- Flash 2.0: 73% -->
+      <rect x="240" y="68" width="36" height="182" fill="#d95f02" rx="2" opacity="0.85"/>
+      <text x="258" y="63" text-anchor="middle" fill="#d95f02" font-size="10" font-family="Segoe UI, sans-serif">73%</text>
+      <text x="258" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Fl 2.0</text>
+
+      <!-- Separator -->
+      <line x1="330" y1="0" x2="330" y2="250" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+
+      <!-- A1 bars -->
+      <!-- Flash 2.0: 33% -->
+      <rect x="390" y="168" width="36" height="82" fill="#d95f02" rx="2" opacity="0.85"/>
+      <text x="408" y="163" text-anchor="middle" fill="#d95f02" font-size="10" font-family="Segoe UI, sans-serif">33%</text>
+      <text x="408" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Fl 2.0</text>
+
+      <!-- Flash 2.5: 40% -->
+      <rect x="440" y="150" width="36" height="100" fill="#e7298a" rx="2" opacity="0.85"/>
+      <text x="458" y="145" text-anchor="middle" fill="#e7298a" font-size="10" font-family="Segoe UI, sans-serif">40%</text>
+      <text x="458" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Fl 2.5</text>
+
+      <!-- Flash 3: 43% -->
+      <rect x="490" y="143" width="36" height="107" fill="#66a61e" rx="2" opacity="0.85"/>
+      <text x="508" y="138" text-anchor="middle" fill="#66a61e" font-size="10" font-family="Segoe UI, sans-serif">43%</text>
+      <text x="508" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Fl 3</text>
+
+      <!-- Pro: 33% -->
+      <rect x="540" y="168" width="36" height="82" fill="#7570b3" rx="2" opacity="0.85"/>
+      <text x="558" y="163" text-anchor="middle" fill="#7570b3" font-size="10" font-family="Segoe UI, sans-serif">33%</text>
+      <text x="558" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Pro</text>
+
+      <!-- Claude: 43% -->
+      <rect x="590" y="143" width="36" height="107" fill="#1b9e77" rx="2" opacity="0.85"/>
+      <text x="608" y="138" text-anchor="middle" fill="#1b9e77" font-size="10" font-family="Segoe UI, sans-serif">43%</text>
+      <text x="608" y="296" text-anchor="middle" fill="#777" font-size="9" font-family="Segoe UI, sans-serif">Claude</text>
+
+      <!-- Mean labels -->
+      <text x="155" y="312" text-anchor="middle" fill="#888" font-size="10" font-family="Segoe UI, sans-serif">mean: 38%</text>
+      <text x="510" y="312" text-anchor="middle" fill="#888" font-size="10" font-family="Segoe UI, sans-serif">mean: 39%</text>
+    </g>
+  </svg>
+  <p class="note">Different perturbation types, same recovery ceiling — prompt-level metacognitive intervention has a shared practical bound.</p>
+</div>
+</body>
+</html>

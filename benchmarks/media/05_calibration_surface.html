@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #16161d; color: #e0e0e0; margin: 0; padding: 40px; }
+  .container { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin: 0 0 6px; }
+  .sub { font-size: 14px; text-align: center; color: #999; margin-bottom: 32px; }
+  .note { text-align: center; color: #777; font-size: 11px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Systematic Miscalibration: 9.3σ Combined</h1>
+  <p class="sub">Every model tested is overconfident — stated confidence exceeds observed accuracy</p>
+
+  <svg viewBox="0 0 840 380" xmlns="http://www.w3.org/2000/svg">
+    <g transform="translate(100, 30)">
+      <!-- Y axis -->
+      <line x1="0" y1="0" x2="0" y2="280" stroke="#444" stroke-width="1"/>
+      <line x1="0" y1="280" x2="660" y2="280" stroke="#444" stroke-width="1"/>
+
+      <!-- Y labels -->
+      <text x="-10" y="284" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0.0</text>
+      <text x="-10" y="214" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0.1</text>
+      <text x="-10" y="144" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0.2</text>
+      <text x="-10" y="74" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0.3</text>
+      <text x="-10" y="4" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0.4+</text>
+
+      <!-- Gridlines -->
+      <line x1="0" y1="210" x2="660" y2="210" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="140" x2="660" y2="140" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="70" x2="660" y2="70" stroke="#2a2a35" stroke-width="0.5"/>
+
+      <text x="-55" y="140" text-anchor="middle" fill="#bbb" font-size="12" font-family="Segoe UI, sans-serif" transform="rotate(-90,-55,140)">Expected Calibration Error</text>
+
+      <!-- Perfect calibration = 0 line -->
+      <line x1="0" y1="280" x2="660" y2="280" stroke="#1a9641" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.4"/>
+      <text x="670" y="284" fill="#1a9641" font-size="10" font-family="Segoe UI, sans-serif" opacity="0.6">perfect</text>
+
+      <!-- Bar width=80, gap between models -->
+      <!-- Flash 2.0: ECE=0.414, z=5.8σ -->
+      <rect x="30" y="-10" width="80" height="290" fill="#d95f02" rx="3" opacity="0.8"/>
+      <text x="70" y="-20" text-anchor="middle" fill="#d95f02" font-size="13" font-weight="600" font-family="Segoe UI, sans-serif">0.414</text>
+      <text x="70" y="302" text-anchor="middle" fill="#ccc" font-size="11" font-family="Segoe UI, sans-serif">Flash 2.0</text>
+      <text x="70" y="318" text-anchor="middle" fill="#d95f02" font-size="10" font-family="Segoe UI, sans-serif">5.8σ</text>
+
+      <!-- Flash 2.5: ECE=0.415, z=7.0σ -->
+      <rect x="150" y="-11" width="80" height="291" fill="#e7298a" rx="3" opacity="0.8"/>
+      <text x="190" y="-20" text-anchor="middle" fill="#e7298a" font-size="13" font-weight="600" font-family="Segoe UI, sans-serif">0.415</text>
+      <text x="190" y="302" text-anchor="middle" fill="#ccc" font-size="11" font-family="Segoe UI, sans-serif">Flash 2.5</text>
+      <text x="190" y="318" text-anchor="middle" fill="#e7298a" font-size="10" font-family="Segoe UI, sans-serif">7.0σ</text>
+
+      <!-- Flash 3: ECE=0.333, z=4.5σ -->
+      <rect x="270" y="47" width="80" height="233" fill="#66a61e" rx="3" opacity="0.8"/>
+      <text x="310" y="38" text-anchor="middle" fill="#66a61e" font-size="13" font-weight="600" font-family="Segoe UI, sans-serif">0.333</text>
+      <text x="310" y="302" text-anchor="middle" fill="#ccc" font-size="11" font-family="Segoe UI, sans-serif">Flash 3</text>
+      <text x="310" y="318" text-anchor="middle" fill="#66a61e" font-size="10" font-family="Segoe UI, sans-serif">4.5σ</text>
+
+      <!-- Pro: ECE=0.230, z=2.5σ -->
+      <rect x="390" y="119" width="80" height="161" fill="#7570b3" rx="3" opacity="0.8"/>
+      <text x="430" y="110" text-anchor="middle" fill="#7570b3" font-size="13" font-weight="600" font-family="Segoe UI, sans-serif">0.230</text>
+      <text x="430" y="302" text-anchor="middle" fill="#ccc" font-size="11" font-family="Segoe UI, sans-serif">Pro 2.5</text>
+      <text x="430" y="318" text-anchor="middle" fill="#7570b3" font-size="10" font-family="Segoe UI, sans-serif">2.5σ</text>
+
+      <!-- Claude: ECE=0.250 -->
+      <rect x="510" y="105" width="80" height="175" fill="#1b9e77" rx="3" opacity="0.8"/>
+      <text x="550" y="96" text-anchor="middle" fill="#1b9e77" font-size="13" font-weight="600" font-family="Segoe UI, sans-serif">0.250</text>
+      <text x="550" y="302" text-anchor="middle" fill="#ccc" font-size="11" font-family="Segoe UI, sans-serif">Claude</text>
+      <text x="550" y="318" text-anchor="middle" fill="#1b9e77" font-size="10" font-family="Segoe UI, sans-serif">cross-family</text>
+
+      <!-- Fisher combined label -->
+      <rect x="580" y="335" width="90" height="30" fill="#d7191c" fill-opacity="0.15" stroke="#d7191c" stroke-opacity="0.3" rx="4"/>
+      <text x="625" y="355" text-anchor="middle" fill="#d7191c" font-size="15" font-weight="700" font-family="Segoe UI, sans-serif">9.3σ</text>
+      <text x="520" y="355" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">Fisher combined:</text>
+    </g>
+  </svg>
+  <p class="note">ECE = Expected Calibration Error. Lower is better. All models show overconfidence (high confidence on wrong answers). Calibration improves with model scale.</p>
+</div>
+</body>
+</html>

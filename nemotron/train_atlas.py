@@ -3,7 +3,7 @@
 Optimized for 2x Quadro GV100 (32GB each, Volta, compute 7.0).
 - Full LoRA rank 32 (competition maximum)
 - FP16 mixed precision (Volta Tensor Cores)
-- No quantization needed (64GB total GPU RAM)
+- 4-bit NF4 quantization (fp16 model exceeds 64GB during loading)
 - device_map="auto" across both GPUs
 """
 
@@ -13,8 +13,12 @@ import pandas as pd
 from pathlib import Path
 from datasets import Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
+
+# Apply all QLoRA compatibility patches (safetensors, dtype, MoE, fused kernels)
+import qpatch
+qpatch.patch_all(compute_dtype=torch.float16)  # Volta = fp16
 
 # ═══════════════════════════════════════════════════════════════
 # Setup
@@ -86,19 +90,37 @@ print(f"Train: {len(train_dataset)}, Val: {len(val_dataset)}")
 
 MODEL_NAME = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-Base-BF16"
 
-print(f"\nLoading {MODEL_NAME} in fp16 across 2x GV100...")
+from transformers import BitsAndBytesConfig
+
+print(f"\nLoading {MODEL_NAME} in 4-bit quantization across 2x GV100...")
+print(f"(fp16 fills both GPUs — 4-bit leaves room for LoRA + activations)")
 t0 = time.time()
+
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=COMPUTE_DTYPE,
+    bnb_4bit_use_double_quant=True,
+)
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
+os.makedirs("/home/claude/nemotron/offload", exist_ok=True)
+# 4-bit 30B model ≈ 15GB weights + LoRA adapters + activations
+# GV100 has 32GB each — reserve 4GB for activations/gradients
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_NAME,
+    quantization_config=bnb_config,
     device_map="auto",
+    max_memory={0: "28GiB", 1: "28GiB", "cpu": "80GiB"},
+    offload_folder="/home/claude/nemotron/offload",
     trust_remote_code=True,
     torch_dtype=COMPUTE_DTYPE,
+    low_cpu_mem_usage=True,
 )
+model = prepare_model_for_kbit_training(model)
 print(f"Model loaded in {time.time()-t0:.0f}s")
 
 # ═══════════════════════════════════════════════════════════════
@@ -108,8 +130,8 @@ print(f"Model loaded in {time.time()-t0:.0f}s")
 lora_config = LoraConfig(
     r=32,
     lora_alpha=64,
-    target_modules=r".*\.(in_proj|out_proj|up_proj|down_proj)$",
-    lora_dropout=0.05,
+    target_modules=["up_proj", "down_proj"],  # MLP only — Mamba projections break with 4-bit
+    lora_dropout=0.0,  # dropout not supported on quantized uint8 tensors
     bias="none",
     task_type="CAUSAL_LM",
 )
@@ -126,9 +148,9 @@ print(f"Trainable: {trainable/1e6:.1f}M / {total/1e9:.1f}B ({100*trainable/total
 training_args = SFTConfig(
     output_dir=str(OUTPUT_DIR),
     num_train_epochs=3,
-    per_device_train_batch_size=2,  # Can fit batch=2 with 32GB per GPU
-    per_device_eval_batch_size=2,
-    gradient_accumulation_steps=4,  # Effective batch = 2*2*4 = 16
+    per_device_train_batch_size=4,   # 4-bit quant leaves plenty of VRAM
+    per_device_eval_batch_size=4,
+    gradient_accumulation_steps=2,   # Effective batch = 4*2*2 = 16
     learning_rate=2e-4,
     weight_decay=0.01,
     warmup_ratio=0.1,

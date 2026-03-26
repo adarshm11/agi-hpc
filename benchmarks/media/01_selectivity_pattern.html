@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #16161d; color: #e0e0e0; margin: 0; padding: 40px; }
+  .container { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin: 0 0 6px; }
+  .sub { font-size: 14px; text-align: center; color: #999; margin-bottom: 32px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Which Symmetries Do LLMs Preserve?</h1>
+  <p class="sub">Moral judgments tested under 6 perturbation types — some are invariant, others are not</p>
+
+  <svg viewBox="0 0 840 360" xmlns="http://www.w3.org/2000/svg">
+    <!-- Preserved column -->
+    <rect x="20" y="50" width="260" height="290" fill="#1a9641" fill-opacity="0.08" stroke="#1a9641" stroke-opacity="0.3" rx="8"/>
+    <text x="150" y="38" text-anchor="middle" fill="#1a9641" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">PRESERVED</text>
+
+    <!-- Broken column -->
+    <rect x="320" y="50" width="500" height="290" fill="#d7191c" fill-opacity="0.06" stroke="#d7191c" stroke-opacity="0.2" rx="8"/>
+    <text x="570" y="38" text-anchor="middle" fill="#d7191c" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">BROKEN</text>
+
+    <!-- Preserved: Gender Swap -->
+    <g transform="translate(150, 140)">
+      <rect x="-90" y="-40" width="180" height="80" fill="#1a9641" fill-opacity="0.12" rx="6"/>
+      <text y="-14" text-anchor="middle" fill="#a6d96a" font-size="15" font-weight="600" font-family="Segoe UI, sans-serif">Gender Swap</text>
+      <text y="8" text-anchor="middle" fill="#999" font-size="12" font-family="Segoe UI, sans-serif">T2 — best: 0.958</text>
+      <text y="26" text-anchor="middle" fill="#666" font-size="11" font-family="Segoe UI, sans-serif">not significant vs control</text>
+    </g>
+
+    <!-- Preserved: Eval Order -->
+    <g transform="translate(150, 265)">
+      <rect x="-90" y="-40" width="180" height="80" fill="#1a9641" fill-opacity="0.12" rx="6"/>
+      <text y="-14" text-anchor="middle" fill="#a6d96a" font-size="15" font-weight="600" font-family="Segoe UI, sans-serif">Evaluation Order</text>
+      <text y="8" text-anchor="middle" fill="#999" font-size="12" font-family="Segoe UI, sans-serif">T4 — best: 1.000</text>
+      <text y="26" text-anchor="middle" fill="#666" font-size="11" font-family="Segoe UI, sans-serif">not significant vs control</text>
+    </g>
+
+    <!-- Broken items as horizontal bars -->
+    <!-- Framing 8.9σ -->
+    <g transform="translate(340, 90)">
+      <rect x="0" y="0" width="356" height="44" fill="#d7191c" fill-opacity="0.18" rx="4"/>
+      <rect x="0" y="0" width="356" height="44" fill="none" stroke="#d7191c" stroke-opacity="0.4" rx="4"/>
+      <text x="12" y="28" fill="#e0e0e0" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">Linguistic Framing (T5)</text>
+      <text x="468" y="28" text-anchor="end" fill="#d7191c" font-size="18" font-weight="700" font-family="Segoe UI, sans-serif">8.9σ</text>
+    </g>
+
+    <!-- Sycophancy 13.3σ -->
+    <g transform="translate(340, 146)">
+      <rect x="0" y="0" width="460" height="44" fill="#d7191c" fill-opacity="0.22" rx="4"/>
+      <rect x="0" y="0" width="460" height="44" fill="none" stroke="#d7191c" stroke-opacity="0.4" rx="4"/>
+      <text x="12" y="28" fill="#e0e0e0" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">Social Pressure / Sycophancy (L2)</text>
+      <text x="468" y="28" text-anchor="end" fill="#d7191c" font-size="18" font-weight="700" font-family="Segoe UI, sans-serif">13.3σ</text>
+    </g>
+
+    <!-- Calibration 9.3σ -->
+    <g transform="translate(340, 202)">
+      <rect x="0" y="0" width="380" height="44" fill="#fdae61" fill-opacity="0.18" rx="4"/>
+      <rect x="0" y="0" width="380" height="44" fill="none" stroke="#fdae61" stroke-opacity="0.4" rx="4"/>
+      <text x="12" y="28" fill="#e0e0e0" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">Metacognitive Calibration (M1)</text>
+      <text x="468" y="28" text-anchor="end" fill="#fdae61" font-size="18" font-weight="700" font-family="Segoe UI, sans-serif">9.3σ</text>
+    </g>
+
+    <!-- Emotion 6.8σ -->
+    <g transform="translate(340, 258)">
+      <rect x="0" y="0" width="270" height="44" fill="#d7191c" fill-opacity="0.14" rx="4"/>
+      <rect x="0" y="0" width="270" height="44" fill="none" stroke="#d7191c" stroke-opacity="0.3" rx="4"/>
+      <text x="12" y="28" fill="#e0e0e0" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">Emotional Anchoring (E2)</text>
+      <text x="468" y="28" text-anchor="end" fill="#d7191c" font-size="18" font-weight="700" font-family="Segoe UI, sans-serif">6.8σ</text>
+    </g>
+
+    <!-- Distractors 4.6σ -->
+    <g transform="translate(340, 314)">
+      <rect x="0" y="0" width="184" height="44" fill="#d7191c" fill-opacity="0.10" rx="4"/>
+      <rect x="0" y="0" width="184" height="44" fill="none" stroke="#d7191c" stroke-opacity="0.25" rx="4"/>
+      <text x="12" y="28" fill="#e0e0e0" font-size="14" font-weight="600" font-family="Segoe UI, sans-serif">Sensory Distractors (A1)</text>
+      <text x="468" y="28" text-anchor="end" fill="#d7191c" font-size="18" font-weight="700" font-family="Segoe UI, sans-serif">4.6σ</text>
+    </g>
+  </svg>
+
+  <p style="text-align:center; color:#777; font-size:12px; margin-top:8px;">
+    Bar width proportional to Fisher-combined sigma. All broken symmetries involve <em>salience manipulation</em>; preserved ones do not.
+  </p>
+</div>
+</body>
+</html>

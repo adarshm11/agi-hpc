@@ -9,9 +9,9 @@ server:
 
 # Downstream Service Addresses
 services:
-  memory: "localhost:50110"
-  safety: "localhost:50200"
-  metacognition: "localhost:50300"
+  memory: "localhost:50053"
+  safety: "localhost:50055"
+  metacognition: "localhost:50070"
 
 # Event Fabric Settings
 fabric:

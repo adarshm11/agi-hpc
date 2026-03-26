@@ -71,3 +71,21 @@ try:
     )
 except ImportError:
     pass
+
+# Optional NATS exports (Sprint 6)
+try:
+    from agi.core.events.nats_backend import (
+        NatsBackend,
+        NatsBackendConfig,
+        NatsStreamConfig,
+    )
+
+    __all__.extend(
+        [
+            "NatsBackend",
+            "NatsBackendConfig",
+            "NatsStreamConfig",
+        ]
+    )
+except ImportError:
+    pass

@@ -1,0 +1,19 @@
+# AGI-HPC Project - High-Performance Computing Architecture for AGI
+# Copyright (c) 2025 Andrew H. Bond
+# Contact: agi.hpc@gmail.com
+#
+# Licensed under the AGI-HPC Responsible AI License v1.0.
+
+"""Meta subpackage — LLM-based metacognitive reflection utilities."""
+
+from agi.meta.llm_reflection import (
+    LLMReflector,
+    PlanCritique,
+    ReflectionConfig,
+)
+
+__all__ = [
+    "LLMReflector",
+    "PlanCritique",
+    "ReflectionConfig",
+]

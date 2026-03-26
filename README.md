@@ -11,7 +11,7 @@ AGI-HPC is a **modular, distributed, safety-gated cognitive architecture** desig
 - **Tiered memory subsystem** (semantic, episodic, procedural)  
 - **Multi-layer safety system** (pre-action, in-action, post-action)  
 - **Virtual embodiment environment** (Unity/MuJoCo)  
-- **Event-driven coordination** (UCX/ZeroMQ fabric)  
+- **Event-driven coordination** (UCX/ZeroMQ/NATS JetStream fabric)
 - **gRPC services** across all components  
 - **Apptainer/Singularity containers** for reproducible HPC deployment
 
@@ -164,8 +164,8 @@ flowchart LR
 | **Procedural Memory** | Skills, policies, reusable action graphs | In-memory → SQL later |
 | **Safety (3-layer)** | Pre-action, in-action, post-action verification | gRPC services + rule engine |
 | **Metacognition** | Cross-check plans, confidence estimation, revise/reject loop | gRPC service + trace analyzer |
-| **Environment** | Virtual embodiment (Unity/MuJoCo) | WebSocket/gRPC interface |
-| **Event Fabric** | Topic-based low-latency message bus | UCX/ZeroMQ stub (pluggable) |
+| **Environment** | Virtual embodiment (Unity/MuJoCo/PyBullet) | Async Gymnasium-compatible interface |
+| **Event Fabric** | Topic-based low-latency message bus | Local/ZMQ/Redis/NATS JetStream (pluggable) |
 
 ---
 
@@ -175,14 +175,21 @@ flowchart LR
 agi-hpc/
 │
 ├── src/agi/
-│   ├── lh/                  # Left Hemisphere service
-│   ├── rh/                  # Right Hemisphere service
-│   ├── memory/              # Semantic, episodic, procedural memory
-│   ├── safety/              # Safety subsystem (pre/in/post + rule engine)
-│   ├── meta/                # Metacognition service
-│   ├── core/                # RPC, event fabric, config loader
-│   ├── proto_gen/           # Auto-generated protobuf stubs
-│   └── env_client/          # Unity/MuJoCo environment client
+│   ├── lh/                  # Left Hemisphere (planner, performance, HPC deploy)
+│   ├── rh/                  # Right Hemisphere (perception, world model, control)
+│   │   └── control/         # Motor primitives, trajectory, realtime, simulation
+│   ├── memory/              # Semantic, episodic, procedural, unified memory
+│   ├── safety/              # Safety subsystem (pre/in/post + rules + learning)
+│   ├── metacognition/       # Reasoning analyzer, consistency, anomaly detection
+│   ├── meta/                # LLM-based metacognitive reflection
+│   ├── core/                # gRPC, event fabric, DHT, LLM integration
+│   │   ├── events/          # Local, ZMQ, Redis, NATS JetStream backends
+│   │   ├── dht/             # Hash ring, observability, HPC, security
+│   │   └── llm/             # Client, providers, middleware, integration
+│   ├── env/                 # Environment interface (MuJoCo, PyBullet, Unity)
+│   ├── common/              # Shared utilities (config loader)
+│   ├── integration/         # Cross-subsystem integration events
+│   └── proto_gen/           # Auto-generated protobuf stubs
 │
 ├── proto/                   
 ├── configs/                 
@@ -190,11 +197,11 @@ agi-hpc/
 │   ├── hpc/                
 │   └── local/              
 │
-├── docs/                    
-├── design/                  
+├── docs/
+├── deploy/                  # Kubernetes / production configs
 │
-├── scripts/       
-├── tests/     
+├── scripts/
+├── tests/
 
 └── .github/workflows/ci.yaml
 ```
@@ -237,6 +244,14 @@ ZMQ (dev multi-process / small cluster)
 export AGI_FABRIC_MODE=zmq
 export AGI_FABRIC_PUB_ENDPOINT=tcp://fabric:5556
 export AGI_FABRIC_SUB_ENDPOINT=tcp://fabric:5555
+
+
+NATS JetStream (production persistent messaging)
+
+export AGI_FABRIC_MODE=nats
+export AGI_FABRIC_NATS_URL=nats://nats-server:4222
+export AGI_FABRIC_NATS_STREAM=AGI_HPC_EVENTS
+export AGI_FABRIC_CONSUMER_GROUP=agi-hpc
 
 
 UCX (HPC inter-node)

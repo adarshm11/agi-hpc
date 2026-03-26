@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #16161d; color: #e0e0e0; margin: 0; padding: 40px; }
+  .container { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 700; text-align: center; margin: 0 0 6px; }
+  .sub { font-size: 14px; text-align: center; color: #999; margin-bottom: 32px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>The Sycophancy Gradient</h1>
+  <p class="sub">How often does each model flip its verdict when given a fabricated correction? (L2, 13.3σ combined)</p>
+
+  <svg viewBox="0 0 840 440" xmlns="http://www.w3.org/2000/svg">
+    <!-- Chart area -->
+    <g transform="translate(100, 30)">
+      <!-- Y axis -->
+      <line x1="0" y1="0" x2="0" y2="300" stroke="#444" stroke-width="1"/>
+      <line x1="0" y1="300" x2="640" y2="300" stroke="#444" stroke-width="1"/>
+
+      <!-- Y gridlines + labels -->
+      <line x1="0" y1="300" x2="640" y2="300" stroke="#333" stroke-width="0.5"/>
+      <line x1="0" y1="225" x2="640" y2="225" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="150" x2="640" y2="150" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="75" x2="640" y2="75" stroke="#2a2a35" stroke-width="0.5"/>
+      <line x1="0" y1="0" x2="640" y2="0" stroke="#2a2a35" stroke-width="0.5"/>
+
+      <text x="-12" y="304" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">0%</text>
+      <text x="-12" y="229" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">20%</text>
+      <text x="-12" y="154" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">40%</text>
+      <text x="-12" y="79" text-anchor="end" fill="#888" font-size="11" font-family="Segoe UI, sans-serif">60%</text>
+
+      <!-- Y title -->
+      <text x="-65" y="150" text-anchor="middle" fill="#bbb" font-size="13" font-family="Segoe UI, sans-serif" transform="rotate(-90,-65,150)">Wrong-Correction Flip Rate</text>
+
+      <!-- Dark2 colors: #1b9e77, #d95f02, #7570b3, #e7298a -->
+
+      <!-- Claude: 0% -->
+      <rect x="50" y="297" width="80" height="3" fill="#1b9e77" rx="1.5"/>
+      <text x="90" y="322" text-anchor="middle" fill="#ccc" font-size="13" font-weight="500" font-family="Segoe UI, sans-serif">Claude</text>
+      <text x="90" y="290" text-anchor="middle" fill="#1b9e77" font-size="16" font-weight="700" font-family="Segoe UI, sans-serif">0%</text>
+      <text x="90" y="340" text-anchor="middle" fill="#1b9e77" font-size="10" font-family="Segoe UI, sans-serif">SI = 0.000</text>
+
+      <!-- Flash 2.0: 33% -->
+      <rect x="200" y="201" width="80" height="99" fill="#d95f02" rx="3" opacity="0.85"/>
+      <text x="240" y="322" text-anchor="middle" fill="#ccc" font-size="13" font-weight="500" font-family="Segoe UI, sans-serif">Flash 2.0</text>
+      <text x="240" y="193" text-anchor="middle" fill="#d95f02" font-size="16" font-weight="700" font-family="Segoe UI, sans-serif">33%</text>
+      <text x="240" y="340" text-anchor="middle" fill="#d95f02" font-size="10" font-family="Segoe UI, sans-serif">SI = 0.472</text>
+
+      <!-- Pro 2.5: 44% -->
+      <rect x="350" y="168" width="80" height="132" fill="#7570b3" rx="3" opacity="0.85"/>
+      <text x="390" y="322" text-anchor="middle" fill="#ccc" font-size="13" font-weight="500" font-family="Segoe UI, sans-serif">Pro 2.5</text>
+      <text x="390" y="160" text-anchor="middle" fill="#7570b3" font-size="16" font-weight="700" font-family="Segoe UI, sans-serif">44%</text>
+      <text x="390" y="340" text-anchor="middle" fill="#7570b3" font-size="10" font-family="Segoe UI, sans-serif">SI = 0.657</text>
+
+      <!-- Flash 2.5: 56% -->
+      <rect x="500" y="132" width="80" height="168" fill="#e7298a" rx="3" opacity="0.85"/>
+      <text x="540" y="322" text-anchor="middle" fill="#ccc" font-size="13" font-weight="500" font-family="Segoe UI, sans-serif">Flash 2.5</text>
+      <text x="540" y="124" text-anchor="middle" fill="#e7298a" font-size="16" font-weight="700" font-family="Segoe UI, sans-serif">56%</text>
+      <text x="540" y="340" text-anchor="middle" fill="#e7298a" font-size="10" font-family="Segoe UI, sans-serif">SI = 0.726</text>
+    </g>
+
+    <!-- Confidence response row -->
+    <g transform="translate(100, 390)">
+      <text x="0" y="0" fill="#777" font-size="11" font-family="Segoe UI, sans-serif">Confidence when given wrong correction:</text>
+      <text x="90" y="18" text-anchor="middle" fill="#1b9e77" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">t = +2.83 ↑</text>
+      <text x="240" y="18" text-anchor="middle" fill="#d95f02" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">t = −2.12 ↓</text>
+      <text x="390" y="18" text-anchor="middle" fill="#7570b3" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">t = −0.80</text>
+      <text x="540" y="18" text-anchor="middle" fill="#e7298a" font-size="11" font-weight="600" font-family="Segoe UI, sans-serif">t = +0.41</text>
+      <text x="90" y="34" text-anchor="middle" fill="#666" font-size="9" font-family="Segoe UI, sans-serif">rejects actively</text>
+      <text x="240" y="34" text-anchor="middle" fill="#666" font-size="9" font-family="Segoe UI, sans-serif">gets suspicious</text>
+      <text x="390" y="34" text-anchor="middle" fill="#666" font-size="9" font-family="Segoe UI, sans-serif">indifferent</text>
+      <text x="540" y="34" text-anchor="middle" fill="#666" font-size="9" font-family="Segoe UI, sans-serif">accepts uncritically</text>
+    </g>
+  </svg>
+</div>
+</body>
+</html>

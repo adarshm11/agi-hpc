@@ -38,13 +38,13 @@ class LHServiceConfig:
         default_factory=lambda: int(os.getenv("AGI_LH_MAX_WORKERS", "16"))
     )
     memory_addr: str = field(
-        default_factory=lambda: os.getenv("AGI_LH_MEMORY_ADDR", "localhost:50110")
+        default_factory=lambda: os.getenv("AGI_LH_MEMORY_ADDR", "localhost:50053")
     )
     safety_addr: str = field(
-        default_factory=lambda: os.getenv("AGI_LH_SAFETY_ADDR", "localhost:50200")
+        default_factory=lambda: os.getenv("AGI_LH_SAFETY_ADDR", "localhost:50055")
     )
     meta_addr: str = field(
-        default_factory=lambda: os.getenv("AGI_LH_META_ADDR", "localhost:50300")
+        default_factory=lambda: os.getenv("AGI_LH_META_ADDR", "localhost:50070")
     )
     fabric_mode: str = field(
         default_factory=lambda: os.getenv("AGI_FABRIC_MODE", "local")

@@ -60,3 +60,39 @@ __all__ = [
     "AgentState",
     "SessionState",
 ]
+
+# Sprint 6: Observability, HPC, Security
+try:
+    from agi.core.dht.observability import DHTMetrics, DHTTracer, SpanContext
+
+    __all__.extend(["DHTMetrics", "DHTTracer", "SpanContext"])
+except ImportError:
+    pass
+
+try:
+    from agi.core.dht.hpc import HPCConfig, UCXTransport, SharedMemoryStore
+
+    __all__.extend(["HPCConfig", "UCXTransport", "SharedMemoryStore"])
+except ImportError:
+    pass
+
+try:
+    from agi.core.dht.security import (
+        SecurityConfig,
+        MTLSCredentials,
+        AccessController,
+        EncryptionManager,
+        AuditLogger,
+    )
+
+    __all__.extend(
+        [
+            "SecurityConfig",
+            "MTLSCredentials",
+            "AccessController",
+            "EncryptionManager",
+            "AuditLogger",
+        ]
+    )
+except ImportError:
+    pass
