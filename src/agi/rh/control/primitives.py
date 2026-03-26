@@ -135,7 +135,7 @@ class ReachPrimitive:
         if distance < self._tolerance:
             return []
 
-        normalized = direction / distance if distance > 0 else direction
+        _normalized = direction / distance if distance > 0 else direction  # noqa: F841
         steps = max(1, int(distance / (self._speed * 0.01)))
 
         actions = []

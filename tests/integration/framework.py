@@ -257,13 +257,13 @@ def _test_metacog_review():
 def _test_full_pipeline():
     """Test full end-to-end pipeline."""
     # 1. Create task
-    task = {"goal": "navigate to target", "type": "navigation"}
+    _task = {"goal": "navigate to target", "type": "navigation"}  # noqa: F841
 
     # 2. Memory enrichment
-    context = {"facts": ["target is at (1,0,0)"], "skills": ["move_to"]}
+    _context = {"facts": ["target is at (1,0,0)"], "skills": ["move_to"]}  # noqa: F841
 
     # 3. Plan generation
-    plan = {"steps": [{"action": "move", "target": [1, 0, 0]}]}
+    _plan = {"steps": [{"action": "move", "target": [1, 0, 0]}]}  # noqa: F841
 
     # 4. Safety check
     safety_result = {"approved": True}
