@@ -36,3 +36,6 @@ birdclef/precomputed/
 docs/nul
 docs/_*.py
 docs/_*.txt
+bash.exe.stackdump
+nul
+.env
