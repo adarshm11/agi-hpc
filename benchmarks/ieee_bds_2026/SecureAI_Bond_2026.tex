@@ -23,7 +23,12 @@
 \textit{Department of Computer Engineering} \\
 \textit{San Jose State University}\\
 San Jose, CA, USA \\
-andrew.bond@sjsu.edu}}
+andrew.bond@sjsu.edu}
+\and
+\IEEEauthorblockN{Lucas Thiele}
+\IEEEauthorblockA{\textit{Department of Cognitive Science} \\
+\textit{University of California, Los Angeles}\\
+Los Angeles, CA, USA}}
 
 \maketitle
 
@@ -333,6 +338,8 @@ The central practical finding is that the framework produces \emph{actionable vu
 \emph{Vulnerability profiling enables targeted hardening.} Table~\ref{tab:profiles} shows that each model has a distinct pattern of which attack surfaces are open. Claude resists social pressure perfectly but is worst at emotional anchoring recovery. Flash~2.0 recovers well from emotional manipulation but has the weakest working memory. A deployment team selecting a model for content moderation can now ask ``which vulnerabilities matter for our use case?'' rather than relying on a single robustness score that describes no model accurately. The statistical significance of individual effects (5.0--8.9$\sigma$ Fisher-combined) confirms that these profiles reflect genuine vulnerabilities, not measurement noise.
 
 \emph{Salience manipulation is the specific attack surface.} The selectivity finding---three perturbation types displace judgments, two do not---narrows the threat model. The three successful manipulations (framing, emotional tone, sensory detail) all make morally irrelevant features perceptually prominent. Gender swap and evaluation order, which do not manipulate salience, produce no displacement. This tells defenders \emph{where to look}: attacks that repackage the same facts with different salience, such as euphemistic rewriting that reduces perceived harm by 10--16 points on a 70-point scale.
+
+\emph{The selectivity is directional, and the direction is consequential.} Claude's framing vulnerability is asymmetric: susceptible to euphemistic minimization (drift $= -9.1$) but resistant to dramatic exaggeration (drift $= -1.5$). This asymmetry reveals a learned heuristic: these models have implicitly acquired the expectation that heightened emotional language is unreliable signal---a reasonable inference from training data where hyperbole is common and rarely indicates genuine severity. Conversely, they have learned that calm, measured language is more trustworthy. But calm language and accurate language are not equivalent. Harmful actions are frequently described in measured, reasonable-sounding terms by actors with an interest in the outcome reading as less severe---corporate liability minimization, legal euphemism, institutional harm reduction framing. A model that discounts dramatic tone while trusting measured tone is vulnerable in precisely the direction where accurate moral judgment matters most: it knows what to ignore, but not fully what to distrust~\cite{thiele2026labse}.
 
 \emph{Fixing one attack surface does not fix others.} Claude's zero-sycophancy profile demonstrates that social pressure resistance is achievable. But Claude simultaneously has the worst emotional anchoring recovery (20\%) and worst divided attention (0.571). The sycophancy gradient within the Gemini family (0\%--56\% wrong-correction acceptance) shows that capability improvements may increase susceptibility on some surfaces. Single-test certification provides false assurance.
 
