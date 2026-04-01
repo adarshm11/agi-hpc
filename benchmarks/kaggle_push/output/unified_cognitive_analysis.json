@@ -1,0 +1,116 @@
+{
+  "metadata": {
+    "benchmark": "Unified Cognitive Benchmark",
+    "version": "1.0",
+    "chc_mapping": {
+      "attention": "Gs",
+      "executive_functions": "Gf",
+      "learning": "Glr",
+      "metacognition": "Gf/Gc",
+      "social_cognition": "Gc"
+    },
+    "references": [
+      "Fourati (2025), A Coherence-Based Measure of AGI, FAST@AAAI 2026",
+      "Bond (2026), Geometric AI, Book 11 of the Geometric Series",
+      "Bond & Thiele (2026), Five Geometric Signatures, NMI (submitted)"
+    ]
+  },
+  "results": [
+    {
+      "model": "gemini-2.0-flash",
+      "scores": {
+        "attention": 0.54,
+        "executive_functions": 0.32,
+        "learning": 0.5,
+        "metacognition": 0.07,
+        "social_cognition": 0.11
+      },
+      "chc_profile": {
+        "Gs": 0.54,
+        "Gf": 0.32,
+        "Glr": 0.5,
+        "Gf/Gc": 0.07,
+        "Gc": 0.11
+      },
+      "scalar": 0.308,
+      "bond_index": 0.1493,
+      "profile_std": 0.1932,
+      "min_score": 0.07,
+      "max_score": 0.54,
+      "coherence_ratio": 0.1296,
+      "fourati_auc": 0.1553
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "scores": {
+        "attention": 0.58,
+        "executive_functions": 0.38,
+        "learning": 0.55,
+        "metacognition": 0.15,
+        "social_cognition": 0.2
+      },
+      "chc_profile": {
+        "Gs": 0.58,
+        "Gf": 0.38,
+        "Glr": 0.55,
+        "Gf/Gc": 0.15,
+        "Gc": 0.2
+      },
+      "scalar": 0.372,
+      "bond_index": 0.1231,
+      "profile_std": 0.1754,
+      "min_score": 0.15,
+      "max_score": 0.58,
+      "coherence_ratio": 0.2586,
+      "fourati_auc": 0.2608
+    },
+    {
+      "model": "gemini-2.5-pro",
+      "scores": {
+        "attention": 0.65,
+        "executive_functions": 0.45,
+        "learning": 0.6,
+        "metacognition": 0.25,
+        "social_cognition": 0.3
+      },
+      "chc_profile": {
+        "Gs": 0.65,
+        "Gf": 0.45,
+        "Glr": 0.6,
+        "Gf/Gc": 0.25,
+        "Gc": 0.3
+      },
+      "scalar": 0.45,
+      "bond_index": 0.1,
+      "profile_std": 0.1581,
+      "min_score": 0.25,
+      "max_score": 0.65,
+      "coherence_ratio": 0.3846,
+      "fourati_auc": 0.3732
+    },
+    {
+      "model": "claude-3.5-sonnet",
+      "scores": {
+        "attention": 0.7,
+        "executive_functions": 0.5,
+        "learning": 0.63,
+        "metacognition": 0.2,
+        "social_cognition": 0.15
+      },
+      "chc_profile": {
+        "Gs": 0.7,
+        "Gf": 0.5,
+        "Glr": 0.63,
+        "Gf/Gc": 0.2,
+        "Gc": 0.15
+      },
+      "scalar": 0.436,
+      "bond_index": 0.1991,
+      "profile_std": 0.2231,
+      "min_score": 0.15,
+      "max_score": 0.7,
+      "coherence_ratio": 0.2143,
+      "fourati_auc": 0.2777
+    }
+  ]
+}

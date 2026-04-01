@@ -1,0 +1,13 @@
+{
+  "id": "ahbond/unified-cognitive-benchmark-measuring-agi",
+  "title": "Unified Cognitive Benchmark: Measuring AGI Through the Geometric Lens",
+  "code_file": "unified_cognitive_benchmark.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "competition_sources": [],
+  "dataset_sources": [],
+  "kernel_sources": []
+}
