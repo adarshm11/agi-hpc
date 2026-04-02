@@ -12,6 +12,7 @@ Provides pub/sub messaging infrastructure with multiple backends:
 - zmq: ZeroMQ (multi-node)
 - ucx: UCX (HPC-grade RDMA)
 - redis: Redis Streams (persistent)
+- nats: NATS JetStream (Phase 0 primary backbone)
 """
 
 from agi.core.events.fabric import (
@@ -85,6 +86,24 @@ try:
             "NatsBackend",
             "NatsBackendConfig",
             "NatsStreamConfig",
+        ]
+    )
+except ImportError:
+    pass
+
+# Optional async NATS Event Fabric (Phase 0)
+try:
+    from agi.core.events.nats_fabric import (
+        NatsEventFabric,
+        NatsFabricConfig,
+        EventFabricProtocol,
+    )
+
+    __all__.extend(
+        [
+            "NatsEventFabric",
+            "NatsFabricConfig",
+            "EventFabricProtocol",
         ]
     )
 except ImportError:

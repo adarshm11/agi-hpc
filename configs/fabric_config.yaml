@@ -1,0 +1,64 @@
+# AGI-HPC Event Fabric Configuration
+# Phase 0 Foundation - NATS JetStream backbone
+
+service:
+  name: event-fabric
+  rpc_port: 0           # fabric is pub/sub only, no gRPC
+  event_uri: "nats://localhost:4222"
+  metrics_port: 9090
+
+nats:
+  # NATS server connection
+  servers:
+    - "nats://localhost:4222"
+  # JetStream stream configuration
+  stream:
+    name: AGI_EVENTS
+    subjects:
+      # Left Hemisphere
+      - "agi.lh.request.chat"
+      - "agi.lh.request.plan"
+      - "agi.lh.request.reason"
+      # Right Hemisphere
+      - "agi.rh.request.pattern"
+      - "agi.rh.request.spatial"
+      - "agi.rh.request.creative"
+      # Memory
+      - "agi.memory.store.semantic"
+      - "agi.memory.store.episodic"
+      - "agi.memory.store.procedural"
+      - "agi.memory.query.semantic"
+      - "agi.memory.query.episodic"
+      - "agi.memory.query.procedural"
+      # Safety
+      - "agi.safety.check.input"
+      - "agi.safety.check.output"
+      - "agi.safety.check.action"
+      # Metacognition
+      - "agi.meta.monitor.latency"
+      - "agi.meta.monitor.quality"
+      - "agi.meta.monitor.confidence"
+      # Environment
+      - "agi.env.sensor.system"
+      - "agi.env.sensor.repos"
+      - "agi.env.sensor.network"
+      # Integration
+      - "agi.integration.route"
+      - "agi.integration.merge"
+      - "agi.integration.session"
+    # Use wildcard subjects for stream capture
+    stream_subjects:
+      - "agi.>"
+    max_msgs: 1000000
+    max_bytes: 1073741824   # 1 GB
+    max_age_seconds: 604800 # 7 days
+    retention: limits       # limits | interest | workqueue
+    storage: file           # file | memory
+
+  # Consumer defaults
+  consumer:
+    group: agi-hpc
+    ack_wait_seconds: 30
+    max_deliver: 3
+    batch_size: 10
+    fetch_timeout_seconds: 1.0

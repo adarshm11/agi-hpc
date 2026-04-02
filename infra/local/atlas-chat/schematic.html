@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlas AGI-HPC — Architecture</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e17;color:#e0e6f0;min-height:100vh;overflow-x:hidden}
+.header{display:flex;align-items:center;gap:16px;padding:12px 24px;border-bottom:1px solid #2a3555;background:#131a2b}
+.header h1{font-size:20px;background:linear-gradient(135deg,#4a9eff,#7cc4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .sub{font-size:12px;color:#7a8ba8;margin-left:8px}
+.nav{margin-left:auto;display:flex;gap:12px}
+.nav a{color:#7a8ba8;text-decoration:none;font-size:13px;padding:6px 14px;border-radius:8px;transition:all .2s}
+.nav a:hover,.nav a.active{color:#4a9eff;background:rgba(74,158,255,0.1)}
+.canvas{position:relative;width:100%;height:calc(100vh - 56px);overflow:hidden}
+
+/* Subsystem nodes */
+.node{position:absolute;border-radius:12px;padding:12px 16px;min-width:180px;cursor:default;transition:all .3s;z-index:2}
+.node:hover{transform:scale(1.05);z-index:10}
+.node .name{font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.node .metrics{font-size:11px;color:#7a8ba8;line-height:1.6}
+.node .metrics .val{color:#e0e6f0;font-family:'Cascadia Code',monospace}
+.node .status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.node .status-dot.on{background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,0.5)}
+.node .status-dot.off{background:#6b7280}
+.node .status-dot.planned{background:#f59e0b;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.node.active{border:1px solid #4a9eff;background:linear-gradient(135deg,#131a2b,#1a2340);box-shadow:0 0 20px rgba(74,158,255,0.15)}
+.node.planned{border:1px dashed #6b7280;background:#0f1520;opacity:.7}
+.node.core{border:1px solid #f59e0b;background:linear-gradient(135deg,#1a1800,#201d10);box-shadow:0 0 15px rgba(245,158,11,0.1)}
+
+/* Connection lines (SVG overlay) */
+.connections{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+.conn-line{stroke:#2a3555;stroke-width:1.5;fill:none}
+.conn-line.active{stroke:#4a9eff;stroke-width:2;opacity:.6}
+.conn-pulse{fill:#4a9eff;opacity:0}
+.conn-pulse.active{animation:flowPulse 3s infinite}
+@keyframes flowPulse{0%{opacity:0;offset-distance:0%}10%{opacity:.8}90%{opacity:.8}100%{opacity:0;offset-distance:100%}}
+
+/* Central bus */
+.bus{position:absolute;border:2px solid #f59e0b;border-radius:16px;background:rgba(245,158,11,0.05);z-index:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#f59e0b;letter-spacing:1px}
+
+/* Bottom stats bar */
+.stats-bar{position:absolute;bottom:0;left:0;right:0;padding:10px 24px;background:#131a2b;border-top:1px solid #2a3555;display:flex;gap:24px;font-size:11px;color:#7a8ba8;z-index:5}
+.stats-bar .stat{display:flex;align-items:center;gap:6px}
+.stats-bar .stat .val{color:#e0e6f0;font-family:'Cascadia Code',monospace}
+
+/* Legend */
+.legend{position:absolute;top:70px;right:20px;background:#131a2b;border:1px solid #2a3555;border-radius:10px;padding:12px 16px;font-size:11px;z-index:5}
+.legend div{display:flex;align-items:center;gap:8px;margin:4px 0}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Atlas AGI-HPC</h1>
+  <span class="sub">Cognitive Architecture — Live Telemetry</span>
+  <div class="nav">
+    <a href="/">Chat</a>
+    <a href="/schematic.html" class="active">Architecture</a>
+  </div>
+</div>
+
+<div class="canvas" id="canvas">
+  <!-- NATS Event Fabric (central bus) -->
+  <div class="bus" style="left:50%;top:50%;transform:translate(-50%,-50%);width:680px;height:60px">
+    NATS Event Fabric
+    <span style="font-size:10px;font-weight:400;margin-left:8px;color:#b8860b" id="nats-stats"></span>
+  </div>
+
+  <!-- Left side: LH, Memory, Safety -->
+  <div class="node active" id="node-lh" style="left:40px;top:60px">
+    <div class="name"><span class="status-dot on"></span>Left Hemisphere</div>
+    <div class="metrics">
+      Mode: <span class="val">Analytical</span><br>
+      Temp: <span class="val">0.3</span> | Top-p: <span class="val">0.9</span><br>
+      Requests: <span class="val" id="lh-reqs">0</span><br>
+      Avg latency: <span class="val" id="lh-lat">—</span>
+    </div>
+  </div>
+
+  <div class="node active" id="node-memory" style="left:40px;top:240px">
+    <div class="name"><span class="status-dot on"></span>Memory</div>
+    <div class="metrics">
+      Semantic: <span class="val" id="mem-semantic">0</span> chunks (pgvector)<br>
+      Episodic: <span class="val" id="mem-episodic">0</span> episodes<br>
+      Procedural: <span class="val" id="mem-procedural">0</span> entries<br>
+      DB size: <span class="val" id="mem-dbsize">—</span>
+    </div>
+  </div>
+
+  <div class="node planned" id="node-safety" style="left:40px;top:420px">
+    <div class="name"><span class="status-dot planned"></span>Safety Gateway</div>
+    <div class="metrics">
+      Pipeline: <span class="val">DEME 3-layer</span><br>
+      Reflex: <span class="val" id="safety-reflex">—</span><br>
+      Vetoes: <span class="val" id="safety-vetoes">0</span><br>
+      Audit log: <span class="val" id="safety-audit">0</span> entries
+    </div>
+  </div>
+
+  <!-- Right side: RH, Environment, Metacognition -->
+  <div class="node planned" id="node-rh" style="right:40px;top:60px">
+    <div class="name"><span class="status-dot planned"></span>Right Hemisphere</div>
+    <div class="metrics">
+      Mode: <span class="val">Creative</span><br>
+      Temp: <span class="val">0.8</span> | Top-p: <span class="val">0.95</span><br>
+      Requests: <span class="val" id="rh-reqs">0</span><br>
+      Patterns: <span class="val" id="rh-patterns">—</span>
+    </div>
+  </div>
+
+  <div class="node active" id="node-env" style="right:40px;top:240px">
+    <div class="name"><span class="status-dot on"></span>Environment</div>
+    <div class="metrics">
+      GPU 0: <span class="val" id="env-gpu0">—</span><br>
+      GPU 1: <span class="val" id="env-gpu1">—</span><br>
+      CPU: <span class="val" id="env-cpu">—</span><br>
+      RAM: <span class="val" id="env-ram">—</span>
+    </div>
+  </div>
+
+  <div class="node planned" id="node-meta" style="right:40px;top:420px">
+    <div class="name"><span class="status-dot planned"></span>Metacognition</div>
+    <div class="metrics">
+      Reflections: <span class="val" id="meta-reflect">0</span><br>
+      Adjustments: <span class="val" id="meta-adjust">0</span><br>
+      LH/RH ratio: <span class="val" id="meta-ratio">—</span><br>
+      Quality: <span class="val" id="meta-quality">—</span>
+    </div>
+  </div>
+
+  <!-- Top center: Integration -->
+  <div class="node active" id="node-integration" style="left:50%;top:10px;transform:translateX(-50%)">
+    <div class="name"><span class="status-dot on"></span>Integration / Orchestrator</div>
+    <div class="metrics">
+      Sessions: <span class="val" id="int-sessions">0</span><br>
+      Routed: <span class="val" id="int-routed">0</span> requests<br>
+      LH: <span class="val" id="int-lh-pct">100%</span> | RH: <span class="val" id="int-rh-pct">0%</span>
+    </div>
+  </div>
+
+  <!-- Bottom center: LLM + DHT -->
+  <div class="node core" id="node-llm" style="left:35%;bottom:80px;transform:translateX(-50%)">
+    <div class="name"><span class="status-dot on"></span>LLM Engine</div>
+    <div class="metrics">
+      Model: <span class="val">Qwen2.5-72B Q5</span><br>
+      VRAM: <span class="val" id="llm-vram">—</span><br>
+      Slots: <span class="val" id="llm-slots">—</span><br>
+      Speed: <span class="val" id="llm-tps">—</span> tok/s
+    </div>
+  </div>
+
+  <div class="node planned" id="node-dht" style="left:65%;bottom:80px;transform:translateX(-50%)">
+    <div class="name"><span class="status-dot planned"></span>DHT / Registry</div>
+    <div class="metrics">
+      Services: <span class="val" id="dht-services">4/10</span> online<br>
+      Config ver: <span class="val">v1.0</span><br>
+      Node: <span class="val">atlas (local)</span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div><span class="status-dot on" style="display:inline-block"></span> Active</div>
+    <div><span class="status-dot planned" style="display:inline-block"></span> Planned</div>
+    <div style="color:#f59e0b">&#9644; Core infrastructure</div>
+    <div style="color:#4a9eff">&#9644; Subsystem</div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat">Uptime: <span class="val" id="stat-uptime">—</span></div>
+    <div class="stat">Events/min: <span class="val" id="stat-epm">0</span></div>
+    <div class="stat">Total queries: <span class="val" id="stat-queries">0</span></div>
+    <div class="stat">Repos indexed: <span class="val" id="stat-repos">0</span></div>
+    <div class="stat">Chunks: <span class="val" id="stat-chunks">0</span></div>
+    <div class="stat" style="margin-left:auto">Atlas &#8226; HP Z840 &#8226; Bel Marin Keys, Novato</div>
+  </div>
+
+  <!-- SVG connections -->
+  <svg class="connections" id="connections"></svg>
+</div>
+
+<script>
+// Draw connection lines between nodes and the central bus
+function drawConnections() {
+  var svg = document.getElementById('connections');
+  var canvas = document.getElementById('canvas');
+  var bus = document.querySelector('.bus');
+  var busRect = bus.getBoundingClientRect();
+  var canvasRect = canvas.getBoundingClientRect();
+
+  var busCx = busRect.left + busRect.width/2 - canvasRect.left;
+  var busCy = busRect.top + busRect.height/2 - canvasRect.top;
+  var busLeft = busRect.left - canvasRect.left;
+  var busRight = busRect.right - canvasRect.left;
+  var busTop = busRect.top - canvasRect.top;
+  var busBottom = busRect.bottom - canvasRect.top;
+
+  var nodes = document.querySelectorAll('.node');
+  var lines = '';
+
+  nodes.forEach(function(node) {
+    var r = node.getBoundingClientRect();
+    var ncx = r.left + r.width/2 - canvasRect.left;
+    var ncy = r.top + r.height/2 - canvasRect.top;
+
+    // Connect to nearest bus edge
+    var tx, ty;
+    if (ncy < busTop) { tx = Math.max(busLeft, Math.min(busRight, ncx)); ty = busTop; }
+    else if (ncy > busBottom) { tx = Math.max(busLeft, Math.min(busRight, ncx)); ty = busBottom; }
+    else if (ncx < busCx) { tx = busLeft; ty = busCy; }
+    else { tx = busRight; ty = busCy; }
+
+    var isActive = node.classList.contains('active') || node.classList.contains('core');
+    var cls = isActive ? 'conn-line active' : 'conn-line';
+    lines += '<line class="' + cls + '" x1="' + ncx + '" y1="' + ncy + '" x2="' + tx + '" y2="' + ty + '"/>';
+
+    // Animated pulse dot for active connections
+    if (isActive) {
+      lines += '<circle r="3" fill="#4a9eff" opacity="0">' +
+        '<animate attributeName="opacity" values="0;.8;.8;0" dur="3s" repeatCount="indefinite"/>' +
+        '<animateMotion dur="3s" repeatCount="indefinite" path="M' + ncx + ',' + ncy + ' L' + tx + ',' + ty + '"/>' +
+        '</circle>';
+    }
+  });
+
+  svg.innerHTML = lines;
+}
+
+// Fetch telemetry from unified API endpoint
+async function updateTelemetry() {
+  try {
+    var res = await fetch('/api/telemetry');
+    if (!res.ok) return;
+    var t = res.json ? await res.json() : {};
+
+    // Left Hemisphere
+    var lh = t.hemispheres && t.hemispheres.lh || {};
+    if (lh.status === 'online') {
+      document.getElementById('node-lh').className = 'node active';
+      document.getElementById('node-lh').querySelector('.status-dot').className = 'status-dot on';
+      document.getElementById('lh-reqs').textContent = (lh.slots_processing || 0) + ' active';
+    }
+
+    // Right Hemisphere
+    var rh = t.hemispheres && t.hemispheres.rh || {};
+    if (rh.status === 'online') {
+      document.getElementById('node-rh').className = 'node active';
+      document.getElementById('node-rh').querySelector('.status-dot').className = 'status-dot on';
+      document.getElementById('rh-reqs').textContent = (rh.slots_processing || 0) + ' active';
+    }
+
+    // NATS Event Fabric
+    var nats = t.nats || {};
+    var natsEl = document.getElementById('nats-stats');
+    if (nats.status === 'online') {
+      natsEl.textContent = nats.in_msgs + ' msgs | ' + nats.connections + ' conns';
+      if (nats.jetstream) {
+        natsEl.textContent += ' | JS: ' + nats.jetstream.streams + ' streams, ' + nats.jetstream.messages + ' msgs';
+      }
+    } else {
+      natsEl.textContent = 'offline';
+    }
+
+    // Memory
+    var mem = t.memory || {};
+    document.getElementById('mem-semantic').textContent = mem.semantic_chunks + ' chunks';
+    document.getElementById('mem-episodic').textContent = mem.episodic_episodes || 0;
+    document.getElementById('stat-chunks').textContent = mem.semantic_chunks || 0;
+    document.getElementById('stat-repos').textContent = mem.repos || 0;
+
+    // Environment (GPU)
+    var gpus = t.environment && t.environment.gpu || [];
+    gpus.forEach(function(g) {
+      var el = document.getElementById('env-gpu' + g.index);
+      if (el) el.textContent = g.temp + '\u00B0C ' + g.util + '% ' + g.mem_used + '/' + g.mem_total + 'MB';
+    });
+
+    // Environment (CPU)
+    var cpu = t.environment && t.environment.cpu || {};
+    if (cpu.package_temps) {
+      document.getElementById('env-cpu').textContent = cpu.package_temps.map(function(t) { return t + '\u00B0C'; }).join(' / ');
+    }
+
+    // Environment (RAM)
+    var ram = t.environment && t.environment.ram || {};
+    if (ram.total_gb) {
+      document.getElementById('env-ram').textContent = ram.used_gb + ' / ' + ram.total_gb + ' GB';
+    }
+
+    // LLM Engine
+    var llmSlots = 0, llmTotal = 0;
+    if (lh.slots_idle !== undefined) { llmSlots += lh.slots_idle; llmTotal += lh.slots_idle + (lh.slots_processing || 0); }
+    if (rh.slots_idle !== undefined) { llmSlots += rh.slots_idle; llmTotal += rh.slots_idle + (rh.slots_processing || 0); }
+    document.getElementById('llm-slots').textContent = llmSlots + '/' + llmTotal + ' idle';
+    if (gpus.length >= 2) {
+      document.getElementById('llm-vram').textContent = gpus[0].mem_used + ' + ' + gpus[1].mem_used + ' MB';
+    }
+
+    // DHT / Services
+    var dht = t.dht || {};
+    document.getElementById('dht-services').textContent = dht.services_online + '/' + dht.services_total + ' online';
+
+    // Stats bar
+    if (nats.in_msgs) document.getElementById('stat-epm').textContent = nats.in_msgs;
+
+    // Redraw connections (active states may have changed)
+    drawConnections();
+  } catch(e) {
+    console.log('Telemetry error:', e);
+  }
+}
+
+// Uptime counter
+var startTime = Date.now();
+function updateUptime() {
+  var secs = Math.floor((Date.now() - startTime) / 1000);
+  var h = Math.floor(secs / 3600);
+  var m = Math.floor((secs % 3600) / 60);
+  var s = secs % 60;
+  document.getElementById('stat-uptime').textContent =
+    (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
+}
+
+// Init
+window.addEventListener('load', function() {
+  drawConnections();
+  updateTelemetry();
+  setInterval(updateUptime, 1000);
+  setInterval(updateTelemetry, 10000);
+  window.addEventListener('resize', drawConnections);
+});
+</script>
+</body>
+</html>
