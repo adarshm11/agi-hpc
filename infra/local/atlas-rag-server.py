@@ -72,6 +72,10 @@ RH_KEYWORDS = {
     "design", "vision", "inspire", "explore", "possibilities", "connect",
     "themes", "big picture", "strategy", "reimagine", "innovate",
     "compare across", "similarities", "different angle", "metaphor",
+    "poem", "story", "write me", "compose", "artistic", "poetic",
+    "fiction", "narrative", "song", "lyric", "haiku", "essay",
+    "philosophical", "muse", "dream", "wonder", "playful", "fun",
+    "joke", "humor", "funny", "weird", "wild", "crazy",
 }
 
 
@@ -81,9 +85,9 @@ def classify_query(text):
     lh_score = sum(1 for kw in LH_KEYWORDS if kw in lower)
     rh_score = sum(1 for kw in RH_KEYWORDS if kw in lower)
 
-    if rh_score > lh_score and rh_score >= 2:
+    if rh_score > lh_score:
         return "rh"
-    elif lh_score > rh_score and lh_score >= 2:
+    elif lh_score > rh_score:
         return "lh"
     else:
         return "lh"  # Default to LH

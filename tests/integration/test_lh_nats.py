@@ -33,6 +33,7 @@ Usage (with LH service running):
 from __future__ import annotations
 
 import asyncio
+from agi.common.event import Event
 import json
 import logging
 import sys
@@ -49,7 +50,6 @@ try:
 except ImportError:
     nats = None
 
-from agi.common.event import Event
 
 
 async def send_and_wait(

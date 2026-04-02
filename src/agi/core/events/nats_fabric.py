@@ -53,6 +53,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
+from agi.common.event import Event
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
