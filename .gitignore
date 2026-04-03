@@ -39,3 +39,7 @@ docs/_*.txt
 bash.exe.stackdump
 nul
 .env
+data/*.db
+data/*.csv
+data/*.sql
+*.pyc
