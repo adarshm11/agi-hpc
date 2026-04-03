@@ -1,1 +1,32 @@
-# TODO env_config.yaml
+# AGI-HPC Environment Service Configuration
+# Phase 5: Metacognition + Environment on Atlas
+
+environment:
+  # NATS event fabric connection
+  nats:
+    servers:
+      - "nats://localhost:4222"
+
+  # System sensor (hardware monitoring)
+  system:
+    poll_interval: 10.0
+    gpu_enabled: true
+    cpu_temp_enabled: true
+    disk_paths:
+      - "/"
+      - "/archive"
+
+  # Repository sensor (git change detection)
+  repos:
+    watch_dir: "/archive/ahb-sjsu"
+    poll_interval: 60.0
+    max_changed_files: 50
+
+  # Feature toggles
+  enable_system_sensor: true
+  enable_repo_sensor: true
+
+  # Port assignments (reference)
+  ports:
+    nats: 4222
+    nats_monitor: 8222

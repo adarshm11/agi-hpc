@@ -468,3 +468,158 @@ agi.memory.store.procedural      # Record completed modules + scores
 
 Deferred to post-competition. Requires: web actuator (Phase 5), metacognition gap analysis,
 curriculum planning logic, assessment generation.
+
+
+## Virtual Training Environments (Future)
+
+### Simulation Frameworks
+
+Atlas can train in virtual environments before deploying to the physical JetBot:
+
+- **MuJoCo** (already in codebase as optional import) -- physics simulation, robotics
+- **Isaac Gym** (NVIDIA) -- GPU-accelerated physics, runs natively on GV100s
+- **Unity ML-Agents** -- rich 3D environments, can run via Proton on Atlas (Steam installed)
+- **Godot** -- open-source alternative to Unity, lighter weight
+- **AI2-THOR** -- indoor household environments for embodied AI
+- **Minecraft (MineRL)** -- open-ended survival, crafting, planning
+
+### Steam Games as Training Environments
+
+Steam is installed on Atlas. Games provide complex, adversarial, multi-modal training:
+
+**Strategy / Planning:**
+- Civilization -- long-horizon planning, resource management, diplomacy
+- Factorio -- optimization, logistics, automation chains
+- Stellaris -- space empire management (ties into PostGIS universe modeling)
+
+**Physics / Spatial Reasoning:**
+- Portal -- spatial puzzles, physics manipulation
+- Kerbal Space Program -- orbital mechanics, engineering
+- Bridge Constructor -- structural engineering
+
+**Social / Communication:**
+- Among Us -- deception detection, theory of mind
+- Diplomacy -- negotiation, alliance formation
+
+**Survival / Adaptation:**
+- Minecraft -- open-ended goals, crafting, exploration
+- Subnautica -- underwater navigation, resource gathering
+
+### Architecture
+
+```
+Game (via Steam/Proton)
+  -> Screen capture (agi.env.sensor.screen)
+  -> Game state extraction (API/memory reading where available)
+  -> Atlas processes frame + state
+  -> LH: strategic planning, resource optimization
+  -> RH: creative problem-solving, exploration
+  -> Safety: don't do unethical things in-game (test ethics in simulation)
+  -> Metacognition: track learning progress, adjust strategy
+  -> Controller output (agi.env.actuator.gamepad)
+  -> Game receives input
+```
+
+### Selenium for Web-Based Training
+
+- Browser-based games and simulations via Selenium
+- Online courses with interactive exercises
+- Web-based coding challenges (LeetCode, HackerRank)
+- Chess/Go via web interfaces
+
+### Research Value
+
+Games as training environments test:
+- Long-horizon planning (metacognition)
+- Adversarial reasoning (safety under pressure)
+- Resource optimization (procedural memory)
+- Spatial reasoning (PostGIS integration)
+- Multi-modal understanding (vision from Gemma 4)
+- Creative problem-solving (RH hemisphere)
+- Ethical decision-making (safety gateway in simulated moral dilemmas)
+
+### Implementation
+
+Part of Phase 5+ (Environment). Requires:
+- Screen capture pipeline (GStreamer or similar)
+- Input injection (xdotool for keyboard/mouse, or virtual gamepad)
+- Game state extraction (per-game, some have APIs)
+- Training loop that feeds back reward signals to metacognition
+
+
+## Metacognition Research References
+
+Key papers informing the Atlas metacognition implementation:
+
+### Core Papers
+
+1. **"Truly Self-Improving Agents Require Intrinsic Metacognitive Learning"** (arxiv 2506.05109)
+   Three-component framework: metacognitive knowledge (self-assessment), metacognitive planning
+   (deciding what to learn), metacognitive evaluation (reflecting to improve). Directly maps to
+   Atlas Monitor, Reflector, and Adjuster components.
+
+2. **"Language Models Are Capable of Metacognitive Monitoring"** (arxiv 2505.13763)
+   Neuroscience-inspired neurofeedback paradigm shows LLMs can monitor their own internal
+   activations. Validates our approach of having Gemma 4 evaluate its own performance.
+
+3. **"Language Models Coupled with Metacognition Can Outperform Reasoning Models"** (arxiv 2508.17959)
+   A metacognition layer on a standard LLM outperforms dedicated reasoning models.
+   Validates Atlas: Spock + metacognition > single bigger model.
+
+4. **"Hyperagents"** (arxiv 2603.19461)
+   Self-referential agents where the meta-modification procedure is itself editable.
+   Ultimate goal: metacognition that can modify its own metacognition.
+
+5. **"Meta-TTRL"** (arxiv 2603.15724)
+   Metacognitive framework for self-improving at test time. Real-time adaptation.
+
+### Key Design Insight: Hemisphere Disagreement as Uncertainty Signal
+
+Research shows LLMs are systematically overconfident (avg 72% confidence when ~50% correct).
+Atlas uses dual-hemisphere disagreement as a calibration signal:
+- When Spock and Kirk agree -> high confidence
+- When they disagree significantly -> low confidence, flag for user
+- Track calibration curve over time: predicted confidence vs actual correctness
+- This is novel: no other system uses multi-model disagreement for metacognitive calibration
+
+### Implementation Mapping
+
+| Paper Concept | Atlas Component |
+|---|---|
+| Metacognitive knowledge | MetricsStore (latency, accuracy, hemisphere usage) |
+| Metacognitive planning | Curriculum planner (self-directed learning) |
+| Metacognitive evaluation | Reflector (periodic self-assessment via LLM) |
+| Neurofeedback monitoring | Monitor (subscribes to all NATS events) |
+| Confidence calibration | Hemisphere disagreement signal |
+| Self-modification | Adjuster (tunes temperature, routing, max_tokens) |
+
+## TurboQuant KV Cache Compression
+
+Google's TurboQuant (2026) compresses key-value cache by 6x at 3-bit with zero accuracy loss.
+
+### Relevance to Atlas
+
+- Tested on Gemma and Mistral (our exact models)
+- KV cache currently consumes ~2-4GB per model at 8K context
+- TurboQuant could reduce to ~500MB, enabling:
+  - 48K+ context on GV100s (currently limited to 8K by VRAM)
+  - Room for larger batch sizes (multiple concurrent users)
+  - Potential to run both hemispheres on one GPU during training
+
+### Two-Stage Algorithm
+
+1. **PolarQuant**: Random rotation + polar coordinate conversion, eliminates data normalization
+2. **QJL**: 1-bit Quantized Johnson-Lindenstrauss error correction
+
+### Performance
+
+- 3-bit: 6x KV cache reduction, zero accuracy loss
+- 4-bit: 8x performance increase on H100 (similar gains expected on Volta)
+- Benchmarks: LongBench, Needle In A Haystack, ZeroSCROLLS, RULER, L-Eval all pass
+
+### Integration Plan
+
+- Check if llama.cpp supports TurboQuant (may need custom kernel)
+- Alternatively implement in Python as a preprocessing step
+- Connects to existing TurboQuant research in the project (beam compression, geometric framework)
+- Target: Phase 6 optimization pass

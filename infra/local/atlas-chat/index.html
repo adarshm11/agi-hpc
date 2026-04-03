@@ -188,23 +188,36 @@ async function send(){
     var md=addMsg("atlas","");
     var bub=md.querySelector(".bub");
     var full="",tc=0;
-    var reader=res.body.getReader();
-    var dec=new TextDecoder();
 
-    while(true){
-      var{done,value}=await reader.read();
-      if(done)break;
-      var chunk=dec.decode(value);
-      var lines=chunk.split("\n");
-      for(var i=0;i<lines.length;i++){
-        if(!lines[i].startsWith("data: "))continue;
-        var data=lines[i].slice(6);
-        if(data==="[DONE]")continue;
-        try{
-          var p=JSON.parse(data);
-          var delta=p.choices&&p.choices[0]&&p.choices[0].delta&&p.choices[0].delta.content;
-          if(delta){full+=delta;tc++;bub.innerHTML=fmt(full);c.scrollTop=c.scrollHeight;}
-        }catch(e){}
+    var ct=res.headers.get("content-type")||"";
+    if(ct.includes("application/json")){
+      // Non-streaming response (dual hemisphere "both" mode)
+      var j=await res.json();
+      full=j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content||"";
+      tc=full.split(" ").length;
+      bub.innerHTML=fmt(full);
+      c.scrollTop=c.scrollHeight;
+    } else {
+      // Streaming SSE response
+      var reader=res.body.getReader();
+      var dec=new TextDecoder();
+
+      while(true){
+        var{done,value}=await reader.read();
+        if(done)break;
+        var chunk=dec.decode(value);
+        var lines=chunk.split("\n");
+        for(var i=0;i<lines.length;i++){
+          if(!lines[i].startsWith("data: "))continue;
+          var data=lines[i].slice(6);
+          if(data==="[DONE]")continue;
+          try{
+            var p=JSON.parse(data);
+            var d0=p.choices&&p.choices[0]&&p.choices[0].delta;
+            var delta=d0&&(d0.content||d0.reasoning_content);
+            if(delta){full+=delta;tc++;bub.innerHTML=fmt(full);c.scrollTop=c.scrollHeight;}
+          }catch(e){}
+        }
       }
     }
 

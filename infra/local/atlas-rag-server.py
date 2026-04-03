@@ -9,19 +9,30 @@ Architecture:
 """
 
 import json
+import logging
 import os
 import re
+import time
 import numpy as np
 from pathlib import Path
 from flask import Flask, request, Response, send_from_directory, jsonify
 import requests
 import psycopg2
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+log = logging.getLogger("atlas-rag")
+
 LH_URL = "http://localhost:8080"  # Gemma 4 31B - Left Hemisphere (analytical)
 RH_URL = "http://localhost:8082"  # Qwen 32B - Right Hemisphere (creative)
 DB_DSN = "dbname=atlas user=claude"
 STATIC_DIR = Path("/home/claude/atlas-chat")
 TOP_K = 6
+RRF_K = 60  # Reciprocal Rank Fusion constant (standard value)
+HYDE_TIMEOUT = 15  # seconds — Gemma 4 generates ~20 tok/s, so 256 tokens ~= 13s
+HYDE_ENABLED = True  # can be toggled at runtime via env var
 
 app = Flask(__name__)
 
@@ -30,6 +41,51 @@ print("Loading embedding model...")
 from sentence_transformers import SentenceTransformer
 embed_model = SentenceTransformer("BAAI/bge-m3", device="cpu")
 print("  Ready.")
+
+
+# ---------------------------------------------------------------------------
+# BM25 bootstrap — ensure tsv column and GIN index exist
+# ---------------------------------------------------------------------------
+def ensure_bm25_schema():
+    """Add tsvector column and GIN index to chunks table if missing."""
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            # Check if tsv column already exists
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'chunks' AND column_name = 'tsv'
+            """)
+            if cur.fetchone() is None:
+                log.info("Adding tsv column to chunks table...")
+                cur.execute("ALTER TABLE chunks ADD COLUMN tsv tsvector")
+                log.info("Populating tsv column (this may take a minute)...")
+                cur.execute("UPDATE chunks SET tsv = to_tsvector('english', content)")
+                log.info("Creating GIN index on tsv column...")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON chunks USING GIN (tsv)"
+                )
+                log.info("BM25 schema setup complete.")
+            else:
+                # Ensure any rows with NULL tsv get populated (new rows since last run)
+                cur.execute(
+                    "UPDATE chunks SET tsv = to_tsvector('english', content) WHERE tsv IS NULL"
+                )
+                rows = cur.rowcount
+                if rows:
+                    log.info("Backfilled tsv for %d new chunks.", rows)
+                # Ensure index exists
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON chunks USING GIN (tsv)"
+                )
+                log.info("BM25 schema verified OK.")
+        conn.close()
+    except Exception as e:
+        log.error("BM25 schema setup failed: %s", e)
+
+
+ensure_bm25_schema()
 
 LH_SYSTEM = (
     "You are Atlas, an AI research assistant running locally on a workstation "
@@ -136,51 +192,263 @@ def detect_repo_filter(query):
     return None
 
 
-def search(query, top_k=TOP_K):
-    """Search pgvector for relevant chunks, with repo boosting."""
-    q_emb = embed_model.encode([query], normalize_embeddings=True)[0]
-    emb_str = str(q_emb.tolist())
-    repo_filter = detect_repo_filter(query)
+def hyde_generate(query):
+    """Generate a hypothetical document using HyDE via Gemma 4.
 
+    Returns the hypothetical text, or None on failure / timeout.
+    """
+    if not HYDE_ENABLED:
+        return None
+    try:
+        t0 = time.time()
+        resp = requests.post(
+            f"{LH_URL}/v1/chat/completions",
+            json={
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a concise technical writer. Write a brief, "
+                            "factual paragraph that directly answers the question. "
+                            "Do not hedge or disclaim — just write the answer as if "
+                            "it were an excerpt from documentation."
+                        ),
+                    },
+                    {"role": "user", "content": query},
+                ],
+                "max_tokens": 128,
+                "temperature": 0.3,
+                "stream": False,
+            },
+            timeout=HYDE_TIMEOUT,
+        )
+        elapsed = time.time() - t0
+        result = resp.json()
+        content = (
+            result.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        if not content:
+            # Gemma 4 sometimes puts output in reasoning_content
+            content = (
+                result.get("choices", [{}])[0]
+                .get("message", {})
+                .get("reasoning_content", "")
+            )
+        log.info("HyDE generated in %.2fs (%d chars)", elapsed, len(content))
+        return content if content else None
+    except requests.Timeout:
+        log.warning("HyDE timed out (>%ds), falling back to raw query", HYDE_TIMEOUT)
+        return None
+    except Exception as e:
+        log.warning("HyDE failed: %s — falling back to raw query", e)
+        return None
+
+
+def dense_search(embedding_str, top_k, repo_filter=None):
+    """Run dense vector search via pgvector. Returns list of (id, repo, file, text, rank)."""
+    results = []
     try:
         conn = psycopg2.connect(DB_DSN)
         with conn.cursor() as cur:
             if repo_filter:
-                # When user mentions a specific repo, search that repo first
                 cur.execute("""
-                    SELECT repo, file_path, content,
+                    SELECT id, repo, file_path, content,
                            1 - (embedding <=> %s::vector) AS score
                     FROM chunks
                     WHERE repo = %s
                     ORDER BY embedding <=> %s::vector
                     LIMIT %s
-                """, (emb_str, repo_filter, emb_str, top_k))
-                results = [
-                    {"repo": r[0], "file": r[1], "text": r[2], "score": float(r[3])}
-                    for r in cur.fetchall()
-                ]
-                # If we got enough results from the target repo, use them
-                if len(results) >= 3:
-                    conn.close()
-                    return results
-                # Otherwise fall through to global search
-
-            cur.execute("""
-                SELECT repo, file_path, content,
-                       1 - (embedding <=> %s::vector) AS score
-                FROM chunks
-                ORDER BY embedding <=> %s::vector
-                LIMIT %s
-            """, (emb_str, emb_str, top_k))
-            results = [
-                {"repo": r[0], "file": r[1], "text": r[2], "score": float(r[3])}
-                for r in cur.fetchall()
-            ]
+                """, (embedding_str, repo_filter, embedding_str, top_k))
+            else:
+                cur.execute("""
+                    SELECT id, repo, file_path, content,
+                           1 - (embedding <=> %s::vector) AS score
+                    FROM chunks
+                    ORDER BY embedding <=> %s::vector
+                    LIMIT %s
+                """, (embedding_str, embedding_str, top_k))
+            for rank, row in enumerate(cur.fetchall(), start=1):
+                results.append({
+                    "id": row[0], "repo": row[1], "file": row[2],
+                    "text": row[3], "dense_score": float(row[4]), "rank": rank,
+                })
         conn.close()
-        return results
     except Exception as e:
-        print(f"RAG search error: {e}")
-        return []
+        log.error("Dense search error: %s", e)
+    return results
+
+
+def _build_or_tsquery(query):
+    """Build an OR-based tsquery string from natural language.
+
+    plainto_tsquery uses AND between words, which is too strict for search.
+    We want OR so partial matches surface and ts_rank_cd sorts by relevance.
+    """
+    # Strip non-alphanumeric, split into words, filter stopwords via to_tsquery
+    words = re.findall(r'[a-zA-Z0-9_-]+', query)
+    # Filter out very short words (likely stopwords)
+    words = [w for w in words if len(w) > 2]
+    if not words:
+        return None
+    # Build OR-joined tsquery: 'word1' | 'word2' | ...
+    return " | ".join(f"'{w}'" for w in words)
+
+
+def bm25_search(query, top_k, repo_filter=None):
+    """Run BM25 full-text search via PostgreSQL tsvector with OR matching."""
+    results = []
+    or_tsquery = _build_or_tsquery(query)
+    if not or_tsquery:
+        return results
+    try:
+        conn = psycopg2.connect(DB_DSN)
+        with conn.cursor() as cur:
+            # Use to_tsquery with OR-joined terms for partial matching
+            # ts_rank_cd ranks by how many terms match and their coverage
+            if repo_filter:
+                cur.execute("""
+                    SELECT id, repo, file_path, content,
+                           ts_rank_cd(tsv, to_tsquery('english', %s)) AS score
+                    FROM chunks
+                    WHERE tsv @@ to_tsquery('english', %s) AND repo = %s
+                    ORDER BY score DESC
+                    LIMIT %s
+                """, (or_tsquery, or_tsquery, repo_filter, top_k))
+            else:
+                cur.execute("""
+                    SELECT id, repo, file_path, content,
+                           ts_rank_cd(tsv, to_tsquery('english', %s)) AS score
+                    FROM chunks
+                    WHERE tsv @@ to_tsquery('english', %s)
+                    ORDER BY score DESC
+                    LIMIT %s
+                """, (or_tsquery, or_tsquery, top_k))
+            for rank, row in enumerate(cur.fetchall(), start=1):
+                results.append({
+                    "id": row[0], "repo": row[1], "file": row[2],
+                    "text": row[3], "bm25_score": float(row[4]), "rank": rank,
+                })
+        conn.close()
+    except Exception as e:
+        log.error("BM25 search error: %s", e)
+    return results
+
+
+def reciprocal_rank_fusion(dense_results, bm25_results, k=RRF_K):
+    """Merge two ranked lists using Reciprocal Rank Fusion.
+
+    score(doc) = sum over lists L: 1 / (k + rank_in_L)
+    """
+    scores = {}   # id -> rrf_score
+    docs = {}     # id -> doc dict
+
+    for r in dense_results:
+        rid = r["id"]
+        scores[rid] = scores.get(rid, 0.0) + 1.0 / (k + r["rank"])
+        if rid not in docs:
+            docs[rid] = {
+                "id": rid, "repo": r["repo"], "file": r["file"],
+                "text": r["text"],
+            }
+        docs[rid]["dense_score"] = r.get("dense_score", 0.0)
+        docs[rid]["dense_rank"] = r["rank"]
+
+    for r in bm25_results:
+        rid = r["id"]
+        scores[rid] = scores.get(rid, 0.0) + 1.0 / (k + r["rank"])
+        if rid not in docs:
+            docs[rid] = {
+                "id": rid, "repo": r["repo"], "file": r["file"],
+                "text": r["text"],
+            }
+        docs[rid]["bm25_score"] = r.get("bm25_score", 0.0)
+        docs[rid]["bm25_rank"] = r["rank"]
+
+    # Sort by fused score descending
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    results = []
+    for rid, fused in ranked:
+        doc = docs[rid]
+        doc["score"] = fused
+        results.append(doc)
+    return results
+
+
+def search(query, top_k=TOP_K):
+    """Hybrid search: HyDE + Dense + BM25 with Reciprocal Rank Fusion."""
+    repo_filter = detect_repo_filter(query)
+    timings = {}
+
+    # --- HyDE: generate hypothetical document and embed it ----
+    t0 = time.time()
+    hyde_text = hyde_generate(query)
+    timings["hyde_gen"] = time.time() - t0
+
+    t0 = time.time()
+    if hyde_text:
+        emb_input = hyde_text
+        log.info("Using HyDE embedding (hypothetical doc)")
+    else:
+        emb_input = query
+        log.info("Using raw query embedding (HyDE skipped)")
+    q_emb = embed_model.encode([emb_input], normalize_embeddings=True)[0]
+    emb_str = str(q_emb.tolist())
+    timings["embed"] = time.time() - t0
+
+    # --- Dense vector search ---
+    # Fetch more candidates so RRF has material to work with
+    fetch_k = top_k * 3
+    t0 = time.time()
+    dense_results = dense_search(emb_str, fetch_k, repo_filter)
+    timings["dense"] = time.time() - t0
+
+    # --- BM25 text search (always on the raw query text) ---
+    t0 = time.time()
+    bm25_results = bm25_search(query, fetch_k, repo_filter)
+    timings["bm25"] = time.time() - t0
+
+    # --- Fallback: if repo-filtered search returned too few, search globally ---
+    if repo_filter and len(dense_results) + len(bm25_results) < 3:
+        log.info("Repo-filtered search too sparse (%d results), falling back to global",
+                 len(dense_results) + len(bm25_results))
+        t0 = time.time()
+        dense_results = dense_search(emb_str, fetch_k, repo_filter=None)
+        timings["dense_fallback"] = time.time() - t0
+        t0 = time.time()
+        bm25_results = bm25_search(query, fetch_k, repo_filter=None)
+        timings["bm25_fallback"] = time.time() - t0
+
+    # --- Reciprocal Rank Fusion ---
+    t0 = time.time()
+    fused = reciprocal_rank_fusion(dense_results, bm25_results)
+    timings["rrf"] = time.time() - t0
+
+    # --- Repo boost: if a repo was mentioned, boost matching results ---
+    if repo_filter:
+        for doc in fused:
+            if doc["repo"] == repo_filter:
+                doc["score"] *= 1.5  # boost matches from mentioned repo
+        fused.sort(key=lambda d: d["score"], reverse=True)
+
+    results = fused[:top_k]
+
+    log.info(
+        "Hybrid search: dense=%d bm25=%d fused=%d top_k=%d | "
+        "timings: hyde=%.2fs embed=%.2fs dense=%.2fs bm25=%.2fs rrf=%.3fs",
+        len(dense_results), len(bm25_results), len(fused), len(results),
+        timings.get("hyde_gen", 0), timings["embed"],
+        timings["dense"], timings["bm25"], timings["rrf"],
+    )
+    for i, r in enumerate(results[:3]):
+        log.info(
+            "  #%d [%.4f] %s/%s  dense_rank=%s bm25_rank=%s",
+            i + 1, r["score"], r["repo"], r["file"],
+            r.get("dense_rank", "-"), r.get("bm25_rank", "-"),
+        )
+
+    return results
 
 
 def inject_context(messages, hemisphere):

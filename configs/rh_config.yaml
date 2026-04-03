@@ -1,1 +1,30 @@
-# TODO rh_config.yaml
+# AGI-HPC Right Hemisphere Configuration
+# Phase 4: RH + Integration on Atlas
+
+rh:
+  # NATS event fabric connection
+  nats:
+    servers:
+      - "nats://localhost:4222"
+
+  # LLM server (Qwen 3 32B via llama-server on port 8082)
+  llm:
+    base_url: "http://localhost:8082"
+    model: "qwen-3-32b"
+    timeout: 300.0
+
+  # Inference defaults (RH = creative, divergent)
+  inference:
+    temperature: 0.8
+    top_p: 0.95
+    max_tokens: 4096
+
+  # Chain-of-thought tracing
+  enable_cot: true
+
+  # Port assignments (reference)
+  ports:
+    grpc: 50057
+    llm_backend: 8082
+    nats: 4222
+    nats_monitor: 8222

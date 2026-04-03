@@ -1,1 +1,37 @@
-# TODO meta_config.yaml
+# AGI-HPC Metacognition Service Configuration
+# Phase 5: Metacognition + Environment on Atlas
+
+metacognition:
+  # NATS event fabric connection
+  nats:
+    servers:
+      - "nats://localhost:4222"
+
+  # Monitor: publishes summary every N seconds
+  summary_interval: 60.0
+
+  # Reflector: triggers reflection every N interactions
+  reflection_interval: 10
+
+  # LLM for reflection (uses Gemma 4 / LH)
+  llm:
+    base_url: "http://localhost:8080"
+    model: "gemma-4-31b"
+    timeout: 300.0
+
+  # Adjuster thresholds
+  adjuster:
+    latency_threshold_p95_ms: 30000.0
+    veto_rate_threshold: 0.1
+    hemisphere_ratio_min: 0.5
+    hemisphere_ratio_max: 3.0
+
+  # Feature toggles
+  enable_reflector: true
+  enable_adjuster: true
+
+  # Port assignments (reference)
+  ports:
+    service: 50070
+    nats: 4222
+    nats_monitor: 8222

@@ -1,0 +1,26 @@
+# AGI-HPC Integration Orchestrator Configuration
+# Phase 4: RH + Integration on Atlas
+
+integration:
+  # NATS event fabric connection
+  nats:
+    servers:
+      - "nats://localhost:4222"
+
+  # Merge timeout: how long to wait for both hemispheres (seconds)
+  merge_timeout: 120.0
+
+  # Default subjects for hemisphere dispatch
+  default_lh_subject: "agi.lh.request.chat"
+  default_rh_subject: "agi.rh.request.creative"
+
+  # Session tracking: store episodes in episodic memory
+  enable_session_tracking: true
+
+  # Minimum keyword hits to trigger a hemisphere
+  routing_threshold: 2
+
+  # Port assignments (reference)
+  ports:
+    nats: 4222
+    nats_monitor: 8222
