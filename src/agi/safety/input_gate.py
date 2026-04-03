@@ -36,8 +36,8 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-from agi.common.event import Event
-from agi.safety.deme_gateway import SafetyGateway, SafetyResult
+from agi.common.event import Event # noqa: E402
+from agi.safety.deme_gateway import SafetyGateway, SafetyResult # noqa: E402
 
 
 class InputGate:
