@@ -57,11 +57,11 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from agi.common.event import Event # noqa: E402
-from agi.core.events.nats_fabric import NatsEventFabric, NatsFabricConfig # noqa: E402
-from agi.safety.deme_gateway import GatewayConfig, SafetyGateway # noqa: E402
-from agi.safety.input_gate import InputGate # noqa: E402
-from agi.safety.output_gate import OutputGate # noqa: E402
+from agi.common.event import Event  # noqa: E402
+from agi.core.events.nats_fabric import NatsEventFabric, NatsFabricConfig  # noqa: E402
+from agi.safety.deme_gateway import GatewayConfig, SafetyGateway  # noqa: E402
+from agi.safety.input_gate import InputGate  # noqa: E402
+from agi.safety.output_gate import OutputGate  # noqa: E402
 
 try:
     import yaml

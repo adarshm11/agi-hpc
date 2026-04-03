@@ -49,7 +49,7 @@ try:
 except ImportError:
     yaml = None  # type: ignore
 
-from agi.safety.adapter import SafetyAdapter # noqa: E402
+from agi.safety.adapter import SafetyAdapter  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Try importing ErisML DEME pipeline
