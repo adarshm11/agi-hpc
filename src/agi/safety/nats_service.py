@@ -57,16 +57,17 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-try:
-    import yaml
-except ImportError:
-    yaml = None  # type: ignore
-
 from agi.common.event import Event
 from agi.core.events.nats_fabric import NatsEventFabric, NatsFabricConfig
 from agi.safety.deme_gateway import GatewayConfig, SafetyGateway
 from agi.safety.input_gate import InputGate
 from agi.safety.output_gate import OutputGate
+
+try:
+    import yaml
+except ImportError:
+    yaml = None  # type: ignore
+
 
 # ---------------------------------------------------------------------------
 # Configuration
