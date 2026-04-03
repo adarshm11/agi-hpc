@@ -41,6 +41,7 @@ Run from repo root:
 from pathlib import Path
 from textwrap import dedent
 
+
 def write(path: Path, content: str, overwrite=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not overwrite:
@@ -475,6 +476,7 @@ if __name__ == "__main__":
 # MAIN: write files
 # =====================================================================
 
+
 def main():
     root = Path("src/agi/safety")
 
@@ -484,6 +486,7 @@ def main():
     write(root / "post_action" / "service.py", POST_ACTION_SERVICE)
 
     print("\nSafety subsystem skeleton generated.")
+
 
 if __name__ == "__main__":
     main()

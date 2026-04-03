@@ -66,11 +66,26 @@ SOURCES = [
     DownloadSource(
         name="wikimedia",
         urls=[
-            ("wikibooks", "https://dumps.wikimedia.org/enwikibooks/latest/enwikibooks-latest-pages-articles.xml.bz2"),
-            ("wikiversity", "https://dumps.wikimedia.org/enwikiversity/latest/enwikiversity-latest-pages-articles.xml.bz2"),
-            ("wikisource", "https://dumps.wikimedia.org/enwikisource/latest/enwikisource-latest-pages-articles.xml.bz2"),
-            ("wikinews", "https://dumps.wikimedia.org/enwikibooks/latest/enwikibooks-latest-pages-articles.xml.bz2"),
-            ("wikivoyage", "https://dumps.wikimedia.org/enwikivoyage/latest/enwikivoyage-latest-pages-articles.xml.bz2"),
+            (
+                "wikibooks",
+                "https://dumps.wikimedia.org/enwikibooks/latest/enwikibooks-latest-pages-articles.xml.bz2",
+            ),
+            (
+                "wikiversity",
+                "https://dumps.wikimedia.org/enwikiversity/latest/enwikiversity-latest-pages-articles.xml.bz2",
+            ),
+            (
+                "wikisource",
+                "https://dumps.wikimedia.org/enwikisource/latest/enwikisource-latest-pages-articles.xml.bz2",
+            ),
+            (
+                "wikinews",
+                "https://dumps.wikimedia.org/enwikibooks/latest/enwikibooks-latest-pages-articles.xml.bz2",
+            ),
+            (
+                "wikivoyage",
+                "https://dumps.wikimedia.org/enwikivoyage/latest/enwikivoyage-latest-pages-articles.xml.bz2",
+            ),
         ],
         dest="/archive/knowledge",
         method="aria2c",
@@ -105,7 +120,10 @@ SOURCES = [
     DownloadSource(
         name="archive_org",
         urls=[
-            ("ia-books", "https://archive.org/download/bookscorpus_shard_0/books_large_p1.txt"),
+            (
+                "ia-books",
+                "https://archive.org/download/bookscorpus_shard_0/books_large_p1.txt",
+            ),
         ],
         dest="/archive/knowledge/ia-books",
         method="aria2c",
@@ -163,7 +181,9 @@ def launch_download(source: DownloadSource, url_name: str, url: str) -> Optional
     if tmux_alive(session):
         return session
 
-    dest = os.path.join(source.dest, url_name) if source.method != "rsync" else source.dest
+    dest = (
+        os.path.join(source.dest, url_name) if source.method != "rsync" else source.dest
+    )
     os.makedirs(dest, exist_ok=True)
 
     if source.method == "aria2c":
@@ -219,7 +239,9 @@ def main():
     args = parser.parse_args()
 
     log.info(f"Atlas Download Daemon (circuit breaker)")
-    log.info(f"  Target: {args.target_mbps} MB/s, Max concurrent: {args.max_concurrent}")
+    log.info(
+        f"  Target: {args.target_mbps} MB/s, Max concurrent: {args.max_concurrent}"
+    )
 
     prev_bytes = get_net_bytes()
     prev_time = time.time()
@@ -246,7 +268,9 @@ def main():
         # Count active downloads
         total_active = 0
         for source in SOURCES:
-            source.active_sessions = [s for s in source.active_sessions if tmux_alive(s)]
+            source.active_sessions = [
+                s for s in source.active_sessions if tmux_alive(s)
+            ]
             total_active += len(source.active_sessions)
 
         # Circuit breaker state transitions
@@ -270,14 +294,20 @@ def main():
                             log.info(f"  Completed: {session}")
                             if source.state == CircuitState.HALF_OPEN:
                                 source.state = CircuitState.CLOSED
-                                log.info(f"  Circuit CLOSED: {source.name} (recovery confirmed)")
+                                log.info(
+                                    f"  Circuit CLOSED: {source.name} (recovery confirmed)"
+                                )
                         else:
                             source.failures += 1
                             source.last_failure = now
-                            log.warning(f"  Failed: {session} (failures: {source.failures})")
+                            log.warning(
+                                f"  Failed: {session} (failures: {source.failures})"
+                            )
                             if source.failures >= source.failure_threshold:
                                 source.state = CircuitState.OPEN
-                                log.error(f"  Circuit OPEN: {source.name} (threshold reached)")
+                                log.error(
+                                    f"  Circuit OPEN: {source.name} (threshold reached)"
+                                )
                     source.active_sessions.remove(session)
                 elif not check_session_health(session, source):
                     # Stalled

@@ -89,6 +89,67 @@ Every query triggers a 4-round debate:
 3. Kirk synthesizes as captain
 4. Confidence measured from hemisphere disagreement
 
+## TurboQuant KV Cache Compression
+
+Adapted from Theory Radar's TurboBeam implementation, which uses the
+Zandieh et al. (ICLR 2026) PolarQuant + QJL algorithm for sub-linear
+memory inference.
+
+**Algorithm**: Random rotation (QR) maps each head-dim vector onto the
+unit hypersphere, then an optimal Lloyd-Max scalar quantizer compresses
+each coordinate to b bits (2, 3, or 4).  Only uint8 indices and a
+per-vector L2 norm are stored.
+
+**Memory savings (Gemma 4 27B, fp16 baseline)**:
+
+Current (uint8 storage, ~2x):
+
+| Context | Bits | Original | Compressed | Ratio | Saved |
+|---------|------|----------|------------|-------|-------|
+| 8,192   | 3    | 4.500 GB | 2.285 GB  | 1.97x | 2.215 GB |
+| 16,384  | 3    | 9.000 GB | 4.570 GB  | 1.97x | 4.430 GB |
+| 32,768  | 3    | 18.00 GB | 9.141 GB  | 1.97x | 8.859 GB |
+
+With bit-packing (future optimisation, ~5x):
+
+| Context | Bits | Original | Compressed | Ratio | Saved |
+|---------|------|----------|------------|-------|-------|
+| 8,192   | 3    | 4.500 GB | 0.879 GB  | 5.12x | 3.621 GB |
+| 16,384  | 3    | 9.000 GB | 1.758 GB  | 5.12x | 7.242 GB |
+| 32,768  | 3    | 18.00 GB | 3.516 GB  | 5.12x | 14.48 GB |
+
+Source: `src/agi/meta/llm/turboquant_kv.py`
+Benchmark: `scripts/benchmark_turboquant_kv.py`
+Tests: `tests/unit/test_turboquant_kv.py`
+
+### llama.cpp Integration Options
+
+**Option A: Python KV cache wrapper (recommended for prototyping)**
+Wrap `llama-server` with a Python process that intercepts KV cache
+tensors between layers.  On each forward pass, compress old KV entries
+(beyond a sliding window) using `TurboQuantKV.compress()`, freeing VRAM.
+Decompress on-demand when attention reaches those positions.  This
+requires exposing KV cache tensors via the llama.cpp Python bindings
+(`llama-cpp-python`), which supports `kv_cache_view()`.
+
+**Option B: Custom CUDA kernel linked into llama.cpp**
+Write a CUDA kernel that performs the rotation + quantization in-place
+within the llama.cpp KV cache management code (`llama-kv-cache.cpp`).
+This avoids Python overhead and integrates directly with the inference
+loop.  Requires modifying `ggml-cuda` to add the quantization as a new
+operation type.  Highest performance but most engineering effort.
+
+**Option C: External cache manager (eviction-based)**
+Run `TurboQuantKV` as a sidecar process that manages a compressed L2
+cache on host RAM.  When VRAM KV cache is full, evict oldest entries
+to the compressed store.  On cache miss, decompress and reload into
+VRAM.  This is a form of memory tiering (L1: VRAM, L2: compressed RAM)
+that fits the existing AGI-HPC memory architecture (see Memory Tiers).
+
+For the Gemma 4 Good Hackathon, Option A is the fastest path to a
+working demo.  Option C aligns best with the AGI-HPC L1-L5 memory
+hierarchy.
+
 ## Training
 
 - **AtlasGym**: 5 environments (ethics, reasoning, coding, debate, memory)

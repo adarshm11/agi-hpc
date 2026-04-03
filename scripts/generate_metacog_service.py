@@ -35,6 +35,7 @@ Run from repo root:
 from pathlib import Path
 from textwrap import dedent
 
+
 def write(path: Path, content: str, overwrite=False):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and not overwrite:
@@ -42,6 +43,7 @@ def write(path: Path, content: str, overwrite=False):
         return
     path.write_text(content, encoding="utf-8")
     print(f"[write] {path}")
+
 
 # ---------------------------------------------------------------------
 # Metacognition Service Code
@@ -169,10 +171,12 @@ if __name__ == "__main__":
 # Main
 # ---------------------------------------------------------------------
 
+
 def main():
     dest = Path("src/agi/meta/service.py")
     write(dest, META_SERVICE, overwrite=False)
     print("\nMetacognition service skeleton generated.")
+
 
 if __name__ == "__main__":
     main()

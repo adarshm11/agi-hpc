@@ -12,6 +12,7 @@ Hardware: Quadro GV100 32GB (Volta, compute 7.0)
 Copyright (c) 2024 AGI-HPC Project
 Author: Andrew H. Bond (agi.hpc@gmail.com)
 """
+
 from __future__ import annotations
 
 import json
@@ -34,8 +35,13 @@ LORA_RANK = 16
 LORA_ALPHA = 32
 LORA_DROPOUT = 0.0
 TARGET_MODULES = [
-    "q_proj", "v_proj", "k_proj", "o_proj",
-    "gate_proj", "up_proj", "down_proj",
+    "q_proj",
+    "v_proj",
+    "k_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
 ]
 LEARNING_RATE = 2e-4
 NUM_EPOCHS = 3
@@ -50,7 +56,7 @@ OUTPUT_DIR = "/home/claude/models/gemma4-ethics-lora"
 CHECKPOINT_DIR = os.path.join(OUTPUT_DIR, "checkpoints")
 
 # Force GPU 1 (GPU 0 runs Spock / Gemma 4 31B inference)
-DEVICE_INDEX = 1
+DEVICE_INDEX = 0
 
 
 def format_prompt(example: dict) -> str:
@@ -94,12 +100,12 @@ def main() -> None:
     logger.info(f"CUDA devices: {gpu_count}")
     for i in range(gpu_count):
         name = torch.cuda.get_device_name(i)
-        mem = torch.cuda.get_device_properties(i).total_mem // (1024 ** 3)
+        mem = torch.cuda.get_device_properties(i).total_memory // (1024**3)
         logger.info(f"  GPU {i}: {name} ({mem}GB)")
 
     # Check GPU 1 memory
     torch.cuda.set_device(DEVICE_INDEX)
-    free_mem = torch.cuda.mem_get_info(DEVICE_INDEX)[0] / (1024 ** 3)
+    free_mem = torch.cuda.mem_get_info(DEVICE_INDEX)[0] / (1024**3)
     logger.info(f"GPU {DEVICE_INDEX} free memory: {free_mem:.1f} GB")
     if free_mem < 8:
         logger.error(
@@ -167,7 +173,7 @@ def main() -> None:
         warmup_ratio=WARMUP_RATIO,
         lr_scheduler_type="cosine",
         optim="adamw_8bit",
-        fp16=True,   # Volta: use fp16, not bf16
+        fp16=True,  # Volta: use fp16, not bf16
         bf16=False,
         max_seq_length=MAX_SEQ_LENGTH,
         dataset_text_field="text",

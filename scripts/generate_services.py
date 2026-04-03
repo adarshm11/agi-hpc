@@ -44,8 +44,10 @@ from textwrap import dedent
 # Logging helpers
 # ---------------------------------------------------------------------
 
+
 def log(msg: str):
     print(f"[generate] {msg}")
+
 
 def write(path: Path, content: str, overwrite=False):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +57,7 @@ def write(path: Path, content: str, overwrite=False):
     path.write_text(content, encoding="utf-8")
     log(f"WRITE   {path}")
     return True
+
 
 # ---------------------------------------------------------------------
 # File content templates
@@ -238,6 +241,7 @@ if __name__ == "__main__":
 # Drive file generation
 # ---------------------------------------------------------------------
 
+
 def generate(overwrite: bool):
     log("Starting service skeleton generation...")
 
@@ -267,6 +271,7 @@ def generate(overwrite: bool):
     log(f"  Created files : {created}")
     log(f"  Skipped files : {skipped}")
     log("Done.")
+
 
 # ---------------------------------------------------------------------
 # Main

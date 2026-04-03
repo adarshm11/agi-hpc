@@ -629,3 +629,93 @@ Google's TurboQuant (2026) compresses key-value cache by 6x at 3-bit with zero a
 See [phase7-metacognitive-loop.md](phase7-metacognitive-loop.md) for the full roadmap.
 Key insight: hemisphere disagreement as confidence calibration (novel contribution).
 10-day implementation plan to close the observe-reflect-decide-act loop.
+
+
+## PostgreSQL Advanced Features (Enabled 2026-04-03)
+
+PostgreSQL 16.13 on Atlas. Database: `atlas`, user: `claude`.
+
+### 1. pg_trgm (Fuzzy Text Search)
+
+**Status: ACTIVE**
+
+Extension `pg_trgm` enables trigram-based fuzzy matching with the `%` similarity operator.
+
+Indexes created:
+- `idx_chunks_trgm` -- GIN trigram index on `chunks.content` (44K rows, ~9s build)
+- `idx_pubs_title_trgm` -- GIN trigram index on `publications.title` (824K rows, ~16s build)
+- `ethics_chunks` skipped (1M+ rows, index would be too large/slow)
+
+Usage:
+```sql
+SET pg_trgm.similarity_threshold = 0.3;
+SELECT title FROM publications WHERE title % 'quantm mechancis' LIMIT 5;
+```
+
+### 2. Materialized Views
+
+**Status: ACTIVE**
+
+Two materialized views with unique indexes for `REFRESH CONCURRENTLY` support:
+
+- `mv_repo_stats` -- Per-repo chunk count and avg content length (7 repos)
+  - Unique index: `idx_mv_repo_stats_repo ON mv_repo_stats (repo)`
+- `mv_ethics_stats` -- Ethics corpus breakdown by corpus/tradition/language (48 groups)
+  - Unique index: `idx_mv_ethics_stats_key ON mv_ethics_stats (corpus, tradition, language)`
+
+Refresh:
+```sql
+REFRESH MATERIALIZED VIEW CONCURRENTLY mv_repo_stats;
+REFRESH MATERIALIZED VIEW CONCURRENTLY mv_ethics_stats;
+```
+
+### 3. Generated Columns
+
+**Status: ACTIVE**
+
+- `chunks.word_count INT GENERATED ALWAYS AS (array_length(string_to_array(content, ' '), 1)) STORED`
+- Only on `chunks` (44K rows). Skipped `ethics_chunks` and `publications` (too large, would lock table).
+
+### 4. pg_stat_statements
+
+**Status: PENDING RESTART**
+
+- Extension created: `CREATE EXTENSION IF NOT EXISTS pg_stat_statements;`
+- Added `shared_preload_libraries = 'pg_stat_statements'` to `/etc/postgresql/16/main/postgresql.conf`
+- Requires PostgreSQL restart to become functional
+- DO NOT restart while services are running
+
+### 5. LISTEN/NOTIFY Bridge to NATS
+
+**Status: ACTIVE (triggers) / READY (bridge script)**
+
+Trigger functions and triggers installed on three tables:
+
+| Trigger | Table | Channel | NATS Subject |
+|---------|-------|---------|--------------|
+| `trg_new_episode` | `episodes` | `new_episode` | `agi.events.new_episode` |
+| `trg_new_chunk` | `chunks` | `new_chunk` | `agi.events.new_chunk` |
+| `trg_confidence_update` | `confidence_log` | `confidence_update` | `agi.events.confidence_update` |
+
+Bridge script: `/home/claude/agi-hpc/scripts/pg_notify_bridge.py`
+
+Run: `python3 /home/claude/agi-hpc/scripts/pg_notify_bridge.py`
+
+### 6. File Foreign Data Wrapper
+
+**Status: READY (no foreign tables yet)**
+
+- Extension `file_fdw` created
+- Server `archive_files` created
+- No Gutenberg catalog CSV found on disk; foreign table creation deferred
+
+### 7. Row-Level Security (Prep)
+
+**Status: ENABLED (no policies)**
+
+RLS enabled on:
+- `episodes` -- `ALTER TABLE episodes ENABLE ROW LEVEL SECURITY;`
+- `visitor_log` -- `ALTER TABLE visitor_log ENABLE ROW LEVEL SECURITY;`
+
+Note: Table owner (`claude`) bypasses RLS by default. Policies needed for non-owner users.
+No policies created yet -- this is prep for future multi-user support.

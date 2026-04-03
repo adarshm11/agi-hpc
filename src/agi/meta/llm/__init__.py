@@ -33,11 +33,18 @@ __all__ = [
     "LH_PRESET",
     "RH_PRESET",
     "PromptTemplateRegistry",
+    "TurboQuantKV",
+    "CompressedKV",
 ]
 
 try:
     from agi.meta.llm.client import LLMClient, CompletionResult
     from agi.meta.llm.config import InferenceConfig, LH_PRESET, RH_PRESET
     from agi.meta.llm.templates import PromptTemplateRegistry
+except ImportError:
+    pass
+
+try:
+    from agi.meta.llm.turboquant_kv import CompressedKV, TurboQuantKV
 except ImportError:
     pass

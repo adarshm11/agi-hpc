@@ -104,7 +104,9 @@ def is_tmux_session_alive(name: str) -> bool:
 
 def get_active_downloads() -> int:
     r = subprocess.run(
-        ["tmux", "ls"], capture_output=True, text=True,
+        ["tmux", "ls"],
+        capture_output=True,
+        text=True,
     )
     count = 0
     for line in r.stdout.split("\n"):
@@ -115,7 +117,10 @@ def get_active_downloads() -> int:
 
 def get_cpu_temps() -> tuple[float, float]:
     r = subprocess.run(
-        ["sensors"], capture_output=True, text=True, timeout=5,
+        ["sensors"],
+        capture_output=True,
+        text=True,
+        timeout=5,
     )
     temps = []
     for line in r.stdout.split("\n"):
@@ -190,7 +195,9 @@ def check_completed(job: DownloadJob) -> bool:
 def get_disk_usage_gb(path: str) -> float:
     r = subprocess.run(
         ["du", "-s", "--block-size=1G", path],
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     if r.stdout:
         return int(r.stdout.split()[0])
