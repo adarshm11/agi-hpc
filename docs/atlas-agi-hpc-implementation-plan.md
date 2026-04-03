@@ -623,3 +623,9 @@ Google's TurboQuant (2026) compresses key-value cache by 6x at 3-bit with zero a
 - Alternatively implement in Python as a preprocessing step
 - Connects to existing TurboQuant research in the project (beam compression, geometric framework)
 - Target: Phase 6 optimization pass
+
+## Phase 7: Closing the Metacognitive Loop
+
+See [phase7-metacognitive-loop.md](phase7-metacognitive-loop.md) for the full roadmap.
+Key insight: hemisphere disagreement as confidence calibration (novel contribution).
+10-day implementation plan to close the observe-reflect-decide-act loop.
