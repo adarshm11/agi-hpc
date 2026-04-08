@@ -1,0 +1,19 @@
+[Unit]
+Description=Atlas Daily Training Session (Ego DM + Dreaming Nap)
+After=network.target postgresql.service
+Wants=atlas-llm-dm.service atlas-llm-spock.service atlas-rag-server.service
+Documentation=Daily Ego-driven training + dreaming consolidation
+
+[Service]
+Type=oneshot
+User=claude
+Environment=PATH=/home/claude/env/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/claude/agi-hpc
+ExecStart=/bin/bash /home/claude/agi-hpc/scripts/daily_training_session.sh --episodes 20 --difficulty 2
+# Training sessions can take 1-2 hours
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

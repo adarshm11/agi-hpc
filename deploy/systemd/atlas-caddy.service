@@ -1,0 +1,15 @@
+[Unit]
+Description=Atlas Caddy Reverse Proxy (HTTPS + TLS)
+After=network.target
+Wants=atlas-oauth2-proxy.service atlas-telemetry.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/caddy run --config /home/claude/Caddyfile
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

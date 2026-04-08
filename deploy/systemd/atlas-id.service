@@ -1,0 +1,20 @@
+[Unit]
+Description=Atlas Id (Qwen 3 32B on GPU 1)
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=claude
+Environment=CUDA_VISIBLE_DEVICES=1
+ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
+    --model /home/claude/models/Qwen3-32B-Q5_K_M/Qwen3-32B-Q5_K_M.gguf \
+    --host 0.0.0.0 --port 8082 --ctx-size 8192 --threads 12
+Restart=always
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=atlas.target

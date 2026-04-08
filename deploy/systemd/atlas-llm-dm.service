@@ -1,0 +1,23 @@
+[Unit]
+Description=Atlas Ego / Dungeon Master (Gemma 4 E4B on CPU)
+After=network.target
+Documentation=Freudian Ego: mediator, arbiter, dungeon master for training
+
+[Service]
+Type=simple
+User=claude
+# No GPU — runs entirely on CPU (48 threads, ~8 tok/s)
+Environment=CUDA_VISIBLE_DEVICES=
+ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
+    --model /home/claude/models/gemma-4-E4B-it-Q5_K_M.gguf \
+    --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 24 \
+    --n-gpu-layers 0
+Restart=always
+RestartSec=15
+StartLimitIntervalSec=120
+StartLimitBurst=3
+StandardOutput=append:/tmp/dm_server.log
+StandardError=append:/tmp/dm_server.log
+
+[Install]
+WantedBy=multi-user.target

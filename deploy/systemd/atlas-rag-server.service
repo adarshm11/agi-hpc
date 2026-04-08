@@ -1,0 +1,18 @@
+[Unit]
+Description=Atlas RAG Server (dual-hemisphere proxy + pgvector search)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=claude
+Environment=CUDA_VISIBLE_DEVICES=1
+WorkingDirectory=/home/claude
+ExecStart=/home/claude/env/bin/python3 /home/claude/atlas-rag-server.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

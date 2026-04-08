@@ -1,0 +1,21 @@
+[Unit]
+Description=Atlas Ego (Gemma 4 E4B on CPU)
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=claude
+Environment=CUDA_VISIBLE_DEVICES=
+ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
+    --model /home/claude/models/gemma-4-E4B-it-Q5_K_M.gguf \
+    --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 12 \
+    --n-gpu-layers 0
+Restart=always
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=atlas.target

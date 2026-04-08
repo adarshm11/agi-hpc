@@ -1,0 +1,15 @@
+[Unit]
+Description=Atlas AI — Full Cognitive Architecture
+Documentation=AGI-HPC Freudian psyche: Id + Superego + Ego + Safety + Memory + Dreaming
+After=network-online.target postgresql.service
+Wants=atlas-nats.service
+Wants=atlas-superego.service
+Wants=atlas-id.service
+Wants=atlas-ego.service
+Wants=atlas-rag-server.service
+Wants=atlas-telemetry.service
+Wants=atlas-caddy.service
+Wants=atlas-oauth2-proxy.service
+
+[Install]
+WantedBy=multi-user.target

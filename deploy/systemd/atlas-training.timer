@@ -1,0 +1,14 @@
+[Unit]
+Description=Atlas Daily Training Timer (10 AM UTC)
+Documentation=Triggers daily DM training + dreaming nap
+
+[Timer]
+# 10:00 AM UTC = 3:00 AM PST (off-peak, before users wake up)
+OnCalendar=*-*-* 10:00:00
+# If the machine was off at 10 AM, run on next boot
+Persistent=true
+# Randomize start by up to 5 minutes to avoid thundering herd
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

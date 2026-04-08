@@ -1,0 +1,52 @@
+AGI-HPC Responsible AI License v1.0
+
+Copyright (c) 2025-2026 Andrew H. Bond <agi.hpc@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to use, copy, modify, merge, and distribute the Software
+for non-commercial research and educational purposes, subject to the
+following conditions:
+
+1. ATTRIBUTION. The above copyright notice and this permission notice
+   shall be included in all copies or substantial portions of the
+   Software.
+
+2. NON-COMMERCIAL. The Software may not be used for commercial purposes
+   without separate written permission from the copyright holder.
+   Commercial purposes include, but are not limited to: selling the
+   Software, using it in a commercial product, or providing it as a
+   commercial service.
+
+3. SAFETY REQUIREMENTS. Any deployment of the Software in systems that
+   interact with humans or make decisions affecting human welfare must
+   include appropriate safety controls, including but not limited to:
+   (a) Input and output safety gates
+   (b) Human oversight mechanisms
+   (c) Audit logging of decisions
+   (d) The ability to halt autonomous operation
+
+4. HIGH-RISK DOMAINS. Use of the Software in safety-critical domains
+   (healthcare, autonomous vehicles, critical infrastructure, law
+   enforcement, military) requires separate written permission and
+   must include domain-appropriate safety and governance controls.
+
+5. AUTONOMOUS OPERATION. The Software must not be deployed for fully
+   autonomous operation without human oversight unless the deployer
+   has conducted and documented a safety assessment appropriate to
+   the deployment context.
+
+6. ETHICAL USE. The Software must not be used to:
+   (a) Cause harm to individuals or groups
+   (b) Discriminate on the basis of protected characteristics
+   (c) Conduct surveillance without appropriate legal authority
+   (d) Generate disinformation or deceptive content
+   (e) Circumvent safety controls in other AI systems
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

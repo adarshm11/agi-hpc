@@ -1,5 +1,32 @@
-numpy
-pydantic
-grpcio
-protobuf
-pyyaml
+# AGI-HPC core dependencies (pinned for reproducibility)
+# Install: pip install -r requirements.txt
+
+# Web framework
+flask>=3.0
+requests>=2.31
+
+# Database
+psycopg2-binary>=2.9
+asyncpg>=0.29
+
+# ML/Embeddings
+numpy>=1.26
+sentence-transformers>=2.6
+
+# Async HTTP
+aiohttp>=3.9
+
+# Config
+pyyaml>=6.0
+
+# Optional: NATS event fabric
+# nats-py>=2.7
+
+# Optional: Training
+# gymnasium>=0.29
+
+# Development
+# black>=24.0
+# ruff>=0.5
+# pytest>=8.0
+# pytest-asyncio>=0.23

@@ -1,0 +1,21 @@
+[Unit]
+Description=Atlas Id / Kirk (Qwen 3 32B on GPU 1)
+After=network.target
+Documentation=Freudian Id: creative, instinctual, fast path
+
+[Service]
+Type=simple
+User=claude
+Environment=CUDA_VISIBLE_DEVICES=1
+ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
+    --model /home/claude/models/Qwen3-32B-Q5_K_M/Qwen3-32B-Q5_K_M.gguf \
+    --host 0.0.0.0 --port 8082 --ctx-size 8192 --threads 12
+Restart=always
+RestartSec=15
+StartLimitIntervalSec=120
+StartLimitBurst=3
+StandardOutput=append:/tmp/kirk_server.log
+StandardError=append:/tmp/kirk_server.log
+
+[Install]
+WantedBy=atlas.target

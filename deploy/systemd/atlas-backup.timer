@@ -1,0 +1,12 @@
+[Unit]
+Description=Atlas Daily Backup Timer (4 AM UTC)
+Documentation=After overnight dreaming, before morning training
+
+[Timer]
+# 4:00 AM UTC = 9:00 PM PST (after overnight dream cycle)
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

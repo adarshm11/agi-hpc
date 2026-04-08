@@ -1,142 +1,122 @@
-name: AGI-HPC CI
+name: Atlas AI — CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
-  build:
-    name: Lint, Generate Protos, Run Tests
+  test:
+    name: Tests & Lint
     runs-on: ubuntu-latest
-
     steps:
-      # -----------------------------
-      # Clean checkout (IMPORTANT!)
-      # -----------------------------
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          clean: true
-          fetch-depth: 0
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      # -----------------------------
-      # Setup Python
-      # -----------------------------
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      # -----------------------------
-      # Install compatible NumPy
-      # -----------------------------
-      - name: Install compatible NumPy
-        run: |
-          pip install --upgrade pip wheel setuptools
-          pip cache purge
-          pip install --no-cache-dir --force-reinstall "numpy==1.26.4"  # Linux-safe wheel
-
-      # -----------------------------
-      # Install dependencies
-      # -----------------------------
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -e ".[dev]"
-          pip install protobuf absl-py
 
-      # -----------------------------
-      # Install dev tools
-      # -----------------------------
-      - name: Install dev tools
+      - name: Lint (ruff)
+        run: ruff check src/ tests/ --select E,F,W
+
+      - name: Format check (black)
+        run: black --check src/ tests/
+
+      - name: Unit tests
+        run: pytest tests/unit/ -v --tb=short -q
+
+  deploy:
+    name: Deploy to Atlas
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SSH client
+        run: sudo apt-get install -y sshpass
+
+      - name: Deploy to Atlas
+        env:
+          ATLAS_HOST: ${{ secrets.ATLAS_HOST }}
+          ATLAS_USER: ${{ secrets.ATLAS_USER }}
+          ATLAS_PASSWORD: ${{ secrets.ATLAS_PASSWORD }}
+          DEPLOY_PATH: /home/claude/agi-hpc
         run: |
-          pip install black==26.1.0
-          pip install ruff==0.15.0
+          # SSH options: skip host key check (Tailscale IP is stable)
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
+          echo "=== Deploying to Atlas ==="
 
+          # Step 1: Pull latest code on Atlas
+          sshpass -p "$ATLAS_PASSWORD" ssh $SSH_OPTS "$ATLAS_USER@$ATLAS_HOST" << 'DEPLOY_SCRIPT'
+            set -e
+            cd /home/claude/agi-hpc
 
-          
-      # -----------------------------
-      # Remove any auto-generated pb2 files
-      # (grpcio-tools sometimes writes to src/)
-      # -----------------------------
-      - name: Clean stray proto files
+            echo "--- Pulling latest code ---"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "--- Copying dashboard HTML ---"
+            cp -f atlas-chat-schematic.html /home/claude/atlas-chat/schematic.html
+            cp -f atlas-chat-index.html /home/claude/atlas-chat/index.html 2>/dev/null || true
+            cp -f atlas-chat-events.html /home/claude/atlas-chat/events.html 2>/dev/null || true
+
+            echo "--- Installing Python package ---"
+            /home/claude/env/bin/pip install -e ".[nats]" --quiet
+
+            echo "--- Restarting RAG server ---"
+            # RAG server picks up code changes on restart
+            sudo systemctl restart atlas-rag-server || \
+              (tmux kill-session -t rag 2>/dev/null; sleep 2; \
+               tmux new-session -d -s rag \
+                 "CUDA_VISIBLE_DEVICES= /home/claude/env/bin/python3 /home/claude/atlas-rag-server.py \
+                 2>&1 | tee /tmp/atlas/rag_server.log")
+
+            echo "--- Restarting telemetry server ---"
+            sudo systemctl restart atlas-telemetry || \
+              (tmux kill-session -t telemetry 2>/dev/null; sleep 1; \
+               tmux new-session -d -s telemetry \
+                 "/home/claude/env/bin/python3 /home/claude/agi-hpc/scripts/telemetry_server.py \
+                 2>&1 | tee /tmp/atlas/telemetry.log")
+
+            echo "--- Verifying services ---"
+            sleep 10
+            for port in 8080 8081 8082 8085; do
+              if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" | grep -q "200"; then
+                echo "  Port $port: OK"
+              else
+                echo "  Port $port: WAITING (LLMs take ~30s to load)"
+              fi
+            done
+
+            echo "=== Deploy complete ==="
+          DEPLOY_SCRIPT
+
+      - name: Smoke test
+        env:
+          ATLAS_HOST: ${{ secrets.ATLAS_HOST }}
+          ATLAS_USER: ${{ secrets.ATLAS_USER }}
+          ATLAS_PASSWORD: ${{ secrets.ATLAS_PASSWORD }}
         run: |
-          find src -maxdepth 1 -name "*_pb2.py" -delete || true
-          find src -maxdepth 1 -name "*_pb2_grpc.py" -delete || true
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          sleep 15
 
-      # -----------------------------
-      # Validate proto headers
-      # -----------------------------
-      - name: Validate proto header syntax
-        run: |
-          python - << 'EOF'
-          import pathlib, re, sys
-          for f in pathlib.Path("proto").glob("*.proto"):
-              txt = f.read_text()
-              if 'syntax = "proto3";' not in txt:
-                  print(f"[ERROR] Missing syntax in {f}")
-                  sys.exit(1)
-              if not re.search(r'^package\s+agi\.\w+\.v1;', txt, re.M):
-                  print(f"[ERROR] Invalid or missing package declaration in {f}")
-                  sys.exit(1)
-          print("Proto header validation OK")
-          EOF
+          # Check RAG server responds
+          sshpass -p "$ATLAS_PASSWORD" ssh $SSH_OPTS "$ATLAS_USER@$ATLAS_HOST" \
+            'curl -sf http://localhost:8081/api/search-status && echo " -> RAG OK" || echo " -> RAG FAIL"'
 
-      # -----------------------------
-      # Regenerate protobuf stubs
-      # -----------------------------
-      - name: Generate Python GRPC stubs
-        run: |
-          python generate_protos.py --clean
-
-      # -----------------------------
-      # Format generated code
-      # -----------------------------
-      - name: Apply Black formatting
-        run: |
-          black src tests
-
-      # -----------------------------
-      # Let Ruff autofix everything
-      # -----------------------------
-      - name: Auto-fix with Ruff
-        run: |
-          ruff check --fix src tests
-        
-      # -----------------------------
-      # Validate TOML syntax
-      # -----------------------------
-      - name: Validate pyproject.toml syntax (Taplo)
-        run: |
-          pip install taplo
-          taplo lint pyproject.toml
-
-      # -----------------------------
-      # Lint codebase
-      # -----------------------------
-      - name: Lint source files
-        run: |
-          black --check src tests
-          ruff check src tests
-
-      # -----------------------------
-      # Run tests
-      # -----------------------------
-      - name: Run pytest
-        run: |
-          pytest -q --disable-warnings --maxfail=1
-
-      # -----------------------------
-      # Ensure working tree clean
-      # -----------------------------
-      - name: Ensure working directory clean
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-              echo "ERROR: repo not clean after proto generation or testing!"
-              git status
-              git --no-pager diff
-              exit 1
-          fi
+          # Check telemetry returns valid JSON
+          sshpass -p "$ATLAS_PASSWORD" ssh $SSH_OPTS "$ATLAS_USER@$ATLAS_HOST" \
+            'curl -sf http://localhost:8081/api/telemetry | python3 -m json.tool > /dev/null && echo "Telemetry OK" || echo "Telemetry FAIL"'

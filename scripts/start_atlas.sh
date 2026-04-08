@@ -161,32 +161,6 @@ asyncio.run(refresh())
     exit 0
 fi
 
-
-# ─── Maintenance mode ──────────────────────────────────
-if [ "$1" = "--maintenance" ] || [ "$1" = "--maint" ]; then
-    log "Atlas AI — Entering Maintenance Mode"
-    
-    # Save original index.html
-    [ ! -f "$ATLAS_HOME/atlas-chat/index.html.bak" ] && \
-        cp "$ATLAS_HOME/atlas-chat/index.html" "$ATLAS_HOME/atlas-chat/index.html.bak"
-    
-    # Write maintenance page
-    cat > "$ATLAS_HOME/atlas-chat/index.html" << 'MHTML'
-<!DOCTYPE html><html><head><title>Atlas AI - Maintenance</title><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui;background:#0a0e17;color:#e0e6f0;height:100vh;display:flex;align-items:center;justify-content:center}.c{background:#131a2b;border:1px solid #2a3555;border-radius:16px;padding:40px;text-align:center;max-width:500px;width:90%}h1{font-size:28px;background:linear-gradient(135deg,#4a9eff,#7cc4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}p{color:#7a8ba8;margin:12px 0;font-size:14px}.s{display:inline-block;padding:6px 16px;background:rgba(245,158,11,0.15);border:1px solid #f59e0b;border-radius:20px;color:#f59e0b;font-size:13px;margin-top:16px}a{color:#4a9eff}</style></head><body><div class="c"><div style="font-size:48px;margin-bottom:16px">&#9881;</div><h1>Atlas AI</h1><p>Currently offline for scheduled maintenance.</p><div class="s">&#9202; Back soon</div><p style="margin-top:20px;font-size:12px"><a href="/schematic.html">Dashboard</a> | <a href="/events.html">Events</a></p></div></body></html>
-MHTML
-    
-    # Kill LLM servers
-    for s in spock kirk; do tmux kill-session -t $s 2>/dev/null && log "  Stopped $s"; done
-    
-    # Keep RAG for dashboard
-    tmux has-session -t rag 2>/dev/null || \
-        tmux new-session -d -s rag "CUDA_VISIBLE_DEVICES= $VENV/python3 $ATLAS_HOME/atlas-rag-server.py 2>&1 | tee $LOG_DIR/rag_server.log"
-    
-    log "  GPUs freed. Dashboard still accessible."
-    log "  Exit maintenance: bash scripts/start_atlas.sh"
-    exit 0
-fi
-
 # ─── Stop mode ──────────────────────────────────────────
 if [ "$1" = "--stop" ]; then
     log "Stopping all Atlas services..."
@@ -196,9 +170,6 @@ if [ "$1" = "--stop" ]; then
     log "All services stopped."
     exit 0
 fi
-
-# Restore from maintenance if needed
-[ -f "$ATLAS_HOME/atlas-chat/index.html.bak" ] && mv "$ATLAS_HOME/atlas-chat/index.html.bak" "$ATLAS_HOME/atlas-chat/index.html"
 
 # ─── Pre-flight checks ─────────────────────────────────
 log "Atlas AI — Starting AGI-HPC Cognitive Architecture"
@@ -311,6 +282,8 @@ if ! tmux has-session -t spock 2>/dev/null; then
         --host 0.0.0.0 --port 8080 --ctx-size 8192 --threads 12 \
         --path $ATLAS_HOME/atlas-chat \
         2>&1 | tee $LOG_DIR/spock.log"
+    # NOTE: --cache-type-k q8_0 --cache-type-v q4_0 saves 1.2 GB VRAM but
+    # halves throughput on Volta GV100 (no hw int8). Enable on Ampere+.
     log "  Spock (Gemma 4 31B): starting on GPU 0:8080..."
 else
     log "  Spock: already running"
@@ -323,9 +296,29 @@ if ! tmux has-session -t kirk 2>/dev/null; then
         --model $ATLAS_HOME/models/Qwen3-32B-Q5_K_M/Qwen3-32B-Q5_K_M.gguf \
         --host 0.0.0.0 --port 8082 --ctx-size 8192 --threads 12 \
         2>&1 | tee $LOG_DIR/kirk.log"
+    # NOTE: --cache-type-k q8_0 --cache-type-v q4_0 saves VRAM but
+    # halves throughput on Volta GV100. Enable on Ampere+.
     log "  Kirk (Qwen 3 32B): starting on GPU 1:8082..."
 else
     log "  Kirk: already running"
+fi
+
+# Ego / Dungeon Master (Gemma 4 E4B) on CPU
+if ! tmux has-session -t ego 2>/dev/null; then
+    DM_MODEL="$ATLAS_HOME/models/gemma-4-E4B-it-Q5_K_M.gguf"
+    if [ -f "$DM_MODEL" ]; then
+        tmux new-session -d -s ego \
+            "CUDA_VISIBLE_DEVICES= $ATLAS_HOME/llama.cpp/build/bin/llama-server \
+            --model $DM_MODEL \
+            --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 16 \
+            --n-gpu-layers 0 \
+            2>&1 | tee $LOG_DIR/ego.log"
+        log "  Ego (Gemma 4 E4B): starting on CPU:8084..."
+    else
+        log "  Ego: model not found at $DM_MODEL (skipping)"
+    fi
+else
+    log "  Ego: already running"
 fi
 
 # Wait for models to load
@@ -333,8 +326,9 @@ log "  Waiting for models to load..."
 for i in $(seq 1 30); do
     SPOCK_OK=$(curl -s http://localhost:8080/health 2>/dev/null | grep -c ok || true)
     KIRK_OK=$(curl -s http://localhost:8082/health 2>/dev/null | grep -c ok || true)
+    EGO_OK=$(curl -s http://localhost:8084/health 2>/dev/null | grep -c ok || true)
     if [ "$SPOCK_OK" = "1" ] && [ "$KIRK_OK" = "1" ]; then
-        log "  Both hemispheres online!"
+        log "  Both hemispheres online!$([ \"$EGO_OK\" = \"1\" ] && echo ' Ego online too.' || echo ' (Ego still loading)')"
         break
     fi
     sleep 5

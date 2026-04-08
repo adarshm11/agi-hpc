@@ -286,6 +286,55 @@ class EpisodicMemory:
         )
         return episode_id
 
+    def store_from_chat(
+        self,
+        session_id: str,
+        user_msg: str,
+        response: str,
+        hemisphere: str = "lh",
+        safety_input: Optional[Dict[str, Any]] = None,
+        safety_output: Optional[Dict[str, Any]] = None,
+        embed_fn: Optional[Any] = None,
+    ) -> str:
+        """Store a chat interaction as an episode (convenience wrapper).
+
+        Combines safety results, optionally generates an embedding,
+        and delegates to :meth:`store_episode`.
+
+        Args:
+            session_id: Conversation session identifier.
+            user_msg: The user's input message.
+            response: Atlas response (final, after safety checks).
+            hemisphere: Which hemisphere(s) handled the request.
+            safety_input: SafetyResult.to_dict() from input gate.
+            safety_output: SafetyResult.to_dict() from output gate.
+            embed_fn: Optional callable(text) -> List[float] for embedding.
+
+        Returns:
+            The UUID of the stored episode.
+        """
+        safety_flags = {}
+        if safety_input:
+            safety_flags["input"] = safety_input
+        if safety_output:
+            safety_flags["output"] = safety_output
+
+        embedding = None
+        if embed_fn is not None:
+            try:
+                embedding = embed_fn(user_msg).tolist()
+            except Exception:
+                logger.warning("[episodic] embedding generation failed")
+
+        return self.store_episode(
+            session_id=session_id,
+            user_msg=user_msg,
+            response=response,
+            hemisphere=hemisphere,
+            safety_flags=safety_flags,
+            embedding=embedding,
+        )
+
     # ------------------------------------------------------------------
     # Recall
     # ------------------------------------------------------------------

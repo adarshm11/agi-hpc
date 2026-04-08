@@ -1,45 +1,69 @@
+# Python
 __pycache__/
-*.pyc
-.venv/
-src/agi_hpc.egg-info/
-src/*.egg-info/
+*.py[cod]
+*$py.class
 *.egg-info/
+*.egg
+dist/
+build/
+.eggs/
 
-# Virtual environment in repo (Windows)
-Lib/
-Scripts/
-scripts/*.exe
-share/
-Include/
-pyvenv.cfg
-*.dll
+# Virtual environments
+env/
+venv/
+.venv/
 
-# Python generated
-*.pyd
-nemotron/kaggle.json
-.coverage
-*.b64
-# Temp generator scripts in repo root
-/_*.py
-# Large data files
-nemotron/*.zip
-nemotron/*.csv
-nemotron/kaggle_push/
-nemotron/shit-code.*
-nemotron/nemotron-out1.txt
-birdclef/data/
-birdclef/*.zip
-birdclef/precomputed/
-# Office temp files
-~$*
-# Misc
-docs/nul
-docs/_*.py
-docs/_*.txt
-bash.exe.stackdump
-nul
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.stackdump
+
+# Models (large binary files)
+*.gguf
+*.bin
+*.safetensors
+models/
+
+# Data
+data/
+*.pkl
+*.npy
+*.npz
+nats-data/
+
+# Secrets
 .env
-data/*.db
-data/*.csv
-data/*.sql
-*.pyc
+*.pem
+*.key
+credentials.json
+
+# Logs
+*.log
+/tmp/
+
+# Backup
+*.dump
+*.tar.gz
+
+# StoryWealth (personal project, not competition)
+storywealth_*.py
+storywealth_*.json
+
+# Legacy/temporary scripts
+_ethics_*.py
+bash.exe.stackdump
+
+# Jupyter
+.ipynb_checkpoints/
+
+# pytest
+.pytest_cache/
+htmlcov/
+.coverage

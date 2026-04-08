@@ -1,0 +1,9 @@
+# AGI-HPC Project - High-Performance Computing Architecture for AGI
+# Copyright (c) 2025 Andrew H. Bond
+# Contact: agi.hpc@gmail.com
+#
+# Licensed under the AGI-HPC Responsible AI License v1.0.
+
+"""Reasoning subsystem — Tree-of-Thought and multi-path debate."""
+
+from __future__ import annotations

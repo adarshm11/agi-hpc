@@ -47,6 +47,7 @@ from agi.meta.llm.turboquant_kv import (
     TurboQuantKVCache,
 )
 
+
 # ------------------------------------------------------------------ #
 # Helpers                                                             #
 # ------------------------------------------------------------------ #
@@ -142,14 +143,16 @@ class TestRoundTrip:
         tensor = _random_kv(batch=1, n_heads=4, seq_len=32, head_dim=128, seed=42)
         mse_values = {}
         for bits in [2, 3, 4]:
-            tq = TurboQuantKV(head_dim=128, n_heads=4, bits=bits, use_gpu=False, seed=0)
+            tq = TurboQuantKV(
+                head_dim=128, n_heads=4, bits=bits, use_gpu=False, seed=0
+            )
             compressed = tq.compress(tensor)
             reconstructed = tq.decompress(compressed)
             mse_values[bits] = _mse(tensor, reconstructed)
 
-        assert (
-            mse_values[4] < mse_values[3] < mse_values[2]
-        ), f"MSE should decrease with more bits: {mse_values}"
+        assert mse_values[4] < mse_values[3] < mse_values[2], (
+            f"MSE should decrease with more bits: {mse_values}"
+        )
 
 
 # ------------------------------------------------------------------ #
@@ -193,7 +196,9 @@ class TestPackedRoundTrip:
     def test_packed_3bit_compression_ratio(self) -> None:
         """3-bit packed at head_dim=256 achieves > 4x compression."""
         tensor = _random_kv(batch=1, n_heads=16, seq_len=128, head_dim=256)
-        tq = TurboQuantKV(head_dim=256, n_heads=16, bits=3, use_gpu=False, seed=0)
+        tq = TurboQuantKV(
+            head_dim=256, n_heads=16, bits=3, use_gpu=False, seed=0
+        )
         compressed = tq.compress(tensor, packed=True)
         ratio = compressed.compression_ratio(256)
         # Theoretical is ~5.1x, allow margin for norm overhead
@@ -235,14 +240,11 @@ class TestBitPacking:
                 err_msg=f"Failed for bits={bits}, n={n}",
             )
 
-    @pytest.mark.parametrize(
-        "bits,group_size,packed_per_group",
-        [
-            (2, 4, 1),
-            (3, 8, 3),
-            (4, 2, 1),
-        ],
-    )
+    @pytest.mark.parametrize("bits,group_size,packed_per_group", [
+        (2, 4, 1),
+        (3, 8, 3),
+        (4, 2, 1),
+    ])
     def test_pack_size_correct(
         self, bits: int, group_size: int, packed_per_group: int
     ) -> None:
@@ -265,23 +267,14 @@ class TestBitPacking:
         # Manual: 24-bit word = 0 | (1<<3) | (2<<6) | (3<<9) | (4<<12)
         #                      | (5<<15) | (6<<18) | (7<<21)
         bits24 = (
-            0
-            | (1 << 3)
-            | (2 << 6)
-            | (3 << 9)
-            | (4 << 12)
-            | (5 << 15)
-            | (6 << 18)
-            | (7 << 21)
+            0 | (1 << 3) | (2 << 6) | (3 << 9)
+            | (4 << 12) | (5 << 15) | (6 << 18) | (7 << 21)
         )
-        expected = np.array(
-            [
-                bits24 & 0xFF,
-                (bits24 >> 8) & 0xFF,
-                (bits24 >> 16) & 0xFF,
-            ],
-            dtype=np.uint8,
-        )
+        expected = np.array([
+            bits24 & 0xFF,
+            (bits24 >> 8) & 0xFF,
+            (bits24 >> 16) & 0xFF,
+        ], dtype=np.uint8)
         np.testing.assert_array_equal(packed, expected)
 
         # Unpack should recover
@@ -379,8 +372,12 @@ class TestEdgeCases:
     def test_large_head_dim(self) -> None:
         """Works with head_dim > 4096 (uses structured rotation)."""
         head_dim = 5000
-        tensor = _random_kv(batch=1, n_heads=1, seq_len=2, head_dim=head_dim, seed=99)
-        tq = TurboQuantKV(head_dim=head_dim, n_heads=1, bits=3, use_gpu=False, seed=0)
+        tensor = _random_kv(
+            batch=1, n_heads=1, seq_len=2, head_dim=head_dim, seed=99
+        )
+        tq = TurboQuantKV(
+            head_dim=head_dim, n_heads=1, bits=3, use_gpu=False, seed=0
+        )
         compressed = tq.compress(tensor)
         reconstructed = tq.decompress(compressed)
         assert reconstructed.shape == tensor.shape
@@ -461,20 +458,12 @@ class TestMemoryEstimation:
     def test_bit_packed_better_than_uint8(self) -> None:
         """Bit-packed estimate has better ratio than uint8."""
         est_uint8 = TurboQuantKV.estimate_memory(
-            n_layers=36,
-            n_kv_heads=16,
-            head_dim=256,
-            seq_len=8192,
-            bits=3,
-            bit_packed=False,
+            n_layers=36, n_kv_heads=16, head_dim=256, seq_len=8192,
+            bits=3, bit_packed=False,
         )
         est_packed = TurboQuantKV.estimate_memory(
-            n_layers=36,
-            n_kv_heads=16,
-            head_dim=256,
-            seq_len=8192,
-            bits=3,
-            bit_packed=True,
+            n_layers=36, n_kv_heads=16, head_dim=256, seq_len=8192,
+            bits=3, bit_packed=True,
         )
         assert est_packed["ratio"] > est_uint8["ratio"]
         assert est_packed["compressed_gb"] < est_uint8["compressed_gb"]
@@ -527,12 +516,8 @@ class TestTurboQuantKVCache:
     def test_append_increases_length(self) -> None:
         """Appending tokens increases cache length."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=4,
-            bits=3,
-            hot_window=8,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=4, bits=3,
+            hot_window=8, use_gpu=False, seed=0,
         )
         assert cache.length == 0
         k = np.random.randn(1, 4, 1, 64).astype(np.float32)
@@ -546,12 +531,8 @@ class TestTurboQuantKVCache:
         """Hot window flushes to cold when exceeding limit."""
         hot_window = 8
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=2,
-            bits=3,
-            hot_window=hot_window,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=2, bits=3,
+            hot_window=hot_window, use_gpu=False, seed=0,
         )
         rng = np.random.default_rng(42)
         for _ in range(20):
@@ -567,12 +548,8 @@ class TestTurboQuantKVCache:
     def test_query_full_range(self) -> None:
         """Can query entire cache spanning cold and hot."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=2,
-            bits=3,
-            hot_window=4,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=2, bits=3,
+            hot_window=4, use_gpu=False, seed=0,
         )
         rng = np.random.default_rng(42)
         for _ in range(10):
@@ -588,12 +565,8 @@ class TestTurboQuantKVCache:
     def test_query_hot_only(self) -> None:
         """Can query just the hot window."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=2,
-            bits=3,
-            hot_window=4,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=2, bits=3,
+            hot_window=4, use_gpu=False, seed=0,
         )
         rng = np.random.default_rng(42)
         for _ in range(10):
@@ -608,12 +581,8 @@ class TestTurboQuantKVCache:
     def test_query_cold_only(self) -> None:
         """Can query just cold storage."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=2,
-            bits=3,
-            hot_window=4,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=2, bits=3,
+            hot_window=4, use_gpu=False, seed=0,
         )
         rng = np.random.default_rng(42)
         for _ in range(10):
@@ -629,12 +598,8 @@ class TestTurboQuantKVCache:
     def test_2d_input(self) -> None:
         """Append accepts (n_heads, head_dim) 2D input."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=4,
-            bits=3,
-            hot_window=8,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=4, bits=3,
+            hot_window=8, use_gpu=False, seed=0,
         )
         k = np.random.randn(4, 64).astype(np.float32)
         v = np.random.randn(4, 64).astype(np.float32)
@@ -646,12 +611,8 @@ class TestTurboQuantKVCache:
     def test_memory_stats(self) -> None:
         """Memory stats return reasonable values."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=2,
-            bits=3,
-            hot_window=4,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=2, bits=3,
+            hot_window=4, use_gpu=False, seed=0,
         )
         rng = np.random.default_rng(42)
         for _ in range(10):
@@ -667,12 +628,8 @@ class TestTurboQuantKVCache:
     def test_clear(self) -> None:
         """Clear resets cache to empty."""
         cache = TurboQuantKVCache(
-            head_dim=64,
-            n_heads=2,
-            bits=3,
-            hot_window=4,
-            use_gpu=False,
-            seed=0,
+            head_dim=64, n_heads=2, bits=3,
+            hot_window=4, use_gpu=False, seed=0,
         )
         rng = np.random.default_rng(42)
         for _ in range(5):
@@ -707,8 +664,12 @@ class TestGPUKernels:
     @pytest.mark.parametrize("bits", [2, 3, 4])
     def test_gpu_pack_matches_cpu(self, bits: int) -> None:
         """GPU packing produces identical bytes as CPU."""
-        tq_cpu = TurboQuantKV(head_dim=64, bits=bits, use_gpu=False, seed=0)
-        tq_gpu = TurboQuantKV(head_dim=64, bits=bits, use_gpu=True, seed=0)
+        tq_cpu = TurboQuantKV(
+            head_dim=64, bits=bits, use_gpu=False, seed=0
+        )
+        tq_gpu = TurboQuantKV(
+            head_dim=64, bits=bits, use_gpu=True, seed=0
+        )
         rng = np.random.default_rng(42)
         n = 2048
         indices_np = rng.integers(0, 2**bits, size=n, dtype=np.uint8)
@@ -721,7 +682,9 @@ class TestGPUKernels:
     @pytest.mark.parametrize("bits", [2, 3, 4])
     def test_gpu_roundtrip(self, bits: int) -> None:
         """GPU pack then unpack recovers original indices."""
-        tq = TurboQuantKV(head_dim=64, bits=bits, use_gpu=True, seed=0)
+        tq = TurboQuantKV(
+            head_dim=64, bits=bits, use_gpu=True, seed=0
+        )
         rng = np.random.default_rng(42)
         n = 2048
         indices_np = rng.integers(0, 2**bits, size=n, dtype=np.uint8)
@@ -736,8 +699,12 @@ class TestGPUKernels:
         """Full GPU compress/decompress with packing produces
         the same reconstruction as CPU."""
         tensor = _random_kv(head_dim=64, seed=42)
-        tq_cpu = TurboQuantKV(head_dim=64, n_heads=4, bits=bits, use_gpu=False, seed=0)
-        tq_gpu = TurboQuantKV(head_dim=64, n_heads=4, bits=bits, use_gpu=True, seed=0)
+        tq_cpu = TurboQuantKV(
+            head_dim=64, n_heads=4, bits=bits, use_gpu=False, seed=0
+        )
+        tq_gpu = TurboQuantKV(
+            head_dim=64, n_heads=4, bits=bits, use_gpu=True, seed=0
+        )
         r_cpu = tq_cpu.decompress(tq_cpu.compress(tensor, packed=True))
         r_gpu = tq_gpu.decompress(tq_gpu.compress(tensor, packed=True))
         np.testing.assert_allclose(r_cpu, r_gpu, atol=1e-5)

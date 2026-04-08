@@ -1,0 +1,16 @@
+[Unit]
+Description=Atlas Watchdog (health checks + restart monitoring)
+After=atlas.target
+Wants=atlas.target
+
+[Service]
+Type=simple
+User=claude
+ExecStart=/bin/bash /home/claude/agi-hpc/scripts/watchdog.sh
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Atlas Daily Backup (PostgreSQL + Wiki + Configs)
+After=network.target postgresql.service
+Documentation=Backs up the AGI's life story and knowledge to RAID5
+
+[Service]
+Type=oneshot
+User=claude
+ExecStart=/bin/bash /home/claude/agi-hpc/scripts/daily_backup.sh
+TimeoutStartSec=3600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

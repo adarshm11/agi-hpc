@@ -1,0 +1,28 @@
+[Unit]
+Description=Atlas OAuth2 Proxy (Google Auth for portal)
+After=network.target atlas-rag-server.service
+Wants=atlas-rag-server.service
+
+[Service]
+Type=simple
+User=claude
+EnvironmentFile=/home/claude/.env
+ExecStart=/usr/local/bin/oauth2-proxy \
+    --provider=google \
+    --client-id=${GOOGLE_CLIENT_ID} \
+    --client-secret=${GOOGLE_CLIENT_SECRET} \
+    --cookie-secret=${COOKIE_SECRET} \
+    --cookie-secure=true \
+    --upstream=http://localhost:8081 \
+    --http-address=0.0.0.0:4180 \
+    --redirect-url=https://atlas-sjsu.duckdns.org/oauth2/callback \
+    --email-domain=* \
+    --upstream-timeout=300s \
+    --banner=- --footer=-
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

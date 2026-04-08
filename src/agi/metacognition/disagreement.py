@@ -20,7 +20,7 @@
 """
 Hemisphere Disagreement Metric for AGI-HPC Phase 7.1.
 
-Measures semantic distance between LH (Spock) and RH (Kirk) responses
+Measures semantic distance between Superego and Id responses
 after each debate round, producing a calibrated confidence score.
 
 Architecture:
@@ -389,12 +389,14 @@ class DisagreementMetric:
                     stats["total_logged"] = int(row[2])
 
                 # Per-topic breakdown
-                cur.execute("""SELECT topic, AVG(confidence), COUNT(*)
+                cur.execute(
+                    """SELECT topic, AVG(confidence), COUNT(*)
                        FROM confidence_log
                        WHERE topic IS NOT NULL
                        GROUP BY topic
                        ORDER BY COUNT(*) DESC
-                       LIMIT 20""")
+                       LIMIT 20"""
+                )
                 for row in cur.fetchall():
                     stats["topics"][row[0]] = {
                         "avg_confidence": float(row[1]),
@@ -423,14 +425,12 @@ class DisagreementMetric:
             if self._nats_client is None:
                 self._nats_client = await nats_mod.connect(self._nats_url)
 
-            payload = json.dumps(
-                {
-                    "similarity": result.similarity,
-                    "confidence": result.confidence,
-                    "hemisphere_that_led": result.hemisphere_that_led,
-                    "compute_time_ms": result.compute_time_ms,
-                }
-            ).encode()
+            payload = json.dumps({
+                "similarity": result.similarity,
+                "confidence": result.confidence,
+                "hemisphere_that_led": result.hemisphere_that_led,
+                "compute_time_ms": result.compute_time_ms,
+            }).encode()
 
             await self._nats_client.publish(
                 "agi.meta.monitor.confidence",

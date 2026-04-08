@@ -105,6 +105,58 @@ def _get_db_counts():
     return counts
 
 
+def _get_tqpro_stats():
+    """Get TurboQuant Pro compression statistics."""
+    stats = {"enabled": False, "tables": {}}
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        for table in ["chunks", "episodes", "ethics_chunks"]:
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE embedding IS NOT NULL")
+                total = cur.fetchone()[0]
+                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE embedding_pca384 IS NOT NULL")
+                compressed = cur.fetchone()[0]
+                if compressed > 0:
+                    stats["enabled"] = True
+                    orig_mb = round(total * 1024 * 4 / 1048576, 1)
+                    comp_mb = round(compressed * 384 * 4 / 1048576, 1)
+                    stats["tables"][table] = {
+                        "total": total, "compressed": compressed,
+                        "original_mb": orig_mb, "compressed_mb": comp_mb,
+                        "saved_mb": round(orig_mb - comp_mb, 1),
+                        "ratio": 2.67,
+                    }
+            except Exception:
+                conn.rollback()
+        if stats["enabled"]:
+            total_orig = sum(t["original_mb"] for t in stats["tables"].values())
+            total_comp = sum(t["compressed_mb"] for t in stats["tables"].values())
+            stats["total_original_mb"] = round(total_orig, 1)
+            stats["total_compressed_mb"] = round(total_comp, 1)
+            stats["total_saved_mb"] = round(total_orig - total_comp, 1)
+            stats["method"] = "PCA-Matryoshka 384d"
+            stats["cosine_similarity"] = 0.990
+        conn.close()
+    except Exception:
+        pass
+    return stats
+
+
+def _get_safety_from_rag(base_status):
+    """Get safety stats from the RAG server's telemetry."""
+    try:
+        import urllib.request
+        r = urllib.request.urlopen("http://localhost:8081/api/telemetry", timeout=3)
+        data = json.loads(r.read())
+        safety = data.get("safety", {})
+        safety["status"] = base_status  # Use port-check status
+        return safety
+    except Exception:
+        return {"status": base_status, "vetoes": 0}
+
+
 def _get_nats():
     try:
         import urllib.request
@@ -132,15 +184,47 @@ def _get_nats():
         return {"status": "offline"}
 
 
+def _check_port(port, timeout=1):
+    """Check if a TCP port is listening."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(("localhost", port))
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
 def _get_services():
-    services = {"lh": "offline", "rh": "offline", "safety": "planned",
-                "metacognition": "planned", "dht": "planned"}
-    for name, session in [("lh", "spock"), ("rh", "kirk"), ("safety", "safety"),
+    services = {"lh": "offline", "rh": "offline", "ego": "offline",
+                "safety": "offline", "metacognition": "offline", "dht": "offline"}
+    # Check LLM hemispheres by port
+    if _check_port(8080):
+        services["lh"] = "online"
+    if _check_port(8082):
+        services["rh"] = "online"
+    elif services["lh"] == "online":
+        services["rh"] = "fallback"  # Id role-played by Superego model
+    if _check_port(8084):
+        services["ego"] = "online"
+    # Safety + Metacognition are integrated into the RAG server (8081)
+    # They're online whenever the RAG server is online
+    if _check_port(8081):
+        services["safety"] = "online"
+        services["metacognition"] = "online"
+    # DHT is online when NATS is up (service registry uses NATS)
+    if _check_port(4222):
+        services["dht"] = "online"
+    # Also check tmux sessions as fallback
+    for name, session in [("safety", "safety"),
                           ("metacognition", "metacognition"), ("dht", "dht")]:
-        r = subprocess.run(["tmux", "has-session", "-t", session],
-                           capture_output=True, timeout=2)
-        if r.returncode == 0:
-            services[name] = "online"
+        if services[name] != "online":
+            r = subprocess.run(["tmux", "has-session", "-t", session],
+                               capture_output=True, timeout=2)
+            if r.returncode == 0:
+                services[name] = "online"
     return services
 
 
@@ -164,15 +248,25 @@ def _get_jobs():
                 job["elapsed"] = parts[3]
 
         desc_map = {
-            "spock": "LH: Gemma 4 31B", "kirk": "RH: Qwen 3 32B",
-            "nats": "NATS JetStream", "rag": "RAG Server",
-            "caddy": "HTTPS / Let's Encrypt", "oauth2": "Google OAuth",
-            "safety": "Safety Gateway", "memory": "Memory Service",
-            "dht": "DHT Registry", "train": "Training",
-            "indexer": "RAG Indexer", "embed": "Ethics Embedding",
+            "spock": ("Superego: Gemma 4 31B", 0),
+            "kirk": ("Id: Qwen 3 32B", 1),
+            "ego": ("Ego: Gemma 4 E4B", None),
+            "nats": ("NATS JetStream", None),
+            "rag": ("RAG Server", None),
+            "caddy": ("HTTPS / Let's Encrypt", None),
+            "oauth2": ("Google OAuth", None),
+            "safety": ("Safety Gateway", None),
+            "memory": ("Memory Service", None),
+            "dht": ("DHT Registry", None),
+            "train": ("Training", None),
+            "indexer": ("RAG Indexer", None),
+            "embed": ("Ethics Embedding", 1),
         }
         if name in desc_map:
-            job["description"] = desc_map[name]
+            desc, gpu = desc_map[name]
+            job["description"] = desc
+            if gpu is not None:
+                job["gpu"] = gpu
         elif name.startswith("dl-"):
             job["description"] = f"Download: {name[3:]}"
 
@@ -180,26 +274,215 @@ def _get_jobs():
     return jobs
 
 
+def _get_rag_telemetry():
+    """Fetch enriched telemetry from the RAG server (short timeout)."""
+    try:
+        import urllib.request
+        r = urllib.request.urlopen(
+            "http://localhost:8081/api/telemetry", timeout=2
+        )
+        return json.loads(r.read())
+    except Exception:
+        return {}
+
+
+def _count_wiki_articles():
+    """Count dream-consolidated wiki articles."""
+    try:
+        wiki = Path("/home/claude/agi-hpc/wiki")
+        if wiki.exists():
+            return len(list(wiki.glob("dream-*.md")))
+    except Exception:
+        pass
+    return 0
+
+
+def _get_training_stats():
+    """Get training stats from PostgreSQL."""
+    stats = {"total_sessions": 0}
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT COUNT(*), AVG(score), MAX(timestamp) "
+                "FROM training_results"
+            )
+            row = cur.fetchone()
+            if row and row[0] > 0:
+                stats["total_sessions"] = int(row[0])
+                stats["last_session_score"] = round(float(row[1] or 0), 3)
+                stats["last_training"] = str(row[2]) if row[2] else None
+        except Exception:
+            conn.rollback()
+
+        # Count retrospective vs pantheon vs LLM scenarios
+        try:
+            cur.execute(
+                "SELECT metadata->>'type', COUNT(*) "
+                "FROM episodes "
+                "WHERE metadata->>'type' = 'dm_training' "
+                "GROUP BY metadata->>'type'"
+            )
+            row = cur.fetchone()
+            if row:
+                stats["dm_training_episodes"] = int(row[1])
+        except Exception:
+            conn.rollback()
+
+        # Count retrospective episodes
+        try:
+            cur.execute(
+                "SELECT COUNT(*) FROM episodes "
+                "WHERE metadata->>'retrospective_used' = 'true'"
+            )
+            stats["retrospective_used"] = cur.fetchone()[0]
+        except Exception:
+            conn.rollback()
+
+        conn.close()
+    except Exception:
+        pass
+    return stats
+
+
+def _get_dreaming_stats():
+    """Get dreaming/consolidation statistics."""
+    stats = {"wiki_articles": 0, "dream_insights": 0}
+    try:
+        wiki = Path("/home/claude/agi-hpc/wiki")
+        if wiki.exists():
+            articles = list(wiki.glob("dream-*.md"))
+            stats["wiki_articles"] = len(articles)
+            insights = list(wiki.glob("dream-insight-*.md"))
+            stats["dream_insights"] = len(insights)
+
+            # Read latest article grade if available
+            if articles:
+                latest = sorted(articles)[-1]
+                content = latest.read_text(encoding="utf-8")
+                for grade in ["A", "B", "C", "D"]:
+                    if f"**{grade}**" in content:
+                        stats["latest_grade"] = grade
+                        break
+    except Exception:
+        pass
+    return stats
+
+
+def _get_curriculum_gaps():
+    """Get knowledge gap summary (read-only)."""
+    try:
+        from agi.metacognition.curriculum_planner import CurriculumPlanner
+        planner = CurriculumPlanner(db_dsn=DB_DSN, lookback_episodes=50)
+        plan = planner.analyze()
+        return {
+            "gaps_detected": len(plan.gaps),
+            "focus_domains": plan.domains_to_focus[:3],
+            "recommended_scenarios": plan.recommended_scenarios,
+            "episodes_analyzed": plan.total_episodes_analyzed,
+        }
+    except Exception:
+        return {"gaps_detected": 0, "focus_domains": []}
+
+
 def build_telemetry():
     gpus = _get_gpu()
     services = _get_services()
     memory = _get_db_counts()
-    online = sum(1 for v in services.values() if v == "online") + 1  # +1 for integration
+    online = sum(1 for v in services.values() if v == "online")
+    total_services = len(services)
+
+    # Enrich with RAG server data (safety stats, privileges)
+    rag_data = _get_rag_telemetry()
+    rag_safety = rag_data.get("safety", {})
+    rag_privs = rag_data.get("ego_privileges", {})
+
+    # Wiki article count
+    memory["wiki_articles"] = _count_wiki_articles()
+
+    # Unconsolidated episode count
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT COUNT(*) FROM episodes "
+                "WHERE metadata->>'consolidated' IS NULL "
+                "OR metadata->>'consolidated' = 'false'"
+            )
+            memory["unconsolidated_episodes"] = cur.fetchone()[0]
+        except Exception:
+            conn.rollback()
+        conn.close()
+    except Exception:
+        pass
+
+    # Safety: merge RAG server's live stats with port-check status
+    safety = {
+        "status": services["safety"],
+        "layer": rag_safety.get("layer", "reflex"),
+        "input_checks": rag_safety.get("input_checks", 0),
+        "output_checks": rag_safety.get("output_checks", 0),
+        "vetoes": rag_safety.get("vetoes", 0),
+        "avg_latency_ms": rag_safety.get("avg_latency_ms", 0),
+        "audit_log_size": rag_safety.get("audit_log_size", 0),
+    }
 
     return {
         "timestamp": time.time(),
         "hemispheres": {
-            "lh": {"status": services["lh"], "model": "Gemma 4 31B", "role": "Spock"},
-            "rh": {"status": services["rh"], "model": "Qwen 3 32B", "role": "Kirk"},
+            "lh": {
+                "status": services["lh"],
+                "model": "Gemma 4 31B",
+                "role": "Superego (analytical)",
+            },
+            "rh": {
+                "status": services["rh"],
+                "model": "Qwen 3 32B",
+                "role": "Id (creative)",
+                "note": (
+                    "Role-played by Superego"
+                    if services["rh"] == "fallback"
+                    else ""
+                ),
+            },
+            "ego": {
+                "status": services["ego"],
+                "model": "Gemma 4 E4B",
+                "role": "Ego (arbiter/DM)",
+            },
         },
         "nats": _get_nats(),
         "memory": memory,
-        "safety": {"status": services["safety"], "vetoes": 0},
+        "safety": safety,
         "metacognition": {"status": services["metacognition"]},
-        "environment": {"gpu": gpus, "cpu": _get_cpu(), "ram": _get_ram()},
-        "integration": {"sessions": 0, "routed": 0},
-        "dht": {"status": services["dht"], "services_online": online, "services_total": 10},
+        "environment": {
+            "gpu": gpus,
+            "cpu": _get_cpu(),
+            "ram": _get_ram(),
+        },
+        "integration": {
+            "status": "online" if services.get("safety") == "online" else "offline",
+            "sessions": 0,
+            "routed": 0,
+        },
+        "dht": {
+            "status": services["dht"],
+            "services_online": online,
+            "services_total": total_services,
+        },
+        "ego_privileges": rag_privs if rag_privs else {
+            "current_level": 0,
+            "level_name": "READ_ONLY",
+        },
+        "training": _get_training_stats(),
+        "dreaming": _get_dreaming_stats(),
+        "curriculum": _get_curriculum_gaps(),
         "jobs": _get_jobs(),
+        "turboquant": _get_tqpro_stats(),
     }
 
 

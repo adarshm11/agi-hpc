@@ -1,0 +1,16 @@
+[Unit]
+Description=Atlas Telemetry Server (system metrics + event stream)
+After=network.target
+
+[Service]
+Type=simple
+User=claude
+WorkingDirectory=/home/claude/agi-hpc
+ExecStart=/home/claude/env/bin/python3 /home/claude/agi-hpc/scripts/telemetry_server.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
