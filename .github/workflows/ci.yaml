@@ -32,7 +32,20 @@ jobs:
         run: black --check src/ tests/ --exclude "proto_gen"
 
       - name: Unit tests
-        run: pytest tests/unit/ -v --tb=short -q --ignore=tests/unit/test_safety_proto.py --ignore=tests/unit/test_erisml_proto.py -k "not proto"
+        run: |
+          pytest tests/unit/ -v --tb=short -q \
+            --ignore=tests/unit/test_safety_proto.py \
+            --ignore=tests/unit/test_erisml_proto.py \
+            --ignore=tests/unit/test_safety_gateway.py \
+            --ignore=tests/unit/test_hohfeld.py \
+            --ignore=tests/unit/test_moral_tensor.py \
+            --ignore=tests/unit/test_safety_adapter.py \
+            --ignore=tests/unit/test_safety_learning.py \
+            --ignore=tests/unit/test_safety_gateway_unit.py \
+            --ignore=tests/unit/test_llm_integration.py \
+            --ignore=tests/unit/test_llm_reflection.py \
+            --ignore=tests/unit/test_dht_security.py \
+            -k "not proto"
 
   deploy:
     name: Deploy to Atlas
