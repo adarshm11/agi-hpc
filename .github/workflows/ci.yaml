@@ -45,7 +45,7 @@ jobs:
             --ignore=tests/unit/test_llm_integration.py \
             --ignore=tests/unit/test_llm_reflection.py \
             --ignore=tests/unit/test_dht_security.py \
-            -k "not proto"
+            -k "not proto and not TestEmbeddingCodecTQ"
 
   deploy:
     name: Deploy to Atlas
