@@ -39,10 +39,10 @@ dependencies = [
 nats = ["nats-py>=2.7"]
 training = ["gymnasium>=0.29"]
 dev = [
-    "black>=24.0",
+    "black==26.1.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "ruff>=0.5",
+    "ruff==0.14.8",
 ]
 
 [project.urls]
