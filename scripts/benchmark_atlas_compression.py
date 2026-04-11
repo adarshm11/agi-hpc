@@ -69,6 +69,16 @@ def compute_perplexity(
 ) -> dict:
     """Sliding-window perplexity on a list of texts."""
     model.eval()
+
+    # Resolve actual device from model (handles device_map="auto")
+    if device == "auto":
+        try:
+            actual_device = next(model.parameters()).device
+        except StopIteration:
+            actual_device = torch.device("cpu")
+    else:
+        actual_device = torch.device(device)
+
     total_nll = 0.0
     total_tokens = 0
     t0 = time.perf_counter()
@@ -79,7 +89,7 @@ def compute_perplexity(
         encodings = tokenizer(
             text, return_tensors="pt", truncation=True, max_length=max_length
         )
-        input_ids = encodings["input_ids"].to(device)
+        input_ids = encodings["input_ids"].to(actual_device)
         seq_len = input_ids.size(1)
         if seq_len < 2:
             continue
