@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from agi.training.dungeon_master import DMConfig, DungeonMaster
+from agi.training.dungeon_master import DMConfig, DungeonMaster, SessionResult
 
 
 class TestDailyTrainingShellScript:
@@ -137,3 +137,75 @@ class TestDMSessionIntegration:
         assert 0.0 <= session.mean_synthesis_score <= 1.0
         assert session.duration_s >= 0
         assert len(session.domains_covered) > 0
+        assert isinstance(session, SessionResult)
+
+
+class TestNATSEventPublishing:
+    """Tests for NATS event integration in DM training."""
+
+    def test_publish_event_method_exists(self) -> None:
+        config = DMConfig(episodes_per_session=1)
+        with patch("agi.training.dungeon_master.EpisodicMemory", None):
+            dm = DungeonMaster(config)
+        assert hasattr(dm, "_publish_event")
+
+    def test_publish_event_noop_without_nats(self) -> None:
+        config = DMConfig(episodes_per_session=1)
+        with patch("agi.training.dungeon_master.EpisodicMemory", None):
+            dm = DungeonMaster(config)
+        dm._nats = None
+        # Should not raise
+        dm._publish_event("test.topic", {"key": "value"})
+
+    def test_session_publishes_events(self) -> None:
+        config = DMConfig(episodes_per_session=1)
+        with patch("agi.training.dungeon_master.EpisodicMemory", None):
+            dm = DungeonMaster(config)
+
+        published = []
+        dm._nats = MagicMock()
+        dm._nats.publish = MagicMock(return_value=None)
+
+        # Mock async publish
+
+        async def mock_pub(topic, payload):
+            published.append((topic, payload))
+
+        dm._nats.publish = mock_pub
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"superego_score": 7, "id_score": 6, '
+                        '"synthesis_score": 7, "feedback": "Good."}'
+                    }
+                }
+            ]
+        }
+
+        with (
+            patch("agi.training.dungeon_master._PANTHEON_CASES", []),
+            patch("agi.training.dungeon_master.ERISML_AVAILABLE", False),
+            patch("agi.training.dungeon_master.requests.post") as mock_post,
+        ):
+            mock_post.return_value = mock_resp
+            dm.run_session(episodes=1, difficulty=1)
+
+        # Should have published: session_start, episode_complete, session_complete
+        topics = [p[0] for p in published]
+        assert "agi.training.progress" in topics
+        assert "agi.training.result" in topics
+
+
+class TestDMConfigNATS:
+    """Tests for DM config NATS URL."""
+
+    def test_default_nats_url(self) -> None:
+        config = DMConfig()
+        assert config.nats_url == "nats://localhost:4222"
+
+    def test_custom_nats_url(self) -> None:
+        config = DMConfig(nats_url="nats://custom:4222")
+        assert config.nats_url == "nats://custom:4222"

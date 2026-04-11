@@ -164,7 +164,7 @@ fi
 # ─── Stop mode ──────────────────────────────────────────
 if [ "$1" = "--stop" ]; then
     log "Stopping all Atlas services..."
-    for session in nats spock kirk rag oauth2 caddy safety memory indexer dht; do
+    for session in nats spock kirk ego rag oauth2 caddy safety memory indexer dht; do
         tmux kill-session -t $session 2>/dev/null && log "  Stopped $session" || true
     done
     log "All services stopped."
@@ -303,22 +303,29 @@ else
     log "  Kirk: already running"
 fi
 
-# Ego / Dungeon Master (Gemma 4 E4B) on CPU
+# Divine Council (Gemma 4 26B-A4B MoE) on CPU — single server, 8 parallel slots
+# All 7 council members share one llama-server process. Model loads once
+# (~15 GB RAM); each --parallel slot adds ~300 MB KV cache. Total ~18 GB.
+COUNCIL_MODEL="$ATLAS_HOME/models/gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf"
+if [ ! -f "$COUNCIL_MODEL" ]; then
+    COUNCIL_MODEL="$ATLAS_HOME/models/gemma-4-E4B-it-Q5_K_M.gguf"
+    log "  Council: 26B-A4B not found, falling back to E4B"
+fi
+
 if ! tmux has-session -t ego 2>/dev/null; then
-    DM_MODEL="$ATLAS_HOME/models/gemma-4-E4B-it-Q5_K_M.gguf"
-    if [ -f "$DM_MODEL" ]; then
+    if [ -f "$COUNCIL_MODEL" ]; then
         tmux new-session -d -s ego \
             "CUDA_VISIBLE_DEVICES= $ATLAS_HOME/llama.cpp/build/bin/llama-server \
-            --model $DM_MODEL \
-            --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 16 \
-            --n-gpu-layers 0 \
+            --model $COUNCIL_MODEL \
+            --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 24 \
+            --parallel 8 --n-gpu-layers 0 --cont-batching \
             2>&1 | tee $LOG_DIR/ego.log"
-        log "  Ego (Gemma 4 E4B): starting on CPU:8084..."
+        log "  Divine Council (26B-A4B MoE): starting on CPU:8084 (8 parallel slots)..."
     else
-        log "  Ego: model not found at $DM_MODEL (skipping)"
+        log "  Divine Council: model not found (skipping)"
     fi
 else
-    log "  Ego: already running"
+    log "  Divine Council: already running"
 fi
 
 # Wait for models to load

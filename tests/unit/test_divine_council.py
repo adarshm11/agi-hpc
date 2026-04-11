@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 from agi.reasoning.divine_council import (
     COUNCIL_MEMBERS,
+    MODEL_NAME,
     CouncilVerdict,
     CouncilVote,
     DivineCouncil,
@@ -32,19 +33,67 @@ def _mock_response(content):
 class TestCouncilMembers:
     """Tests for council member definitions."""
 
-    def test_four_members(self) -> None:
-        assert len(COUNCIL_MEMBERS) == 4
+    def test_seven_members(self) -> None:
+        assert len(COUNCIL_MEMBERS) == 7
 
     def test_required_members(self) -> None:
-        assert "judge" in COUNCIL_MEMBERS
-        assert "advocate" in COUNCIL_MEMBERS
-        assert "synthesizer" in COUNCIL_MEMBERS
-        assert "ethicist" in COUNCIL_MEMBERS
+        expected = {
+            "judge",
+            "advocate",
+            "synthesizer",
+            "ethicist",
+            "historian",
+            "futurist",
+            "pragmatist",
+        }
+        assert set(COUNCIL_MEMBERS.keys()) == expected
 
     def test_each_has_system_prompt(self) -> None:
-        for mid, info in COUNCIL_MEMBERS.items():
+        for _mid, info in COUNCIL_MEMBERS.items():
             assert "system_prompt" in info
             assert len(info["system_prompt"]) > 50
+
+    def test_enriched_prompts_have_mission(self) -> None:
+        for mid, info in COUNCIL_MEMBERS.items():
+            assert "MISSION" in info["system_prompt"], f"{mid} missing MISSION"
+
+    def test_enriched_prompts_have_rules(self) -> None:
+        for mid, info in COUNCIL_MEMBERS.items():
+            assert "RULES" in info["system_prompt"], f"{mid} missing RULES"
+
+    def test_enriched_prompts_have_success_metrics(self) -> None:
+        for mid, info in COUNCIL_MEMBERS.items():
+            assert (
+                "SUCCESS METRICS" in info["system_prompt"]
+            ), f"{mid} missing SUCCESS METRICS"
+
+    def test_each_has_color(self) -> None:
+        for mid, info in COUNCIL_MEMBERS.items():
+            assert "color" in info, f"{mid} missing color"
+            assert info["color"].startswith("#"), f"{mid} color not hex"
+
+
+class TestModelName:
+    """Tests for model name constant."""
+
+    def test_model_name_exists(self) -> None:
+        assert MODEL_NAME is not None
+
+    def test_model_name_is_26b(self) -> None:
+        assert "26B" in MODEL_NAME
+
+
+class TestMaxTokens:
+    """Tests for increased max_tokens (512 for 26B-A4B)."""
+
+    def test_call_uses_512_tokens(self) -> None:
+        council = DivineCouncil()
+        with patch("agi.reasoning.divine_council.requests.post") as m:
+            m.return_value = _mock_response("Score: 8/10")
+            council._call_member("judge", "test")
+        call_args = m.call_args
+        body = call_args[1]["json"] if "json" in call_args[1] else call_args[0][1]
+        assert body["max_tokens"] == 512
 
 
 class TestDeliberation:
@@ -57,6 +106,9 @@ class TestDeliberation:
             _mock_response("I challenge this — the reasoning is weak."),
             _mock_response("Combining both views, the answer is..."),
             _mock_response("No ethical concerns. The response is fair."),
+            _mock_response("We tried something similar before. 7/10"),
+            _mock_response("Long-term this looks sustainable. 7/10"),
+            _mock_response("Feasible with current resources. 8/10"),
         ]
 
         with patch("agi.reasoning.divine_council.requests.post") as mock_post:
@@ -69,7 +121,7 @@ class TestDeliberation:
 
         assert isinstance(verdict, CouncilVerdict)
         assert verdict.method == "divine_council"
-        assert len(verdict.votes) == 4
+        assert len(verdict.votes) == 7
         assert verdict.synthesis != ""
         assert verdict.total_latency_s >= 0
 
@@ -80,6 +132,9 @@ class TestDeliberation:
             _mock_response("Minor quibble but overall good."),
             _mock_response("Well-integrated synthesis."),
             _mock_response("Ethically sound. No concerns."),
+            _mock_response("Consistent with past successes. 8/10"),
+            _mock_response("Good long-term outlook. 8/10"),
+            _mock_response("Practical and achievable. 9/10"),
         ]
 
         with patch("agi.reasoning.divine_council.requests.post") as mock_post:
@@ -87,7 +142,7 @@ class TestDeliberation:
             verdict = council.deliberate("Test query")
 
         assert verdict.consensus is True
-        assert verdict.approval_count >= 2
+        assert verdict.approval_count >= 4
 
     def test_no_consensus_with_ethical_flag(self) -> None:
         council = DivineCouncil()
@@ -96,6 +151,9 @@ class TestDeliberation:
             _mock_response("Acceptable."),
             _mock_response("Synthesis looks good."),
             _mock_response("CONCERN: potential bias detected. Harm risk."),
+            _mock_response("No prior precedent for this. 7/10"),
+            _mock_response("Consequences seem manageable. 7/10"),
+            _mock_response("Feasible approach. 8/10"),
         ]
 
         with patch("agi.reasoning.divine_council.requests.post") as mock_post:
@@ -170,15 +228,26 @@ class TestFormatLog:
                 "advocate": CouncilVote("advocate", "I challenge...", 5, latency_s=4),
                 "synthesizer": CouncilVote("synthesizer", "Merged...", 7, latency_s=6),
                 "ethicist": CouncilVote("ethicist", "No concerns.", 8, latency_s=3),
+                "historian": CouncilVote(
+                    "historian", "Past precedent...", 7, latency_s=4
+                ),
+                "futurist": CouncilVote("futurist", "Long-term ok.", 7, latency_s=5),
+                "pragmatist": CouncilVote("pragmatist", "Feasible.", 8, latency_s=3),
             },
-            approval_count=3,
+            approval_count=6,
             challenge_count=1,
         )
         log = verdict.format_log()
-        assert "Judge" in log
-        assert "Advocate" in log
-        assert "Synthesizer" in log
-        assert "Ethicist" in log
+        for name in [
+            "Judge",
+            "Advocate",
+            "Synthesizer",
+            "Ethicist",
+            "Historian",
+            "Futurist",
+            "Pragmatist",
+        ]:
+            assert name in log, f"{name} missing from log"
         assert "Yes" in log and "approve" in log
 
 
@@ -199,4 +268,29 @@ class TestVerdictDataclass:
 
         # Should still produce a verdict, just with error messages
         assert isinstance(verdict, CouncilVerdict)
-        assert len(verdict.votes) == 4
+        assert len(verdict.votes) == 7
+
+
+class TestSingleServerArchitecture:
+    """Tests that all members share a single llama-server endpoint."""
+
+    def test_default_urls_all_same(self) -> None:
+        council = DivineCouncil()
+        urls = set(council._urls.values())
+        assert len(urls) == 1
+        assert urls.pop() == "http://localhost:8084"
+
+    def test_all_members_have_url(self) -> None:
+        council = DivineCouncil()
+        for mid in COUNCIL_MEMBERS:
+            assert mid in council._urls
+
+    def test_custom_base_url(self) -> None:
+        council = DivineCouncil(base_url="http://gpu-box:9090")
+        for mid in COUNCIL_MEMBERS:
+            assert council._urls[mid] == "http://gpu-box:9090"
+
+    def test_member_urls_override(self) -> None:
+        custom = {"judge": "http://a:1", "advocate": "http://b:2"}
+        council = DivineCouncil(member_urls=custom)
+        assert council._urls == custom

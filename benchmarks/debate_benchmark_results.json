@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-07T17:12:48",
+  "timestamp": "2026-04-11T11:45:32",
   "config": {
     "modes": [
       "single",
@@ -17,11 +17,6 @@
       "mean_quality": 0.0,
       "mean_latency_s": 0.0,
       "by_category": {
-        "code": {
-          "accuracy": 0.0,
-          "mean_quality": 0.0,
-          "count": 2
-        },
         "factual": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
@@ -32,12 +27,17 @@
           "mean_quality": 0.0,
           "count": 2
         },
-        "creative": {
+        "reasoning": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
           "count": 2
         },
-        "reasoning": {
+        "code": {
+          "accuracy": 0.0,
+          "mean_quality": 0.0,
+          "count": 2
+        },
+        "creative": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
           "count": 2
@@ -51,11 +51,6 @@
       "mean_quality": 0.0,
       "mean_latency_s": 0.0,
       "by_category": {
-        "code": {
-          "accuracy": 0.0,
-          "mean_quality": 0.0,
-          "count": 2
-        },
         "factual": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
@@ -66,12 +61,17 @@
           "mean_quality": 0.0,
           "count": 2
         },
-        "creative": {
+        "reasoning": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
           "count": 2
         },
-        "reasoning": {
+        "code": {
+          "accuracy": 0.0,
+          "mean_quality": 0.0,
+          "count": 2
+        },
+        "creative": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
           "count": 2
@@ -85,11 +85,6 @@
       "mean_quality": 0.0,
       "mean_latency_s": 0.0,
       "by_category": {
-        "code": {
-          "accuracy": 0.0,
-          "mean_quality": 0.0,
-          "count": 2
-        },
         "factual": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
@@ -100,12 +95,17 @@
           "mean_quality": 0.0,
           "count": 2
         },
-        "creative": {
+        "reasoning": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
           "count": 2
         },
-        "reasoning": {
+        "code": {
+          "accuracy": 0.0,
+          "mean_quality": 0.0,
+          "count": 2
+        },
+        "creative": {
           "accuracy": 0.0,
           "mean_quality": 0.0,
           "count": 2

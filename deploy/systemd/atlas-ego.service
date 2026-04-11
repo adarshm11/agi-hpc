@@ -1,5 +1,5 @@
 [Unit]
-Description=Atlas Ego (Gemma 4 E4B on CPU)
+Description=Atlas Divine Council (Gemma 4 26B-A4B MoE — single server, 8 parallel slots)
 After=network.target
 StartLimitIntervalSec=120
 StartLimitBurst=3
@@ -8,10 +8,14 @@ StartLimitBurst=3
 Type=simple
 User=claude
 Environment=CUDA_VISIBLE_DEVICES=
+# Single llama-server with --parallel 8 replaces 4 separate instances.
+# All 7 council members (Judge, Advocate, Synthesizer, Ethicist, Historian,
+# Futurist, Pragmatist) hit this one endpoint concurrently. The model loads
+# once (~15 GB); each parallel slot adds ~300 MB of KV cache.
 ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
-    --model /home/claude/models/gemma-4-E4B-it-Q5_K_M.gguf \
-    --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 12 \
-    --n-gpu-layers 0
+    --model /home/claude/models/gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf \
+    --host 127.0.0.1 --port 8084 --ctx-size 4096 --threads 24 \
+    --parallel 8 --n-gpu-layers 0 --cont-batching
 Restart=always
 RestartSec=15
 StandardOutput=journal

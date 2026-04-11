@@ -43,6 +43,22 @@ class ResearchGoal:
     priority: int = 3  # 1 (low) to 5 (critical)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    @property
+    def age_hours(self) -> float:
+        """Hours since this gap was first detected."""
+        delta = datetime.now(timezone.utc) - self.timestamp
+        return delta.total_seconds() / 3600.0
+
+    @property
+    def adjusted_priority(self) -> int:
+        """Curiosity drive: priority increases with age.
+
+        Every 6 hours unresolved, priority bumps by 1.
+        Capped at 10 to prevent runaway prioritization.
+        """
+        age_bump = int(self.age_hours / 6.0)
+        return min(self.priority + age_bump, 10)
+
 
 @dataclass
 class ResearchResult:
@@ -258,7 +274,7 @@ class ResearchLoop:
         if not goals:
             return []
 
-        goals.sort(key=lambda g: g.priority, reverse=True)
+        goals.sort(key=lambda g: g.adjusted_priority, reverse=True)
         results = []
         for goal in goals[:3]:
             result = await self.research(goal)

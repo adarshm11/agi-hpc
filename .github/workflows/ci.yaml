@@ -83,6 +83,7 @@ jobs:
 
             echo "--- Copying dashboard HTML ---"
             cp -f atlas-chat-schematic.html /home/claude/atlas-chat/schematic.html
+            cp -f atlas-chat-schematic.html /home/claude/atlas-chat/atlas-chat-schematic.html
             cp -f atlas-chat-index.html /home/claude/atlas-chat/index.html 2>/dev/null || true
             cp -f atlas-chat-events.html /home/claude/atlas-chat/events.html 2>/dev/null || true
 
@@ -94,7 +95,7 @@ jobs:
             sudo systemctl restart atlas-rag-server || \
               (tmux kill-session -t rag 2>/dev/null; sleep 2; \
                tmux new-session -d -s rag \
-                 "CUDA_VISIBLE_DEVICES= /home/claude/env/bin/python3 /home/claude/atlas-rag-server.py \
+                 "cd /home/claude/agi-hpc && /home/claude/env/bin/python3 atlas-rag-server.py \
                  2>&1 | tee /tmp/atlas/rag_server.log")
 
             echo "--- Restarting telemetry server ---"

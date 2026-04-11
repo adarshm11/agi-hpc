@@ -36,10 +36,14 @@ from agi.memory.episodic.store import (
 from agi.safety.privilege_gate import PrivilegeGate
 from agi.metacognition.executive_function import ExecutiveFunction
 from agi.attention.filter import AttentionFilter
+from agi.reasoning.divine_council import DivineCouncil
+from agi.metacognition.disagreement import DisagreementMetric
+from agi.metacognition.adaptive_router import AdaptiveTemperatureRouter
+from agi.metacognition.anomaly_detector import AnomalyDetector
 
 LH_URL = "http://localhost:8080"  # Gemma 4 31B - Superego (analytical)
 RH_URL = "http://localhost:8082"  # Qwen 32B - Id (creative)
-EGO_URL = "http://localhost:8084"  # Gemma 4 E4B - Ego (arbiter/DM, CPU)
+EGO_URL = "http://localhost:8084"  # Gemma 4 26B-A4B MoE - Ego (arbiter/DM, CPU)
 DB_DSN = "dbname=atlas user=claude"
 STATIC_DIR = Path("/home/claude/atlas-chat")
 TOP_K = 6
@@ -51,18 +55,26 @@ app = Flask(__name__)
 # Load embedding model at startup
 print("Loading embedding model...")
 from sentence_transformers import SentenceTransformer
+
 embed_model = SentenceTransformer("BAAI/bge-m3", device="cpu")
 
 # Initialise Safety Gateway (Somatic Marker — reflex layer <1ms)
 print("Initialising Safety Gateway...")
 _safety_config_path = "/home/claude/agi-hpc/configs/safety_config.yaml"
 try:
-    _safety_gateway = DemeSafetyGateway(config=GatewayConfig.from_yaml(_safety_config_path))
+    _safety_gateway = DemeSafetyGateway(
+        config=GatewayConfig.from_yaml(_safety_config_path)
+    )
     print(f"Safety Gateway loaded from {_safety_config_path}")
 except Exception:
     _safety_gateway = DemeSafetyGateway(config=GatewayConfig.default())
     print("Safety Gateway loaded with default patterns")
-_safety_stats = {"input_checks": 0, "output_checks": 0, "vetoes": 0, "total_latency_ms": 0.0}
+_safety_stats = {
+    "input_checks": 0,
+    "output_checks": 0,
+    "vetoes": 0,
+    "total_latency_ms": 0.0,
+}
 
 # Initialise Episodic Memory (Hippocampal Replay — feeds dreaming)
 _episodic_memory = None
@@ -86,13 +98,46 @@ except Exception:
 
 # Initialise Executive Function (Miyake — cognitive control)
 _executive = ExecutiveFunction()
-_executive_stats = {"last_mode": "--", "last_complexity": 0, "last_goal": "none", "last_inhibit": False}
+_executive_stats = {
+    "last_mode": "--",
+    "last_complexity": 0,
+    "last_goal": "none",
+    "last_inhibit": False,
+    "last_context_strategy": "default",
+}
+
+# Initialise Divine Council (Minsky — Society of Mind)
+_divine_council = DivineCouncil()
+print("Divine Council initialised (4 x 26B-A4B MoE agents)")
 print("Executive Function loaded")
 
 # Initialise Attention Filter (Posner — distractor detection)
 _attention_filter = AttentionFilter()
-_attention_stats = {"checks": 0, "distractors_detected": 0, "warnings_issued": 0, "last_intensity": "none", "last_score": 0.0}
+_attention_stats = {
+    "checks": 0,
+    "distractors_detected": 0,
+    "warnings_issued": 0,
+    "last_intensity": "none",
+    "last_score": 0.0,
+}
 print("Attention Filter loaded")
+
+# Initialise Calibration Loop (Bayesian — self-improvement)
+_disagreement = DisagreementMetric(
+    embed_model=embed_model, db_dsn=DB_DSN
+)
+_adaptive_temp = AdaptiveTemperatureRouter()
+_anomaly_detector = AnomalyDetector()
+_calibration_stats = {
+    "measurements": 0,
+    "last_confidence": 0.0,
+    "last_similarity": 0.0,
+    "last_temperature": 0.7,
+    "anomalies_detected": 0,
+    "ego_arbitrations": 0,
+    "ece": 0.0,
+}
+print("Calibration loop loaded (Disagreement + AdaptiveTemp + Anomaly)")
 
 
 def _store_episode_background(
@@ -107,6 +152,7 @@ def _store_episode_background(
     if _episodic_memory is None:
         return
     try:
+
         def _embed(text: str):
             return embed_model.encode(text, normalize_embeddings=True)
 
@@ -123,9 +169,10 @@ def _store_episode_background(
     except Exception:
         _episode_stats["errors"] += 1
 
+
 # Load PCA rotation matrix
 _pca_components = None  # (1024, 384)
-_pca_mean = None        # (1024,)
+_pca_mean = None  # (1024,)
 if os.path.exists(PCA_PATH):
     with open(PCA_PATH, "rb") as _f:
         _pca_data = pickle.load(_f)
@@ -135,15 +182,16 @@ if os.path.exists(PCA_PATH):
 
 # GPU Hamming search setup (binary funnel)
 _hamming_gpu_ready = False
-_binary_db = None        # (n, n_words) packed uint64
-_pca384_db = None        # (n, 384) float32 for rerank
-_chunk_ids_db = None     # (n,) chunk IDs
-_chunk_data_db = None    # list of (repo, file_path, content)
+_binary_db = None  # (n, n_words) packed uint64
+_pca384_db = None  # (n, 384) float32 for rerank
+_chunk_ids_db = None  # (n,) chunk IDs
+_chunk_data_db = None  # list of (repo, file_path, content)
 _gpu_hamming_fn = None
 _pack_binary_fn = None
 
 try:
     from turboquant_pro.cuda_search import gpu_hamming_search, pack_binary
+
     _gpu_hamming_fn = gpu_hamming_search
     _pack_binary_fn = pack_binary
     print("GPU Hamming search available")
@@ -200,12 +248,15 @@ _load_hamming_index()
 _unified_searcher = None
 try:
     from agi.common.unified_search import UnifiedSearcher
+
     _unified_searcher = UnifiedSearcher(
         pca_path=PCA_PATH,
     )
     stats = _unified_searcher.stats()
-    print(f"Unified search: {stats.get('total', 0):,} vectors across "
-          f"{len(stats)-1} corpora ({', '.join(f'{k}={v:,}' for k,v in stats.items() if k != 'total')})")
+    print(
+        f"Unified search: {stats.get('total', 0):,} vectors across "
+        f"{len(stats)-1} corpora ({', '.join(f'{k}={v:,}' for k,v in stats.items() if k != 'total')})"
+    )
 except Exception as e:
     print(f"WARNING: Unified search not available: {e}")
 
@@ -241,29 +292,98 @@ RH_SYSTEM = (
 
 # Keywords that suggest analytical (LH) vs creative (RH) routing
 LH_KEYWORDS = {
-    "explain", "debug", "error", "fix", "how does", "what is", "define",
-    "analyze", "calculate", "prove", "implement", "code", "function",
-    "syntax", "compile", "trace", "step by step", "specifically",
-    "exact", "precise", "correct", "documentation", "api", "reference",
+    "explain",
+    "debug",
+    "error",
+    "fix",
+    "how does",
+    "what is",
+    "define",
+    "analyze",
+    "calculate",
+    "prove",
+    "implement",
+    "code",
+    "function",
+    "syntax",
+    "compile",
+    "trace",
+    "step by step",
+    "specifically",
+    "exact",
+    "precise",
+    "correct",
+    "documentation",
+    "api",
+    "reference",
 }
 
 RH_KEYWORDS = {
-    "brainstorm", "creative", "imagine", "what if", "pattern", "analogy",
-    "design", "vision", "inspire", "explore", "possibilities", "connect",
-    "themes", "big picture", "strategy", "reimagine", "innovate",
-    "compare across", "similarities", "different angle", "metaphor",
-    "poem", "story", "write me", "compose", "artistic", "poetic",
-    "fiction", "narrative", "song", "lyric", "haiku", "essay",
-    "philosophical", "muse", "dream", "wonder", "playful", "fun",
-    "joke", "humor", "funny", "weird", "wild", "crazy",
+    "brainstorm",
+    "creative",
+    "imagine",
+    "what if",
+    "pattern",
+    "analogy",
+    "design",
+    "vision",
+    "inspire",
+    "explore",
+    "possibilities",
+    "connect",
+    "themes",
+    "big picture",
+    "strategy",
+    "reimagine",
+    "innovate",
+    "compare across",
+    "similarities",
+    "different angle",
+    "metaphor",
+    "poem",
+    "story",
+    "write me",
+    "compose",
+    "artistic",
+    "poetic",
+    "fiction",
+    "narrative",
+    "song",
+    "lyric",
+    "haiku",
+    "essay",
+    "philosophical",
+    "muse",
+    "dream",
+    "wonder",
+    "playful",
+    "fun",
+    "joke",
+    "humor",
+    "funny",
+    "weird",
+    "wild",
+    "crazy",
 }
 
 
 BOTH_KEYWORDS = {
-    "all angles", "both perspectives", "think deeply", "comprehensive",
-    "compare", "contrast", "pros and cons", "trade-off", "debate",
-    "should i", "help me decide", "weigh", "consider",
-    "architecture", "design system", "plan",
+    "all angles",
+    "both perspectives",
+    "think deeply",
+    "comprehensive",
+    "compare",
+    "contrast",
+    "pros and cons",
+    "trade-off",
+    "debate",
+    "should i",
+    "help me decide",
+    "weigh",
+    "consider",
+    "architecture",
+    "design system",
+    "plan",
 }
 
 
@@ -279,11 +399,18 @@ def classify_query(text):
 
 
 REPO_ALIASES = {
-    "theory radar": "theory-radar", "theory-radar": "theory-radar",
-    "erisml": "erisml-lib", "eris": "erisml-lib", "deme": "erisml-lib",
-    "agi-hpc": "agi-hpc", "agi hpc": "agi-hpc",
-    "atlas portal": "atlas-portal", "research portal": "atlas-portal",
-    "arc agi": "arc-agi-2", "arc-agi": "arc-agi-2", "arc prize": "arc-prize",
+    "theory radar": "theory-radar",
+    "theory-radar": "theory-radar",
+    "erisml": "erisml-lib",
+    "eris": "erisml-lib",
+    "deme": "erisml-lib",
+    "agi-hpc": "agi-hpc",
+    "agi hpc": "agi-hpc",
+    "atlas portal": "atlas-portal",
+    "research portal": "atlas-portal",
+    "arc agi": "arc-agi-2",
+    "arc-agi": "arc-agi-2",
+    "arc prize": "arc-prize",
     "geometric reasoning": "geometric-reasoning",
     "geometric cognition": "geometric-cognition",
     "geometric communication": "geometric-communication",
@@ -293,10 +420,14 @@ REPO_ALIASES = {
     "geometric moderation": "geometric-moderation",
     "geometric education": "geometric-education",
     "geometric politics": "geometric-politics",
-    "non-abelian": "non-abelian-sqnd", "sqnd": "non-abelian-sqnd",
-    "eris ketos": "eris-ketos", "whale": "eris-ketos",
-    "prometheus": "prometheus", "structural fuzzing": "structural-fuzzing",
-    "batch probe": "batch-probe", "batch-probe": "batch-probe",
+    "non-abelian": "non-abelian-sqnd",
+    "sqnd": "non-abelian-sqnd",
+    "eris ketos": "eris-ketos",
+    "whale": "eris-ketos",
+    "prometheus": "prometheus",
+    "structural fuzzing": "structural-fuzzing",
+    "batch probe": "batch-probe",
+    "batch-probe": "batch-probe",
     "deep past": "deep-past",
 }
 
@@ -336,7 +467,8 @@ def _search_hamming_funnel(q_emb, top_k=TOP_K, repo_filter=None):
     # Repo filter: narrow candidates if specific repo requested
     if repo_filter:
         mask = [
-            i for i, idx in enumerate(coarse_idx)
+            i
+            for i, idx in enumerate(coarse_idx)
             if _chunk_data_db[idx][0] == repo_filter
         ]
         if len(mask) >= top_k:
@@ -351,12 +483,14 @@ def _search_hamming_funnel(q_emb, top_k=TOP_K, repo_filter=None):
     for rank_idx in rerank_order:
         orig_idx = coarse_idx[rank_idx]
         repo, fpath, content = _chunk_data_db[orig_idx]
-        results.append({
-            "repo": repo,
-            "file": fpath,
-            "text": content,
-            "score": float(scores[rank_idx]),
-        })
+        results.append(
+            {
+                "repo": repo,
+                "file": fpath,
+                "text": content,
+                "score": float(scores[rank_idx]),
+            }
+        )
     return results
 
 
@@ -369,14 +503,17 @@ def _search_pgvector_pca384(q_emb, top_k=TOP_K, repo_filter=None):
     with conn.cursor() as cur:
         cur.execute("SET ivfflat.probes = 10")
         if repo_filter:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT repo, file_path, content,
                        1 - (embedding_pca384 <=> %s::vector) AS score
                 FROM chunks
                 WHERE repo = %s
                 ORDER BY embedding_pca384 <=> %s::vector
                 LIMIT %s
-            """, (pca_str, repo_filter, pca_str, top_k))
+            """,
+                (pca_str, repo_filter, pca_str, top_k),
+            )
             results = [
                 {"repo": r[0], "file": r[1], "text": r[2], "score": float(r[3])}
                 for r in cur.fetchall()
@@ -385,13 +522,16 @@ def _search_pgvector_pca384(q_emb, top_k=TOP_K, repo_filter=None):
                 conn.close()
                 return results
 
-        cur.execute("""
+        cur.execute(
+            """
             SELECT repo, file_path, content,
                    1 - (embedding_pca384 <=> %s::vector) AS score
             FROM chunks
             ORDER BY embedding_pca384 <=> %s::vector
             LIMIT %s
-        """, (pca_str, pca_str, top_k))
+        """,
+            (pca_str, pca_str, top_k),
+        )
         results = [
             {"repo": r[0], "file": r[1], "text": r[2], "score": float(r[3])}
             for r in cur.fetchall()
@@ -405,16 +545,25 @@ def _search_fts_fallback(query, top_k=TOP_K):
     try:
         conn = psycopg2.connect(DB_DSN)
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT repo, file_path, content,
                        ts_rank(tsv, plainto_tsquery('english', %s)) AS score
                 FROM chunks
                 WHERE tsv @@ plainto_tsquery('english', %s)
                 ORDER BY score DESC
                 LIMIT %s
-            """, (query, query, top_k))
+            """,
+                (query, query, top_k),
+            )
             results = [
-                {"repo": r[0], "file": r[1], "text": r[2], "score": float(r[3]), "source": "fts"}
+                {
+                    "repo": r[0],
+                    "file": r[1],
+                    "text": r[2],
+                    "score": float(r[3]),
+                    "source": "fts",
+                }
                 for r in cur.fetchall()
             ]
         conn.close()
@@ -434,7 +583,9 @@ def _search_wiki(query, top_k=2):
     for md_file in wiki_dir.glob("*.md"):
         if md_file.name == "index.md":
             continue
-        slug_words = set(md_file.stem.replace("-", " ").replace("_", " ").lower().split())
+        slug_words = set(
+            md_file.stem.replace("-", " ").replace("_", " ").lower().split()
+        )
         overlap = len(query_words & slug_words)
         if overlap > 0:
             content = md_file.read_text(encoding="utf-8", errors="replace")
@@ -442,8 +593,13 @@ def _search_wiki(query, top_k=2):
 
     matches.sort(key=lambda x: -x[0])
     return [
-        {"repo": "wiki", "file": slug + ".md", "text": content[:2000],
-         "score": 1.0, "source": "wiki"}
+        {
+            "repo": "wiki",
+            "file": slug + ".md",
+            "text": content[:2000],
+            "score": 1.0,
+            "source": "wiki",
+        }
         for _, slug, content in matches[:top_k]
     ]
 
@@ -477,13 +633,15 @@ def search(query, top_k=TOP_K):
                 top_k=remaining,
             )
             for r in unified_results:
-                results.append({
-                    "repo": r.get("corpus", "unknown"),
-                    "file": r.get("title", ""),
-                    "text": r.get("content", ""),
-                    "score": r.get("score", 0.0),
-                    "source": r.get("corpus", "unified"),
-                })
+                results.append(
+                    {
+                        "repo": r.get("corpus", "unknown"),
+                        "file": r.get("title", ""),
+                        "text": r.get("content", ""),
+                        "score": r.get("score", 0.0),
+                        "source": r.get("corpus", "unified"),
+                    }
+                )
         elif _pca_components is not None:
             # Fallback: single-corpus PCA-384 on chunks only
             repo_filter = detect_repo_filter(query)
@@ -497,8 +655,15 @@ def search(query, top_k=TOP_K):
     return results[:top_k]
 
 
-def inject_context(messages, hemisphere):
-    """Find the user's last message, search, and inject context."""
+def inject_context(messages, hemisphere, context_strategy="default"):
+    """Find the user's last message, search, and inject context.
+
+    Context strategies (from Executive Function):
+      - "minimal": No RAG, just system prompt (simple queries).
+      - "episodic_recent": Prioritize recent conversation episodes.
+      - "semantic_deep": More results, deeper search (complex).
+      - "default": Standard RAG (wiki + pgvector + FTS).
+    """
     user_msg = None
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -512,32 +677,73 @@ def inject_context(messages, hemisphere):
     hemisphere = classify_query(user_msg)
     system_prompt = LH_SYSTEM if hemisphere == "lh" else RH_SYSTEM
 
-    results = search(user_msg)
     context = ""
-    if results:
-        context = "\n\n--- Retrieved from local repositories ---\n"
-        for r in results:
-            context += f"\n[{r['repo']}/{r['file']}] (relevance: {r['score']:.3f})\n"
-            context += r["text"] + "\n"
-        context += "\n--- End of retrieved context ---\n"
+    if context_strategy == "minimal":
+        # Skip RAG entirely for simple factual queries
+        pass
+    elif context_strategy == "episodic_recent":
+        # Prioritize recent episodes from conversation memory
+        try:
+            conn = psycopg2.connect(DB_DSN)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT user_msg, response FROM episodes "
+                    "ORDER BY timestamp DESC LIMIT 5"
+                )
+                rows = cur.fetchall()
+                if rows:
+                    context = "\n\n--- Recent conversation context ---\n"
+                    for r in rows:
+                        context += f"\nQ: {r[0][:200]}\n"
+                        context += f"A: {r[1][:200]}\n"
+                    context += "\n--- End of conversation context ---\n"
+            conn.close()
+        except Exception:
+            pass
+        # Also do a standard search with fewer results
+        results = search(user_msg, top_k=3)
+        if results:
+            context += "\n\n--- Retrieved context ---\n"
+            for r in results:
+                context += (
+                    f"\n[{r['repo']}/{r['file']}] " f"(relevance: {r['score']:.3f})\n"
+                )
+                context += r["text"] + "\n"
+            context += "\n--- End of retrieved context ---\n"
+    elif context_strategy == "semantic_deep":
+        # Deep search with more results for complex queries
+        results = search(user_msg, top_k=TOP_K * 2)
+        if results:
+            context = "\n\n--- Retrieved from local repositories " "(deep search) ---\n"
+            for r in results:
+                context += (
+                    f"\n[{r['repo']}/{r['file']}] " f"(relevance: {r['score']:.3f})\n"
+                )
+                context += r["text"] + "\n"
+            context += "\n--- End of retrieved context ---\n"
+    else:
+        # Default: standard RAG
+        results = search(user_msg)
+        if results:
+            context = "\n\n--- Retrieved from local repositories ---\n"
+            for r in results:
+                context += (
+                    f"\n[{r['repo']}/{r['file']}] " f"(relevance: {r['score']:.3f})\n"
+                )
+                context += r["text"] + "\n"
+            context += "\n--- End of retrieved context ---\n"
 
     new_messages = []
     has_system = False
     for m in messages:
         if m.get("role") == "system":
             has_system = True
-            new_messages.append({
-                "role": "system",
-                "content": system_prompt + context
-            })
+            new_messages.append({"role": "system", "content": system_prompt + context})
         else:
             new_messages.append(m)
 
     if not has_system:
-        new_messages.insert(0, {
-            "role": "system",
-            "content": system_prompt + context
-        })
+        new_messages.insert(0, {"role": "system", "content": system_prompt + context})
 
     return new_messages, hemisphere
 
@@ -546,7 +752,10 @@ def proxy_stream(url, data):
     """Stream from a single hemisphere."""
     try:
         resp = requests.post(
-            f"{url}/v1/chat/completions", json=data, stream=True, timeout=300,
+            f"{url}/v1/chat/completions",
+            json=data,
+            stream=True,
+            timeout=300,
         )
         for chunk in resp.iter_content(chunk_size=None):
             yield chunk
@@ -562,7 +771,9 @@ def call_hemisphere(url, data):
         if payload.get("max_tokens", 0) < 1024:
             payload["max_tokens"] = 1024
         resp = requests.post(
-            f"{url}/v1/chat/completions", json=payload, timeout=300,
+            f"{url}/v1/chat/completions",
+            json=payload,
+            timeout=300,
         )
         result = resp.json()
         msg = result.get("choices", [{}])[0].get("message", {})
@@ -593,24 +804,27 @@ def chat_completions():
     if not input_check.passed:
         _safety_stats["vetoes"] += 1
         import json as _json
+
         veto_resp = {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": (
-                        f"I can't process this request. "
-                        f"Safety flags: {', '.join(input_check.flags)}.\n\n"
-                        f"<details class=\"think\"><summary>Safety Gate (input vetoed in {input_check.latency_ms:.1f}ms)</summary>"
-                        f"<div class=\"think-content\">\n\n"
-                        f"**Score:** {input_check.score:.2f} (threshold: 0.30)\n"
-                        f"**Flags:** {input_check.flags}\n"
-                        f"**Gate:** {input_check.gate}\n"
-                        f"**Latency:** {input_check.latency_ms:.1f}ms\n\n"
-                        f"</div></details>"
-                    ),
-                },
-                "finish_reason": "stop",
-            }],
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": (
+                            f"I can't process this request. "
+                            f"Safety flags: {', '.join(input_check.flags)}.\n\n"
+                            f'<details class="think"><summary>Safety Gate (input vetoed in {input_check.latency_ms:.1f}ms)</summary>'
+                            f'<div class="think-content">\n\n'
+                            f"**Score:** {input_check.score:.2f} (threshold: 0.30)\n"
+                            f"**Flags:** {input_check.flags}\n"
+                            f"**Gate:** {input_check.gate}\n"
+                            f"**Latency:** {input_check.latency_ms:.1f}ms\n\n"
+                            f"</div></details>"
+                        ),
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
             "model": "atlas-safety",
         }
         return Response(_json.dumps(veto_resp), content_type="application/json")
@@ -621,19 +835,22 @@ def chat_completions():
     _executive_stats["last_complexity"] = ef_decision.complexity
     _executive_stats["last_goal"] = ef_decision.goal_summary or "none"
     _executive_stats["last_inhibit"] = ef_decision.inhibit
+    _executive_stats["last_sub_queries"] = len(ef_decision.sub_queries)
 
     # Check inhibition — ask for clarification instead of guessing
     if ef_decision.inhibit:
         import json as _json
 
         inhibit_resp = {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": ef_decision.inhibit_reason,
-                },
-                "finish_reason": "stop",
-            }],
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": ef_decision.inhibit_reason,
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
             "model": "atlas-executive",
         }
         return Response(
@@ -652,7 +869,16 @@ def chat_completions():
             _attention_stats["warnings_issued"] += 1
 
     hemisphere = "lh"
-    data["messages"], hemisphere = inject_context(data.get("messages", []), hemisphere)
+    # Route context strategy from Executive Function
+    ctx_strategy = ef_decision.context_strategy
+    # Goal continuation: boost episodic context
+    if ef_decision.goal_continuation and ctx_strategy == "default":
+        ctx_strategy = "episodic_recent"
+    _executive_stats["last_context_strategy"] = ctx_strategy
+
+    data["messages"], hemisphere = inject_context(
+        data.get("messages", []), hemisphere, ctx_strategy
+    )
 
     # Inject attention warning into system messages if distractors detected
     if attn_result.warning:
@@ -668,6 +894,123 @@ def chat_completions():
     elif ef_decision.mode == "debate":
         hemisphere = "both"
 
+    # ── Sub-query chaining (multi-step decomposition) ──
+    # If Executive Function decomposed the query, process each
+    # sub-query sequentially — each answer feeds into the next
+    # as additional context, then synthesize a final answer.
+    if len(ef_decision.sub_queries) > 1:
+        import json as _json
+
+        sub_answers = []
+        for i, sq in enumerate(ef_decision.sub_queries):
+            accumulated = ""
+            if sub_answers:
+                accumulated = "\n".join(
+                    f"[Step {j+1}] Q: {sa['q']}\n" f"A: {sa['a'][:300]}"
+                    for j, sa in enumerate(sub_answers)
+                )
+
+            sq_msgs = [
+                {
+                    "role": "system",
+                    "content": (
+                        LH_SYSTEM
+                        + ("\n\nPrior steps:\n" + accumulated if accumulated else "")
+                    ),
+                },
+                {"role": "user", "content": sq},
+            ]
+
+            answer = call_hemisphere(
+                LH_URL,
+                {
+                    "messages": sq_msgs,
+                    "temperature": 0.3,
+                    "max_tokens": 512,
+                },
+            )
+            sub_answers.append({"q": sq, "a": answer})
+
+        # Synthesize all sub-answers via Ego
+        synth_prompt = (
+            f"The user's full question: {user_query_raw}\n\n"
+            + "\n".join(
+                f"Step {i+1}: {sa['q']}\n" f"Answer: {sa['a'][:400]}\n"
+                for i, sa in enumerate(sub_answers)
+            )
+            + "\nSynthesize these step-by-step answers into "
+            "one coherent, complete response."
+        )
+
+        synthesis = call_hemisphere(
+            EGO_URL,
+            {
+                "messages": [{"role": "user", "content": synth_prompt}],
+                "temperature": 0.3,
+                "max_tokens": 1024,
+            },
+        )
+
+        # Safety check
+        output_check = _safety_gateway.check_output(synthesis, user_query_raw)
+        _safety_stats["output_checks"] += 1
+        _safety_stats["total_latency_ms"] += output_check.latency_ms
+        if not output_check.passed:
+            _safety_stats["vetoes"] += 1
+            synthesis = (
+                "Response flagged by safety gate. "
+                f"Flags: {', '.join(output_check.flags)}."
+            )
+
+        # Build decomposition log
+        decomp_log = "### Multi-Step Decomposition\n\n"
+        for i, sa in enumerate(sub_answers):
+            decomp_log += f"**Step {i+1}:** {sa['q']}\n" f"{sa['a'][:400]}\n\n"
+
+        output = (
+            f"{synthesis}\n\n"
+            f'<details class="think">'
+            f"<summary>Multi-Step Reasoning "
+            f"({len(sub_answers)} steps)</summary>"
+            f'<div class="think-content">\n\n'
+            f"{decomp_log}\n\n"
+            f"</div></details>"
+        )
+
+        # Store episode
+        import threading
+
+        session_id = request.headers.get("X-Session-Id", "anon")
+        threading.Thread(
+            target=_store_episode_background,
+            args=(
+                session_id,
+                user_query_raw,
+                synthesis,
+                "both",
+                input_check.to_dict(),
+                output_check.to_dict(),
+            ),
+            daemon=True,
+        ).start()
+
+        resp_json = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": output,
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "model": "atlas-decompose",
+        }
+        return Response(
+            _json.dumps(resp_json),
+            content_type="application/json",
+        )
+
     if hemisphere == "both":
         import json as _json
         import concurrent.futures
@@ -679,10 +1022,7 @@ def chat_completions():
                 break
 
         # Feature flag: Tree-of-Thought mode
-        use_tot = (
-            data.get("tree_of_thought", False)
-            or request.args.get("tot") == "1"
-        )
+        use_tot = data.get("tree_of_thought", False) or request.args.get("tot") == "1"
 
         if use_tot:
             # Tree-of-Thought: multi-branch reasoning
@@ -693,6 +1033,7 @@ def chat_completions():
                     superego_url=LH_URL,
                     id_url=RH_URL,
                     ego_url=EGO_URL,
+                    council=_divine_council,
                 )
 
                 # Extract RAG context
@@ -741,23 +1082,25 @@ def chat_completions():
 
                 output = (
                     f"{tot_result.synthesis}\n\n"
-                    f"<details class=\"think\">"
+                    f'<details class="think">'
                     f"<summary>Tree-of-Thought "
                     f"({tot_result.total_branches} branches, "
                     f"{tot_result.latency_s:.1f}s)</summary>"
-                    f"<div class=\"think-content\">\n\n"
+                    f'<div class="think-content">\n\n'
                     f"{tot_result.debate_log}\n\n"
                     f"</div></details>"
                 )
 
                 resp_json = {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": output,
-                        },
-                        "finish_reason": "stop",
-                    }],
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": output,
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
                     "model": "atlas-tot",
                 }
                 return Response(
@@ -778,15 +1121,30 @@ def chat_completions():
         spock_msgs = list(base_msgs) + [
             {"role": "user", "content": f"Answer concisely and precisely: {user_query}"}
         ]
-        kirk_msgs = [
-            {"role": "system", "content": RH_SYSTEM},
-        ] + [m for m in base_msgs if m.get("role") != "system"] + [
-            {"role": "user", "content": f"Answer with creativity and insight: {user_query}"}
-        ]
+        kirk_msgs = (
+            [
+                {"role": "system", "content": RH_SYSTEM},
+            ]
+            + [m for m in base_msgs if m.get("role") != "system"]
+            + [
+                {
+                    "role": "user",
+                    "content": f"Answer with creativity and insight: {user_query}",
+                }
+            ]
+        )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-            spock_future = ex.submit(call_hemisphere, LH_URL, {**data, "messages": spock_msgs, "max_tokens": 512})
-            kirk_future = ex.submit(call_hemisphere, RH_URL, {**data, "messages": kirk_msgs, "max_tokens": 512})
+            spock_future = ex.submit(
+                call_hemisphere,
+                LH_URL,
+                {**data, "messages": spock_msgs, "max_tokens": 512},
+            )
+            kirk_future = ex.submit(
+                call_hemisphere,
+                RH_URL,
+                {**data, "messages": kirk_msgs, "max_tokens": 512},
+            )
             spock_1 = spock_future.result()
             kirk_1 = kirk_future.result()
 
@@ -795,42 +1153,95 @@ def chat_completions():
 
         # Round 2: Each challenges the other
         spock_challenge_msgs = list(base_msgs) + [
-            {"role": "user", "content": (
-                f"You said:\n{spock_1}\n\n"
-                f"The Id countered:\n{kirk_1}\n\n"
-                "Challenge the Id's reasoning. Where is it wrong, imprecise, or unsupported by evidence? Be direct."
-            )}
+            {
+                "role": "user",
+                "content": (
+                    f"You said:\n{spock_1}\n\n"
+                    f"The Id countered:\n{kirk_1}\n\n"
+                    "Challenge the Id's reasoning. Where is it wrong, imprecise, or unsupported by evidence? Be direct."
+                ),
+            }
         ]
-        kirk_challenge_msgs = [
-            {"role": "system", "content": RH_SYSTEM},
-        ] + [m for m in base_msgs if m.get("role") != "system"] + [
-            {"role": "user", "content": (
-                f"You said:\n{kirk_1}\n\n"
-                f"The Superego's take:\n{spock_1}\n\n"
-                "Challenge the Superego's reasoning. Where is it too narrow, missing the bigger picture, or ignoring the human element? Be bold."
-            )}
-        ]
+        kirk_challenge_msgs = (
+            [
+                {"role": "system", "content": RH_SYSTEM},
+            ]
+            + [m for m in base_msgs if m.get("role") != "system"]
+            + [
+                {
+                    "role": "user",
+                    "content": (
+                        f"You said:\n{kirk_1}\n\n"
+                        f"The Superego's take:\n{spock_1}\n\n"
+                        "Challenge the Superego's reasoning. Where is it too narrow, missing the bigger picture, or ignoring the human element? Be bold."
+                    ),
+                }
+            ]
+        )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
-            spock_ch_future = ex.submit(call_hemisphere, LH_URL, {**data, "messages": spock_challenge_msgs, "max_tokens": 384})
-            kirk_ch_future = ex.submit(call_hemisphere, RH_URL, {**data, "messages": kirk_challenge_msgs, "max_tokens": 384})
+            spock_ch_future = ex.submit(
+                call_hemisphere,
+                LH_URL,
+                {**data, "messages": spock_challenge_msgs, "max_tokens": 384},
+            )
+            kirk_ch_future = ex.submit(
+                call_hemisphere,
+                RH_URL,
+                {**data, "messages": kirk_challenge_msgs, "max_tokens": 384},
+            )
             spock_2 = spock_ch_future.result()
             kirk_2 = kirk_ch_future.result()
 
         debate.append(f"**Superego (Challenge):**\n{spock_2}")
         debate.append(f"**Id (Challenge):**\n{kirk_2}")
 
-        # Round 3: Measure disagreement, then synthesize
-        # Compute psyche disagreement (cosine similarity of opening responses)
+        # Round 3: Measure disagreement via calibrated metric
         ego_arbitrated = False
         try:
-            embs = embed_model.encode(
-                [spock_1[:2000], kirk_1[:2000]], normalize_embeddings=True
+            # Classify topic for adaptive temperature
+            topic = "general"
+            lower_q = user_query.lower()
+            for t in ["ethics", "code", "math", "science"]:
+                if t in lower_q:
+                    topic = t
+                    break
+
+            dr = _disagreement.compute(
+                spock_text=spock_1,
+                kirk_text=kirk_1,
+                query=user_query,
+                topic=topic,
             )
-            similarity = float(embs[0] @ embs[1])
-            confidence = 0.9 if similarity > 0.85 else (
-                0.4 + (similarity - 0.5) / 0.35 * 0.45 if similarity >= 0.5 else 0.3
+            similarity = dr.similarity
+            confidence = dr.confidence
+            _calibration_stats["measurements"] += 1
+            _calibration_stats["last_confidence"] = confidence
+            _calibration_stats["last_similarity"] = similarity
+
+            # Feed confidence to adaptive temperature
+            temp_info = _adaptive_temp.update(topic, confidence)
+            _calibration_stats["last_temperature"] = (
+                temp_info["temperature"]
             )
+
+            # Feed to anomaly detector for drift monitoring
+            import time as _time
+
+            anomaly = _anomaly_detector.check_confidence_drift(
+                confidence,
+            )
+            anomalies = [anomaly] if anomaly else []
+            if anomalies:
+                _calibration_stats["anomalies_detected"] += len(
+                    anomalies
+                )
+                for a in anomalies:
+                    logger.warning(
+                        "[calibration] anomaly: %s (%s)",
+                        a.description,
+                        a.severity.value,
+                    )
         except Exception:
             similarity, confidence = 0.7, 0.6
 
@@ -852,20 +1263,27 @@ def chat_completions():
 
         if ego_online and confidence < 0.5:
             # Ego (Gemma 4 E4B, CPU) mediates — Freudian reality principle
+            _calibration_stats["ego_arbitrations"] += 1
             ego_msgs = [
-                {"role": "system", "content": (
-                    "You are the Ego — the mediator of the psyche. The Superego (analytical, "
-                    "moral) and the Id (creative, instinctual) have debated but strongly disagree. "
-                    "Your role is to find the practical, balanced resolution. You are grounded in "
-                    "reality. Be concise and authoritative."
-                )},
-                {"role": "user", "content": (
-                    f"The user asked: {user_query}\n\n"
-                    f"The psyche debate (similarity={similarity:.2f}, confidence={confidence:.2f}):\n"
-                    f"{debate_summary}\n\n"
-                    "The Superego and Id strongly disagree. As the Ego, synthesize a balanced, "
-                    "practical answer. Don't reference the debate — just answer directly."
-                )}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the Ego — the mediator of the psyche. The Superego (analytical, "
+                        "moral) and the Id (creative, instinctual) have debated but strongly disagree. "
+                        "Your role is to find the practical, balanced resolution. You are grounded in "
+                        "reality. Be concise and authoritative."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"The user asked: {user_query}\n\n"
+                        f"The psyche debate (similarity={similarity:.2f}, confidence={confidence:.2f}):\n"
+                        f"{debate_summary}\n\n"
+                        "The Superego and Id strongly disagree. As the Ego, synthesize a balanced, "
+                        "practical answer. Don't reference the debate — just answer directly."
+                    ),
+                },
             ]
             final = call_hemisphere(
                 EGO_URL, {**data, "messages": ego_msgs, "max_tokens": 1024}
@@ -876,19 +1294,26 @@ def chat_completions():
             )
         else:
             # Id synthesizes (normal path — hemispheres agree enough)
-            captain_msgs = [
-                {"role": "system", "content": RH_SYSTEM},
-            ] + [m for m in base_msgs if m.get("role") != "system"] + [
-                {"role": "user", "content": (
-                    f"The user asked: {user_query}\n\n"
-                    f"The psyche debate:\n"
-                    f"{debate_summary}\n\n"
-                    "Give a clear, direct answer to the user's question. Incorporate the strongest "
-                    "points from both perspectives naturally -- don't label them as 'Superego' or 'Id', "
-                    "don't use words like 'verdict' or 'synthesis' or 'debate'. Just answer the question "
-                    "as if you thought of it yourself. Be concise and authoritative."
-                )}
-            ]
+            captain_msgs = (
+                [
+                    {"role": "system", "content": RH_SYSTEM},
+                ]
+                + [m for m in base_msgs if m.get("role") != "system"]
+                + [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"The user asked: {user_query}\n\n"
+                            f"The psyche debate:\n"
+                            f"{debate_summary}\n\n"
+                            "Give a clear, direct answer to the user's question. Incorporate the strongest "
+                            "points from both perspectives naturally -- don't label them as 'Superego' or 'Id', "
+                            "don't use words like 'verdict' or 'synthesis' or 'debate'. Just answer the question "
+                            "as if you thought of it yourself. Be concise and authoritative."
+                        ),
+                    }
+                ]
+            )
             final = call_hemisphere(
                 RH_URL, {**data, "messages": captain_msgs, "max_tokens": 1024}
             )
@@ -900,10 +1325,10 @@ def chat_completions():
 
         # Build psyche + safety badges
         psyche_badge = (
-            f"<details class=\"think\"><summary>Psyche Metrics "
+            f'<details class="think"><summary>Psyche Metrics '
             f"(similarity={similarity:.2f}, confidence={confidence:.2f}"
             f"{', Ego arbitrated' if ego_arbitrated else ''})"
-            f"</summary><div class=\"think-content\">\n\n"
+            f'</summary><div class="think-content">\n\n'
             f"**Hemisphere similarity:** {similarity:.3f}\n"
             f"**Confidence:** {confidence:.3f}\n"
             f"**Synthesized by:** {'Ego (CPU, Gemma 4 E4B)' if ego_arbitrated else 'Id (GPU 1, Qwen 3 32B)'}\n"
@@ -912,10 +1337,10 @@ def chat_completions():
         )
 
         safety_badge = (
-            f"<details class=\"think\"><summary>Safety Gate "
+            f'<details class="think"><summary>Safety Gate '
             f"({'PASS' if output_check.passed else 'VETO'} — "
             f"input {input_check.latency_ms:.1f}ms, output {output_check.latency_ms:.1f}ms)"
-            f"</summary><div class=\"think-content\">\n\n"
+            f'</summary><div class="think-content">\n\n'
             f"**Input score:** {input_check.score:.2f} | **Output score:** {output_check.score:.2f}\n"
             f"**Flags:** {output_check.flags if output_check.flags else 'none'}\n\n"
             f"</div></details>"
@@ -934,8 +1359,8 @@ def chat_completions():
         rounds = "4 rounds" + (" + Ego arbitration" if ego_arbitrated else "")
         output = (
             f"{final}\n\n"
-            f"<details class=\"think\"><summary>Psyche Debate ({rounds})</summary>"
-            f"<div class=\"think-content\">\n\n{debate_log}\n\n</div></details>\n\n"
+            f'<details class="think"><summary>Psyche Debate ({rounds})</summary>'
+            f'<div class="think-content">\n\n{debate_log}\n\n</div></details>\n\n'
             f"{psyche_badge}\n\n{safety_badge}"
         )
 
@@ -957,7 +1382,12 @@ def chat_completions():
         ).start()
 
         resp_json = {
-            "choices": [{"message": {"role": "assistant", "content": output}, "finish_reason": "stop"}],
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": output},
+                    "finish_reason": "stop",
+                }
+            ],
             "model": "atlas-debate",
         }
         return Response(_json.dumps(resp_json), content_type="application/json")
@@ -966,27 +1396,36 @@ def chat_completions():
     target_url = LH_URL if hemisphere == "lh" else RH_URL
 
     if data.get("stream"):
+
         def generate():
             yield from proxy_stream(target_url, data)
             # Fallback
             if not any(True for _ in []):
                 pass
 
-        return Response(proxy_stream(target_url, data), content_type="text/event-stream")
+        return Response(
+            proxy_stream(target_url, data), content_type="text/event-stream"
+        )
     else:
         try:
             resp = requests.post(
-                f"{target_url}/v1/chat/completions", json=data, timeout=300,
+                f"{target_url}/v1/chat/completions",
+                json=data,
+                timeout=300,
             )
         except requests.ConnectionError:
             fallback = RH_URL if hemisphere == "lh" else LH_URL
             resp = requests.post(
-                f"{fallback}/v1/chat/completions", json=data, timeout=300,
+                f"{fallback}/v1/chat/completions",
+                json=data,
+                timeout=300,
             )
         # --- Safety Output Gate (single hemisphere, non-streaming) ---
         try:
             resp_data = resp.json()
-            content = resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = (
+                resp_data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            )
             if content:
                 output_check = _safety_gateway.check_output(content, user_query_raw)
                 _safety_stats["output_checks"] += 1
@@ -997,7 +1436,9 @@ def chat_completions():
                         "I generated a response but it was flagged by the safety gate. "
                         f"Flags: {', '.join(output_check.flags)}."
                     )
-                    return Response(json.dumps(resp_data), content_type="application/json")
+                    return Response(
+                        json.dumps(resp_data), content_type="application/json"
+                    )
                 # --- Store episode (single hemisphere, non-streaming) ---
                 import threading
 
@@ -1023,24 +1464,34 @@ def chat_completions():
 def search_status():
     """Report which search backend is active."""
     unified_stats = _unified_searcher.stats() if _unified_searcher else {}
-    return jsonify({
-        "search_mode": "unified_3corpus" if _unified_searcher else (
-            "pgvector_pca384" if _pca_components is not None else "pgvector_full_1024"
-        ),
-        "pca_loaded": _pca_components is not None,
-        "unified_searcher": _unified_searcher is not None,
-        "corpora": unified_stats,
-        "total_vectors": unified_stats.get("total", 0),
-        "hamming_gpu_ready": _hamming_gpu_ready,
-        "hamming_index_size": len(_chunk_ids_db) if _chunk_ids_db else 0,
-    })
+    return jsonify(
+        {
+            "search_mode": (
+                "unified_3corpus"
+                if _unified_searcher
+                else (
+                    "pgvector_pca384"
+                    if _pca_components is not None
+                    else "pgvector_full_1024"
+                )
+            ),
+            "pca_loaded": _pca_components is not None,
+            "unified_searcher": _unified_searcher is not None,
+            "corpora": unified_stats,
+            "total_vectors": unified_stats.get("total", 0),
+            "hamming_gpu_ready": _hamming_gpu_ready,
+            "hamming_index_size": len(_chunk_ids_db) if _chunk_ids_db else 0,
+        }
+    )
 
 
 @app.route("/api/reload-index", methods=["POST"])
 def reload_index():
     """Reload the Hamming index (e.g., after new chunks are indexed)."""
     ok = _load_hamming_index()
-    return jsonify({"reloaded": ok, "index_size": len(_chunk_ids_db) if _chunk_ids_db else 0})
+    return jsonify(
+        {"reloaded": ok, "index_size": len(_chunk_ids_db) if _chunk_ids_db else 0}
+    )
 
 
 @app.route("/api/hemisphere", methods=["POST"])
@@ -1049,7 +1500,9 @@ def check_hemisphere():
     data = request.get_json()
     query = data.get("query", "")
     h = classify_query(query)
-    return jsonify({"hemisphere": h, "model": "Gemma 4 31B" if h == "lh" else "Qwen 32B"})
+    return jsonify(
+        {"hemisphere": h, "model": "Gemma 4 31B" if h == "lh" else "Qwen 32B"}
+    )
 
 
 @app.route("/api/telemetry")
@@ -1062,7 +1515,8 @@ def telemetry():
         try:
             r = subprocess.run(
                 ["tmux", "has-session", "-t", name],
-                capture_output=True, timeout=2,
+                capture_output=True,
+                timeout=2,
             )
             return r.returncode == 0
         except Exception:
@@ -1070,7 +1524,11 @@ def telemetry():
 
     data = {
         "timestamp": time.time(),
-        "hemispheres": {"lh": {"status": "offline"}, "rh": {"status": "offline"}, "ego": {"status": "offline"}},
+        "hemispheres": {
+            "lh": {"status": "offline"},
+            "rh": {"status": "offline"},
+            "ego": {"status": "offline"},
+        },
         "nats": {"status": "offline"},
         "memory": {
             "semantic_chunks": 0,
@@ -1081,20 +1539,39 @@ def telemetry():
         },
         "safety": {
             "status": "online",
-            "layer": "reflex" + (" + DEME tactical" if _safety_gateway.has_deme else ""),
+            "layer": "reflex"
+            + (" + DEME tactical" if _safety_gateway.has_deme else ""),
             "input_checks": _safety_stats["input_checks"],
             "output_checks": _safety_stats["output_checks"],
             "vetoes": _safety_stats["vetoes"],
-            "avg_latency_ms": round(_safety_stats["total_latency_ms"] / max(1, _safety_stats["input_checks"] + _safety_stats["output_checks"]), 2),
+            "avg_latency_ms": round(
+                _safety_stats["total_latency_ms"]
+                / max(
+                    1, _safety_stats["input_checks"] + _safety_stats["output_checks"]
+                ),
+                2,
+            ),
             "audit_log_size": len(_safety_gateway.audit_log),
         },
-        "metacognition": {"status": "online" if check_tmux("metacognition") else "planned"},
+        "metacognition": {
+            "status": "online" if check_tmux("metacognition") else "planned"
+        },
         "environment": {"gpu": [], "cpu": {}, "ram": {}},
         "integration": {"sessions": 0, "routed": 0},
-        "dht": {"status": "online" if check_tmux("dht") else "planned", "services_online": 0, "services_total": 10},
-        "ego_privileges": _privilege_gate.state.to_dict() if hasattr(_privilege_gate, '_state') and _privilege_gate._state else {"current_level": 0, "level_name": "READ_ONLY"},
+        "dht": {
+            "status": "online" if check_tmux("dht") else "planned",
+            "services_online": 0,
+            "services_total": 10,
+        },
+        "ego_privileges": (
+            _privilege_gate.state.to_dict()
+            if hasattr(_privilege_gate, "_state") and _privilege_gate._state
+            else {"current_level": 0, "level_name": "READ_ONLY"}
+        ),
         "executive_function": _executive_stats,
         "attention": _attention_stats,
+        "calibration": _calibration_stats,
+        "adaptive_temperature": _adaptive_temp.get_summary(),
     }
 
     # Check LH (Gemma 4)
@@ -1198,28 +1675,38 @@ def telemetry():
     # GPU stats
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            [
+                "nvidia-smi",
+                "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         for line in result.stdout.strip().split("\n"):
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 6:
-                data["environment"]["gpu"].append({
-                    "index": int(parts[0]),
-                    "name": parts[1],
-                    "temp": int(parts[2]),
-                    "util": int(parts[3]),
-                    "mem_used": int(parts[4]),
-                    "mem_total": int(parts[5]),
-                })
+                data["environment"]["gpu"].append(
+                    {
+                        "index": int(parts[0]),
+                        "name": parts[1],
+                        "temp": int(parts[2]),
+                        "util": int(parts[3]),
+                        "mem_used": int(parts[4]),
+                        "mem_total": int(parts[5]),
+                    }
+                )
     except Exception:
         pass
 
     # CPU temps
     try:
         result = subprocess.run(
-            ["sensors"], capture_output=True, text=True, timeout=5,
+            ["sensors"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         packages = []
         for line in result.stdout.split("\n"):
@@ -1237,7 +1724,10 @@ def telemetry():
     # RAM
     try:
         result = subprocess.run(
-            ["free", "-b"], capture_output=True, text=True, timeout=5,
+            ["free", "-b"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         for line in result.stdout.split("\n"):
             if line.startswith("Mem:"):
@@ -1254,7 +1744,10 @@ def telemetry():
     data["jobs"] = []
     try:
         result = subprocess.run(
-            ["tmux", "ls"], capture_output=True, text=True, timeout=5,
+            ["tmux", "ls"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         for line in result.stdout.strip().split("\n"):
             if ":" not in line:
@@ -1263,16 +1756,35 @@ def telemetry():
             # Get the process running in this tmux session
             proc_result = subprocess.run(
                 ["tmux", "list-panes", "-t", name, "-F", "#{pane_pid}"],
-                capture_output=True, text=True, timeout=3,
+                capture_output=True,
+                text=True,
+                timeout=3,
             )
             pid = proc_result.stdout.strip()
-            job = {"name": name, "status": "running", "pid": pid, "cpu": "", "mem": "", "gpu": None, "elapsed": ""}
+            job = {
+                "name": name,
+                "status": "running",
+                "pid": pid,
+                "cpu": "",
+                "mem": "",
+                "gpu": None,
+                "elapsed": "",
+            }
 
             if pid:
                 # Get child process info (the actual command, not bash)
                 ps_result = subprocess.run(
-                    ["ps", "--ppid", pid, "-o", "pid,pcpu,rss,etime,comm", "--no-headers"],
-                    capture_output=True, text=True, timeout=3,
+                    [
+                        "ps",
+                        "--ppid",
+                        pid,
+                        "-o",
+                        "pid,pcpu,rss,etime,comm",
+                        "--no-headers",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
                 )
                 children = ps_result.stdout.strip().split("\n")
                 if children and children[0]:
@@ -1340,7 +1852,9 @@ def telemetry():
     try:
         result = subprocess.run(
             ["du", "-s", "--block-size=1G", "/archive/"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.stdout:
             data["environment"]["archive_gb"] = int(result.stdout.split()[0])
@@ -1353,14 +1867,17 @@ def telemetry():
         # Check if training is running
         result = subprocess.run(
             ["tmux", "has-session", "-t", "train"],
-            capture_output=True, timeout=3,
+            capture_output=True,
+            timeout=3,
         )
         if result.returncode == 0:
             data["training"]["active"] = True
             # Check which type
             ps_result = subprocess.run(
                 ["tmux", "capture-pane", "-t", "train", "-p"],
-                capture_output=True, text=True, timeout=3,
+                capture_output=True,
+                text=True,
+                timeout=3,
             )
             pane = ps_result.stdout
             if "ethics" in pane.lower() or "finetune" in pane.lower():
@@ -1398,7 +1915,8 @@ def telemetry():
                     # Get level from metadata
                     cur.execute(
                         "SELECT metadata->>'level' FROM training_results "
-                        "WHERE env_name = %s ORDER BY timestamp DESC LIMIT 1", (r[0],)
+                        "WHERE env_name = %s ORDER BY timestamp DESC LIMIT 1",
+                        (r[0],),
                     )
                     level_row = cur.fetchone()
                     level = int(level_row[0]) if level_row and level_row[0] else 1
@@ -1406,7 +1924,8 @@ def telemetry():
                     # Recent trend (last 10 scores)
                     cur.execute(
                         "SELECT score FROM training_results WHERE env_name = %s "
-                        "ORDER BY timestamp DESC LIMIT 10", (r[0],)
+                        "ORDER BY timestamp DESC LIMIT 10",
+                        (r[0],),
                     )
                     recent_scores = [float(row[0]) for row in cur.fetchall()]
 
@@ -1428,13 +1947,15 @@ def telemetry():
                     ORDER BY timestamp DESC LIMIT 10
                 """)
                 for r in cur.fetchall():
-                    data["gym"]["recent"].append({
-                        "env": r[0],
-                        "score": float(r[1]) if r[1] else 0,
-                        "level": int(r[2]) if r[2] else 1,
-                        "scenario": r[3],
-                        "time": r[4].isoformat() if r[4] else None,
-                    })
+                    data["gym"]["recent"].append(
+                        {
+                            "env": r[0],
+                            "score": float(r[1]) if r[1] else 0,
+                            "level": int(r[2]) if r[2] else 1,
+                            "scenario": r[3],
+                            "time": r[4].isoformat() if r[4] else None,
+                        }
+                    )
 
                 # Current streak (consecutive scores > 0.7)
                 cur.execute(
@@ -1478,9 +1999,15 @@ def log_visitor():
     if email or user:
         visitor = email or user
         path = request.path
-        ip = request.headers.get("X-Real-Ip", request.headers.get("X-Forwarded-For", request.remote_addr))
+        ip = request.headers.get(
+            "X-Real-Ip", request.headers.get("X-Forwarded-For", request.remote_addr)
+        )
         # Only log page views, not API/telemetry polls
-        if not path.startswith("/api/") and not path.startswith("/v1/") and path != "/favicon.ico":
+        if (
+            not path.startswith("/api/")
+            and not path.startswith("/v1/")
+            and path != "/favicon.ico"
+        ):
             try:
                 conn = psycopg2.connect(DB_DSN)
                 with conn.cursor() as cur:
@@ -1496,7 +2023,12 @@ def log_visitor():
                     """)
                     cur.execute(
                         "INSERT INTO visitor_log (email, ip, path, user_agent) VALUES (%s, %s, %s, %s)",
-                        (visitor, ip, path, request.headers.get("User-Agent", "")[:200])
+                        (
+                            visitor,
+                            ip,
+                            path,
+                            request.headers.get("User-Agent", "")[:200],
+                        ),
                     )
                     conn.commit()
                 conn.close()
@@ -1525,7 +2057,9 @@ def visitors():
             cur.execute("SELECT COUNT(*) FROM visitor_log")
             total = cur.fetchone()[0]
         conn.close()
-        return jsonify({"unique_visitors": unique, "total_visits": total, "recent": rows})
+        return jsonify(
+            {"unique_visitors": unique, "total_visits": total, "recent": rows}
+        )
     except Exception:
         return jsonify({"unique_visitors": 0, "total_visits": 0, "recent": []})
 
@@ -1551,19 +2085,21 @@ def events():
             connz = r.json()
             conns = connz.get("connections", [])
             for c in conns:
-                data["connections"].append({
-                    "name": c.get("name", ""),
-                    "ip": c.get("ip", ""),
-                    "lang": c.get("lang", ""),
-                    "version": c.get("version", ""),
-                    "in_msgs": c.get("in_msgs", 0),
-                    "out_msgs": c.get("out_msgs", 0),
-                    "in_bytes": c.get("in_bytes", 0),
-                    "out_bytes": c.get("out_bytes", 0),
-                    "subscriptions": c.get("subscriptions_list", [])[:20],
-                    "uptime": c.get("uptime", ""),
-                    "idle": c.get("idle", ""),
-                })
+                data["connections"].append(
+                    {
+                        "name": c.get("name", ""),
+                        "ip": c.get("ip", ""),
+                        "lang": c.get("lang", ""),
+                        "version": c.get("version", ""),
+                        "in_msgs": c.get("in_msgs", 0),
+                        "out_msgs": c.get("out_msgs", 0),
+                        "in_bytes": c.get("in_bytes", 0),
+                        "out_bytes": c.get("out_bytes", 0),
+                        "subscriptions": c.get("subscriptions_list", [])[:20],
+                        "uptime": c.get("uptime", ""),
+                        "idle": c.get("idle", ""),
+                    }
+                )
     except Exception:
         pass
 
@@ -1577,19 +2113,23 @@ def events():
             cache = subsz.get("cache", {})
             if cache:
                 for subject, info in cache.items():
-                    data["subjects"].append({
-                        "subject": subject,
-                        "num_subscriptions": info if isinstance(info, int) else 1,
-                    })
+                    data["subjects"].append(
+                        {
+                            "subject": subject,
+                            "num_subscriptions": info if isinstance(info, int) else 1,
+                        }
+                    )
             data["subjects"].sort(key=lambda x: x["num_subscriptions"], reverse=True)
             if num_subs > 0:
-                data["events"].append({
-                    "time": now_str,
-                    "source": "NATS",
-                    "type": "heartbeat",
-                    "summary": f"{num_subs} active subscriptions, {num_cache} cached subjects",
-                    "severity": "info",
-                })
+                data["events"].append(
+                    {
+                        "time": now_str,
+                        "source": "NATS",
+                        "type": "heartbeat",
+                        "summary": f"{num_subs} active subscriptions, {num_cache} cached subjects",
+                        "severity": "info",
+                    }
+                )
     except Exception:
         pass
 
@@ -1600,13 +2140,15 @@ def events():
             routez = r.json()
             num_routes = routez.get("num_routes", 0)
             if num_routes > 0:
-                data["events"].append({
-                    "time": now_str,
-                    "source": "NATS",
-                    "type": "cluster",
-                    "summary": f"{num_routes} cluster routes active",
-                    "severity": "info",
-                })
+                data["events"].append(
+                    {
+                        "time": now_str,
+                        "source": "NATS",
+                        "type": "cluster",
+                        "summary": f"{num_routes} cluster routes active",
+                        "severity": "info",
+                    }
+                )
     except Exception:
         pass
 
@@ -1621,10 +2163,12 @@ def events():
     existing = {s["subject"] for s in data["subjects"]}
     for subj, count in sorted(all_subjects.items(), key=lambda x: -x[1]):
         if subj not in existing:
-            data["subjects"].append({
-                "subject": subj,
-                "num_subscriptions": count,
-            })
+            data["subjects"].append(
+                {
+                    "subject": subj,
+                    "num_subscriptions": count,
+                }
+            )
 
     return jsonify(data)
 

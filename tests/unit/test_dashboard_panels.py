@@ -132,9 +132,8 @@ class TestFreudianLabels:
 
     def test_ego_elements(self) -> None:
         content = DASHBOARD.read_text(encoding="utf-8")
-        assert 'id="ego-model"' in content
-        assert 'id="ego-role"' in content
         assert 'id="ego-slots"' in content
+        assert "Divine Council" in content
 
     def test_ego_js_binding(self) -> None:
         content = DASHBOARD.read_text(encoding="utf-8")
@@ -220,6 +219,124 @@ class TestTrainingEnriched:
     def test_retro_js_binding(self) -> None:
         content = DASHBOARD.read_text(encoding="utf-8")
         assert "retrospective_used" in content
+
+
+class TestTrainingSparkline:
+    """Tests for the training score sparkline."""
+
+    def test_sparkline_svg_exists(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="training-sparkline"' in content
+
+    def test_sparkline_polyline(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="training-spark-line"' in content
+
+    def test_sparkline_js_binding(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "recent_scores" in content
+
+
+class TestTrainingDomains:
+    """Tests for per-domain training breakdown."""
+
+    def test_domain_container(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="training-domains"' in content
+
+    def test_domain_js_binding(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "domain_breakdown" in content
+
+
+class TestTrainingTimer:
+    """Tests for training timer status display."""
+
+    def test_timer_element(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="training-timer"' in content
+
+    def test_timer_js_binding(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "timer_active" in content
+
+
+class TestTrainingControl:
+    """Tests for the Start Training button."""
+
+    def test_start_button_exists(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="training-start-btn"' in content
+
+    def test_start_function_exists(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "function startTraining" in content
+
+    def test_start_posts_to_api(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "/api/training/start" in content
+
+    def test_privilege_gating(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "Requires L3" in content
+
+
+class TestGymCurriculum:
+    """Tests for AtlasGym curriculum progression indicators."""
+
+    def test_gym_promo_bar(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "Promo:" in content
+
+    def test_gym_level_badge(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "levelColors" in content
+
+
+class TestCalibrationPanel:
+    """Tests for the Calibration (Bayesian) dashboard panel."""
+
+    def test_calibration_card_exists(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="sc-calibration"' in content
+
+    def test_calibration_elements(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="cal-confidence"' in content
+        assert 'id="cal-similarity"' in content
+        assert 'id="cal-temperature"' in content
+        assert 'id="cal-arbitrations"' in content
+        assert 'id="cal-anomalies"' in content
+
+    def test_calibration_js_binding(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "t.calibration" in content
+        assert "last_confidence" in content
+        assert "ego_arbitrations" in content
+
+    def test_bayesian_label(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "Bayesian" in content
+
+
+class TestExecutiveFunctionPanel:
+    """Tests for enhanced Executive Function panel."""
+
+    def test_context_strategy_element(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="ef-context"' in content
+
+    def test_decomp_element(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert 'id="ef-decomp"' in content
+
+    def test_context_strategy_js(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "last_context_strategy" in content
+
+    def test_sub_queries_js(self) -> None:
+        content = DASHBOARD.read_text(encoding="utf-8")
+        assert "last_sub_queries" in content
 
 
 class TestCogSciLabels:

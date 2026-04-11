@@ -87,8 +87,8 @@ except ImportError:
 # Optional curriculum planner for gap detection
 try:
     from agi.metacognition.curriculum_planner import (
-        CurriculumPlanner,
         CurriculumPlan,
+        CurriculumPlanner,
     )
 except ImportError:
     CurriculumPlanner = None  # type: ignore[assignment,misc]
@@ -283,6 +283,7 @@ class DungeonMaster:
         self._config = config or DMConfig()
         self._memory: Optional[Any] = None
         self._monitor: Optional[Any] = None
+        self._nats: Optional[Any] = None
         self._session_id = str(uuid.uuid4())[:8]
 
         # Initialize episodic memory if available
@@ -297,6 +298,16 @@ class DungeonMaster:
                 logger.info("[dungeon-master] episodic memory connected")
             except Exception:
                 logger.warning("[dungeon-master] episodic memory unavailable")
+
+        # Initialize NATS event fabric for training events
+        if NatsEventFabric is not None:
+            try:
+                self._nats = NatsEventFabric(
+                    NatsFabricConfig(url=self._config.nats_url)
+                )
+                logger.info("[dungeon-master] NATS event fabric connected")
+            except Exception:
+                logger.warning("[dungeon-master] NATS unavailable — events disabled")
 
         # Initialize read-only system monitor (interoception)
         if EgoMonitor is not None:
@@ -863,6 +874,24 @@ class DungeonMaster:
             return None
 
     # ------------------------------------------------------------------
+    # NATS event publishing
+    # ------------------------------------------------------------------
+
+    def _publish_event(self, topic: str, data: Dict[str, Any]) -> None:
+        """Publish a training event to NATS (fire-and-forget)."""
+        if self._nats is None:
+            return
+        try:
+            import asyncio
+
+            payload = json.dumps(data).encode()
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(self._nats.publish(topic, payload))
+            loop.close()
+        except Exception:
+            logger.debug("[dungeon-master] NATS publish failed for %s", topic)
+
+    # ------------------------------------------------------------------
     # Full training session
     # ------------------------------------------------------------------
 
@@ -908,6 +937,17 @@ class DungeonMaster:
             difficulty,
         )
 
+        # Publish session start event
+        self._publish_event(
+            "agi.training.progress",
+            {
+                "event": "session_start",
+                "session_id": self._session_id,
+                "total_episodes": episodes,
+                "difficulty": difficulty,
+            },
+        )
+
         for i in range(episodes):
             # Generate scenario (biased toward detected gaps)
             scenario = self.generate_scenario(
@@ -930,6 +970,20 @@ class DungeonMaster:
             # Store episode for dreaming
             self._store_training_episode(scenario, result)
 
+            # Publish per-episode progress event
+            self._publish_event(
+                "agi.training.progress",
+                {
+                    "event": "episode_complete",
+                    "session_id": self._session_id,
+                    "episode": i + 1,
+                    "total_episodes": episodes,
+                    "domain": scenario.domain,
+                    "score": result.synthesis_score,
+                    "latency_s": result.latency_s,
+                },
+            )
+
         elapsed = time.monotonic() - t0
         scores = [r.synthesis_score for r in results]
         domain_scores = [r.domain_score for r in results]
@@ -942,6 +996,20 @@ class DungeonMaster:
             domains_covered=list(set(domains_covered)),
             duration_s=elapsed,
             results=results,
+        )
+
+        # Publish session complete event
+        self._publish_event(
+            "agi.training.result",
+            {
+                "event": "session_complete",
+                "session_id": session.session_id,
+                "episodes": session.episodes,
+                "mean_synthesis_score": session.mean_synthesis_score,
+                "mean_domain_score": session.mean_domain_score,
+                "domains_covered": session.domains_covered,
+                "duration_s": session.duration_s,
+            },
         )
 
         logger.info(

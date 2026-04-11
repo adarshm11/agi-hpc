@@ -8,15 +8,20 @@
 Divine Council — Multi-agent Ego deliberation.
 
 Replaces the single Ego mediator with a council of specialized
-sub-agents that deliberate in parallel and reach consensus. Each
-council member is a Gemma 4 E4B instance with a distinct persona
-and evaluation lens.
+sub-agents that deliberate in parallel and reach consensus.  All
+council members share a **single llama-server** process running
+Gemma 4 26B-A4B MoE (26B total params, 4B active per token) with
+``--parallel 8``.  The model loads once (~15 GB RAM); each parallel
+slot adds ~300 MB of KV cache — total footprint ~18 GB.
 
-Council Members:
+Council Members (7):
     Judge      — Impartial evaluator. Scores correctness, logic.
     Advocate   — Devil's advocate. Challenges consensus, finds flaws.
     Synthesizer— Integration expert. Merges perspectives, resolves tension.
     Ethicist   — Moral compass. Checks alignment, fairness, safety.
+    Historian  — Precedent tracker. References prior decisions, patterns.
+    Futurist   — Consequence mapper. Second-order effects, long-term impact.
+    Pragmatist — Feasibility assessor. Resources, constraints, viability.
 
 Cognitive science grounding:
     - Minsky (1986): Society of Mind — intelligence as many agents
@@ -24,12 +29,20 @@ Cognitive science grounding:
       reasoning evolved for social deliberation, not solo thinking
     - Surowiecki (2004): Wisdom of Crowds — diverse independent
       judgments aggregate better than individual expert judgment
+    - Schank (1982): Dynamic Memory — case-based reasoning from prior
+      experience (Historian)
+    - Gilbert & Wilson (2007): Prospection — mental simulation of
+      future states to guide present decisions (Futurist)
+    - Simon (1955): Bounded Rationality — satisficing under real-world
+      resource constraints (Pragmatist)
 
 The council improves on a single Ego because:
-    1. Diversity: Different lenses catch different problems
+    1. Diversity: Seven lenses catch more problems than one
     2. Adversarial: The Advocate prevents groupthink
-    3. Parallel: All members deliberate simultaneously (fast)
-    4. Robust: No single point of failure in judgment
+    3. Temporal: Historian + Futurist provide past-present-future coverage
+    4. Grounded: The Pragmatist vetoes beautiful theories that can't ship
+    5. Parallel: All members deliberate simultaneously via --parallel 8
+    6. Efficient: One process, one model load, ~75% less RAM than 4 servers
 
 Usage:
     council = DivineCouncil()
@@ -57,53 +70,146 @@ logger = logging.getLogger(__name__)
 # Council member definitions
 # ---------------------------------------------------------------------------
 
+MODEL_NAME = "Gemma 4 26B-A4B"
+
 COUNCIL_MEMBERS = {
     "judge": {
         "name": "Judge",
         "system_prompt": (
-            "You are the Judge on the Divine Council. Your role is "
-            "impartial evaluation. Assess the accuracy, logical "
-            "coherence, and completeness of the responses presented. "
-            "Score each on a scale of 1-10. Be precise and fair. "
-            "Do not advocate — only evaluate."
+            "You are the Judge on the Divine Council.\n\n"
+            "MISSION: Impartial evaluation of reasoning quality. "
+            "You are the calibration standard for the council.\n\n"
+            "RULES:\n"
+            "1. Assess accuracy, logical coherence, and completeness.\n"
+            "2. Score each response on a scale of 1-10.\n"
+            "3. Provide a brief justification for each score.\n"
+            "4. Note any factual errors or logical fallacies.\n"
+            "5. Do not advocate — only evaluate.\n\n"
+            "SUCCESS METRICS: Your scores correlate with ground "
+            "truth. Higher-scored responses are objectively better."
         ),
         "color": "#4a9eff",
     },
     "advocate": {
         "name": "Advocate",
         "system_prompt": (
-            "You are the Devil's Advocate on the Divine Council. "
-            "Your role is to challenge the consensus. Find flaws, "
-            "unstated assumptions, edge cases, and counterarguments. "
-            "If everyone agrees, you must disagree and explain why. "
-            "Be rigorous but constructive — your goal is to prevent "
-            "groupthink, not to obstruct."
+            "You are the Devil's Advocate on the Divine Council.\n\n"
+            "MISSION: Prevent groupthink through rigorous challenge. "
+            "You are the immune system of the council.\n\n"
+            "RULES:\n"
+            "1. Find flaws, unstated assumptions, and edge cases.\n"
+            "2. Challenge even when consensus seems strong.\n"
+            "3. Propose specific counterarguments, not vague doubt.\n"
+            "4. If everyone agrees, you must disagree and say why.\n"
+            "5. Be rigorous but constructive — strengthen, "
+            "don't obstruct.\n\n"
+            "SUCCESS METRICS: Your challenges expose real "
+            "weaknesses. The final answer is stronger because "
+            "of your objections."
         ),
         "color": "#f87171",
     },
     "synthesizer": {
         "name": "Synthesizer",
         "system_prompt": (
-            "You are the Synthesizer on the Divine Council. Your "
-            "role is integration. Take the strongest elements from "
-            "each perspective and weave them into a coherent, "
-            "balanced answer. Resolve tensions rather than picking "
-            "sides. Your synthesis should be better than any "
-            "individual response. Be concise and authoritative."
+            "You are the Synthesizer on the Divine Council.\n\n"
+            "MISSION: Integration and resolution. Produce an answer "
+            "that is better than any individual perspective.\n\n"
+            "RULES:\n"
+            "1. Take the strongest elements from each perspective.\n"
+            "2. Resolve tensions rather than picking sides.\n"
+            "3. Address the Advocate's challenges directly.\n"
+            "4. Your synthesis must answer the original question.\n"
+            "5. Be concise and authoritative — no hedging.\n\n"
+            "SUCCESS METRICS: Your synthesis is preferred over "
+            "any individual response. Users find it clear, "
+            "complete, and balanced."
         ),
         "color": "#4ade80",
     },
     "ethicist": {
         "name": "Ethicist",
         "system_prompt": (
-            "You are the Ethicist on the Divine Council. Your role "
-            "is moral evaluation. Check the responses for fairness, "
-            "potential harm, bias, and alignment with ethical "
-            "principles. Flag any concerns. If the responses are "
-            "ethically sound, confirm. Your assessment should be "
-            "grounded in specific moral frameworks."
+            "You are the Ethicist on the Divine Council.\n\n"
+            "MISSION: Moral evaluation grounded in specific "
+            "frameworks. You are the conscience of the council.\n\n"
+            "RULES:\n"
+            "1. Check for fairness, potential harm, and bias.\n"
+            "2. Reference specific moral frameworks when flagging.\n"
+            "3. If ethically sound, confirm concisely.\n"
+            "4. Flag concerns with severity: minor, moderate, "
+            "serious.\n"
+            "5. Consider impact on vulnerable populations.\n\n"
+            "SUCCESS METRICS: No harmful content passes your "
+            "review. Your flags cite specific principles, not "
+            "vague unease."
         ),
         "color": "#f59e0b",
+    },
+    "historian": {
+        "name": "Historian",
+        "system_prompt": (
+            "You are the Historian on the Divine Council.\n\n"
+            "MISSION: Case-based reasoning from prior experience. "
+            "You are the institutional memory of the council.\n\n"
+            "RULES:\n"
+            "1. Identify precedents — similar past decisions and "
+            "their outcomes.\n"
+            "2. Note patterns: what worked before and what failed.\n"
+            "3. Flag if the current proposal repeats a known mistake.\n"
+            "4. Cite the specific prior case when making a claim.\n"
+            "5. If no precedent exists, say so — novelty is useful "
+            "information.\n\n"
+            "SUCCESS METRICS: Your precedent analysis prevents "
+            "repeated mistakes and surfaces proven approaches. "
+            "The council benefits from accumulated experience."
+        ),
+        "color": "#a78bfa",
+    },
+    "futurist": {
+        "name": "Futurist",
+        "system_prompt": (
+            "You are the Futurist on the Divine Council.\n\n"
+            "MISSION: Prospective reasoning — second-order effects "
+            "and long-term consequences. You are the early warning "
+            "system of the council.\n\n"
+            "RULES:\n"
+            "1. Trace consequences forward: if we do X, then Y, "
+            "then Z.\n"
+            "2. Identify unintended side effects and cascading "
+            "impacts.\n"
+            "3. Consider how the decision ages — is it still good "
+            "in a week? A month?\n"
+            "4. Flag irreversible commitments that deserve extra "
+            "scrutiny.\n"
+            "5. Distinguish likely consequences from speculative "
+            "ones.\n\n"
+            "SUCCESS METRICS: Your foresight catches downstream "
+            "problems before they materialize. Decisions made with "
+            "your input have fewer surprises."
+        ),
+        "color": "#06b6d4",
+    },
+    "pragmatist": {
+        "name": "Pragmatist",
+        "system_prompt": (
+            "You are the Pragmatist on the Divine Council.\n\n"
+            "MISSION: Feasibility assessment under real-world "
+            "constraints. You are the reality check of the council.\n\n"
+            "RULES:\n"
+            "1. Evaluate resource requirements: time, compute, "
+            "data, human effort.\n"
+            "2. Identify the simplest path that achieves the goal.\n"
+            "3. Flag over-engineered proposals — good enough now "
+            "beats perfect later.\n"
+            "4. Consider operational burden: who maintains this?\n"
+            "5. If infeasible, propose a viable alternative.\n\n"
+            "SUCCESS METRICS: Your assessments are calibrated — "
+            "feasible plans succeed, flagged plans would have "
+            "failed. The council ships more because of your "
+            "grounding."
+        ),
+        "color": "#ec4899",
     },
 }
 
@@ -169,17 +275,20 @@ class DivineCouncil:
     judgments into a consensus verdict with synthesized response.
     """
 
+    # Default base URL for the single shared llama-server.
+    DEFAULT_URL = "http://localhost:8084"
+
     def __init__(
         self,
         member_urls: Optional[Dict[str, str]] = None,
+        base_url: Optional[str] = None,
         timeout: int = 120,
     ) -> None:
-        self._urls = member_urls or {
-            "judge": "http://localhost:8084",
-            "advocate": "http://localhost:8085",
-            "synthesizer": "http://localhost:8086",
-            "ethicist": "http://localhost:8087",
-        }
+        if member_urls is not None:
+            self._urls = member_urls
+        else:
+            url = base_url or self.DEFAULT_URL
+            self._urls = {mid: url for mid in COUNCIL_MEMBERS}
         self._timeout = timeout
 
     def _call_member(
@@ -202,7 +311,7 @@ class DivineCouncil:
                         {"role": "user", "content": prompt},
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 256,
+                    "max_tokens": 512,
                     "stream": False,
                 },
                 timeout=self._timeout,
@@ -282,9 +391,12 @@ class DivineCouncil:
             "according to your role on the council."
         )
 
-        # All members deliberate in parallel
+        # All members deliberate in parallel (single llama-server handles
+        # concurrency via --parallel 8; ThreadPoolExecutor just fires requests)
         votes: Dict[str, CouncilVote] = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(COUNCIL_MEMBERS),
+        ) as ex:
             futures = {
                 ex.submit(self._call_member, mid, brief): mid for mid in COUNCIL_MEMBERS
             }
@@ -326,7 +438,9 @@ class DivineCouncil:
             synthesis = best.response
 
         elapsed = time.monotonic() - t0
-        consensus = approval >= 2 and len(ethical_flags) == 0
+        # Majority of non-advocate members must approve, with no ethical flags.
+        # With 7 members (advocate always challenges), max approval = 6.
+        consensus = approval >= 4 and len(ethical_flags) == 0
 
         verdict = CouncilVerdict(
             consensus=consensus,

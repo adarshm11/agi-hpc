@@ -154,8 +154,13 @@ class TreeOfThought:
     """Multi-path reasoning engine for the Freudian psyche.
 
     Generates multiple reasoning branches from each hemisphere,
-    evaluates them via the Ego, and synthesizes the best into
-    a final answer.
+    evaluates them via the Ego (or Divine Council), and synthesizes
+    the best into a final answer.
+
+    When a DivineCouncil instance is provided, branch evaluation
+    uses 4-agent deliberation (Judge/Advocate/Synthesizer/Ethicist)
+    instead of a single Ego call. This produces richer scoring,
+    adversarial challenge of weak branches, and ethical review.
     """
 
     def __init__(
@@ -164,11 +169,13 @@ class TreeOfThought:
         id_url: str = "http://localhost:8082",
         ego_url: str = "http://localhost:8084",
         timeout: int = 300,
+        council: object = None,
     ) -> None:
         self._superego_url = superego_url
         self._id_url = id_url
         self._ego_url = ego_url
         self._timeout = timeout
+        self._council = council  # Optional DivineCouncil instance
 
     def _call_llm(
         self,
@@ -242,8 +249,14 @@ class TreeOfThought:
             len(id_branches),
         )
 
-        # Step 2: Ego evaluates all branches
-        self._evaluate_branches(query, all_branches)
+        # Step 2: Evaluate all branches
+        council_verdict = None
+        if self._council is not None:
+            # Divine Council evaluation: 4-agent deliberation
+            council_verdict = self._council_evaluate(query, all_branches)
+        else:
+            # Simple Ego evaluation (single LLM call)
+            self._evaluate_branches(query, all_branches)
 
         # Step 3: Select top branches (best from each hemisphere)
         selected = self._select_top(all_branches, top_n=2)
@@ -255,10 +268,13 @@ class TreeOfThought:
         )
 
         # Step 4: Synthesize from best branches
+        # Always use the full-size Ego for synthesis — the council
+        # E4B Synthesizer is too small to produce quality answers.
+        # Council is used for evaluation/scoring only.
         synthesis = self._synthesize(query, selected)
 
         # Build debate log for UI
-        debate_log = self._format_debate_log(all_branches, selected)
+        debate_log = self._format_debate_log(all_branches, selected, council_verdict)
 
         elapsed = time.monotonic() - t0
 
@@ -371,6 +387,93 @@ class TreeOfThought:
 
         return branches
 
+    def _council_evaluate(
+        self,
+        query: str,
+        branches: List[ReasoningBranch],
+    ):
+        """Have the Divine Council evaluate branches.
+
+        The council receives a formatted brief with all branches
+        and deliberates in parallel. The Judge's scores are mapped
+        back to branch ego_scores. The Advocate's challenges flag
+        weak reasoning. The Ethicist checks for safety concerns.
+        The Synthesizer produces the final answer.
+
+        Returns:
+            CouncilVerdict from the council's deliberation.
+        """
+        # Format branches as the "response" for the council
+        branches_text = ""
+        for i, b in enumerate(branches):
+            branches_text += (
+                f"Branch {i+1} ({b.hemisphere}, {b.approach}):\n"
+                f"{b.content[:300]}\n\n"
+            )
+
+        verdict = self._council.deliberate(
+            query=query,
+            superego_response=(
+                "Superego branches:\n"
+                + "\n".join(
+                    f"- {b.approach}: {b.content[:200]}"
+                    for b in branches
+                    if b.hemisphere == "superego"
+                )
+            ),
+            id_response=(
+                "Id branches:\n"
+                + "\n".join(
+                    f"- {b.approach}: {b.content[:200]}"
+                    for b in branches
+                    if b.hemisphere == "id"
+                )
+            ),
+            context=branches_text,
+        )
+
+        # Map Judge's score to all branches (uniform for now)
+        judge_vote = verdict.votes.get("judge")
+        if judge_vote and judge_vote.score > 0:
+            # Parse per-branch scores from Judge if present
+            import re as _re
+
+            for i, b in enumerate(branches):
+                match = _re.search(
+                    rf"[Bb](?:ranch)?\s*{i+1}\s*[:=]\s*(\d+)",
+                    judge_vote.response,
+                )
+                if match:
+                    b.ego_score = min(10.0, float(match.group(1)))
+                else:
+                    b.ego_score = judge_vote.score
+
+        # Advocate challenges lower scores for weak branches
+        advocate_vote = verdict.votes.get("advocate")
+        if advocate_vote:
+            lower = advocate_vote.response.lower()
+            for b in branches:
+                # If advocate specifically calls out this approach
+                if b.approach.lower() in lower:
+                    b.ego_score = max(1.0, b.ego_score - 2.0)
+
+        # Ethicist flags reduce scores
+        ethicist_vote = verdict.votes.get("ethicist")
+        if ethicist_vote and ethicist_vote.flags:
+            for b in branches:
+                b.ego_score = max(1.0, b.ego_score - 1.0)
+
+        logger.info(
+            "[tot] Council evaluated %d branches: "
+            "consensus=%s, %d approve, %d challenge",
+            len(branches),
+            verdict.consensus,
+            verdict.approval_count,
+            verdict.challenge_count,
+        )
+
+        return verdict
+
     def _evaluate_branches(
         self,
         query: str,
@@ -472,12 +575,13 @@ class TreeOfThought:
         self,
         all_branches: List[ReasoningBranch],
         selected: List[ReasoningBranch],
+        council_verdict=None,
     ) -> str:
         """Format the debate for the UI collapsible."""
         lines: List[str] = []
 
         lines.append("### Reasoning Branches\n")
-        for i, b in enumerate(all_branches):
+        for b in all_branches:
             star = " ★" if b in selected else ""
             lines.append(
                 f"**{b.hemisphere.title()} — {b.approach}** "
@@ -491,5 +595,10 @@ class TreeOfThought:
             lines.append(
                 f"- {b.hemisphere.title()}: {b.approach} " f"(score={b.ego_score:.0f})"
             )
+
+        # Include council deliberation details if available
+        if council_verdict is not None:
+            lines.append("\n### Divine Council Deliberation\n")
+            lines.append(council_verdict.format_log())
 
         return "\n".join(lines)
