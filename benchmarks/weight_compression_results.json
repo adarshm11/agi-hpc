@@ -1,0 +1,91 @@
+{
+  "benchmark_info": {
+    "description": "TurboQuant SVD weight compression benchmark",
+    "version": "0.6.0",
+    "shapes": [
+      "512x512",
+      "1024x1024"
+    ],
+    "energies": [
+      0.9,
+      0.95
+    ],
+    "bit_widths": [
+      3
+    ]
+  },
+  "results": [
+    {
+      "shape": "512x512",
+      "energy_threshold": 0.9,
+      "bits": 3,
+      "rank": 256,
+      "energy_retained": 0.8985,
+      "original_mb": 1.05,
+      "compressed_mb": 0.1,
+      "ratio": 10.24,
+      "vs_q4": 1.28,
+      "vs_q2k": 0.8,
+      "cosine_sim": 0.906321,
+      "frobenius_rel_err": 0.428077,
+      "compress_ms": 95.5,
+      "decompress_ms": 46.8,
+      "factored_matmul_ms": 46.83,
+      "dense_matmul_ms": 0.08
+    },
+    {
+      "shape": "512x512",
+      "energy_threshold": 0.95,
+      "bits": 3,
+      "rank": 256,
+      "energy_retained": 0.8985,
+      "original_mb": 1.05,
+      "compressed_mb": 0.1,
+      "ratio": 10.24,
+      "vs_q4": 1.28,
+      "vs_q2k": 0.8,
+      "cosine_sim": 0.906321,
+      "frobenius_rel_err": 0.428077,
+      "compress_ms": 87.6,
+      "decompress_ms": 45.2,
+      "factored_matmul_ms": 47.01,
+      "dense_matmul_ms": 0.08
+    },
+    {
+      "shape": "1024x1024",
+      "energy_threshold": 0.9,
+      "bits": 3,
+      "rank": 483,
+      "energy_retained": 0.9,
+      "original_mb": 4.19,
+      "compressed_mb": 0.38,
+      "ratio": 11.07,
+      "vs_q4": 1.38,
+      "vs_q2k": 0.86,
+      "cosine_sim": 0.907405,
+      "frobenius_rel_err": 0.425141,
+      "compress_ms": 528.6,
+      "decompress_ms": 281.7,
+      "factored_matmul_ms": 287.17,
+      "dense_matmul_ms": 0.56
+    },
+    {
+      "shape": "1024x1024",
+      "energy_threshold": 0.95,
+      "bits": 3,
+      "rank": 512,
+      "energy_retained": 0.9078,
+      "original_mb": 4.19,
+      "compressed_mb": 0.4,
+      "ratio": 10.45,
+      "vs_q4": 1.31,
+      "vs_q2k": 0.82,
+      "cosine_sim": 0.911228,
+      "frobenius_rel_err": 0.416864,
+      "compress_ms": 561.5,
+      "decompress_ms": 289.1,
+      "factored_matmul_ms": 295.55,
+      "dense_matmul_ms": 0.67
+    }
+  ]
+}

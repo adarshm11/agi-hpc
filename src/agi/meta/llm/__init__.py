@@ -36,6 +36,10 @@ __all__ = [
     "TurboQuantKV",
     "TurboQuantKVCache",
     "CompressedKV",
+    "TurboQuantWeights",
+    "CompressedWeight",
+    "CompressedModel",
+    "WeightCompressionConfig",
 ]
 
 try:
@@ -50,6 +54,16 @@ try:
         CompressedKV,
         TurboQuantKV,
         TurboQuantKVCache,
+    )
+except ImportError:
+    pass
+
+try:
+    from agi.meta.llm.turboquant_weights import (
+        CompressedModel,
+        CompressedWeight,
+        TurboQuantWeights,
+        WeightCompressionConfig,
     )
 except ImportError:
     pass
