@@ -8,9 +8,11 @@ StartLimitBurst=3
 Type=simple
 User=claude
 Environment=CUDA_VISIBLE_DEVICES=1
+Environment=GGML_CUDA_NO_VMM=1
 ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
     --model /home/claude/models/Qwen3-32B-Q5_K_M/Qwen3-32B-Q5_K_M.gguf \
-    --host 0.0.0.0 --port 8082 --ctx-size 8192 --threads 12
+    --host 0.0.0.0 --port 8082 --ctx-size 8192 --threads 12 \
+    --no-mmap --flash-attn off
 Restart=always
 RestartSec=15
 StandardOutput=journal

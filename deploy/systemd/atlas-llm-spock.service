@@ -6,9 +6,11 @@ After=network.target
 Type=simple
 User=claude
 Environment=CUDA_VISIBLE_DEVICES=0
+Environment=GGML_CUDA_NO_VMM=1
 ExecStart=/home/claude/llama.cpp/build/bin/llama-server \
     --model /home/claude/models/Qwen2.5-72B-Instruct-Q5_K_M/qwen2.5-72b-instruct-q5_k_m-00001-of-00014.gguf \
     --host 0.0.0.0 --port 8080 --ctx-size 8192 --threads 24 \
+    --no-mmap --flash-attn off \
     --path /home/claude/atlas-chat
 Restart=always
 RestartSec=15

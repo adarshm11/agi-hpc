@@ -478,6 +478,9 @@ sensors | grep Package
 | Search returns 0 results | tsvector not populated or IVFFlat probes=1 | Run populate script; check probes=10 |
 | LLM very slow | KV cache quantized on Volta | Remove --cache-type-k/v flags |
 | GPU OOM | Multiple models loaded | Check `nvidia-smi`, kill extra processes |
+| GPU OOM (phantom) | mmap not releasing weights from RAM | Add `--no-mmap` to llama-server flags |
+| CUDA VMM crash | Virtual memory management bug | Set `GGML_CUDA_NO_VMM=1` in service env |
+| Flash attention hang | FA kernel sync failure on large ctx | Add `--flash-attn off` (required on Volta GV100) |
 | CPU >95°C | Too many parallel workers | Cap at 20 threads (`taskset -c`) |
 | PCA model missing | First deployment | Run `tqpro_migrate.py --fit-only` |
 
