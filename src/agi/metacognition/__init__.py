@@ -87,6 +87,28 @@ __all__ = [
     "EvidenceValidator",
 ]
 
+# Phase 3: Autonomous research loop
+try:
+    from agi.metacognition.research_loop import (
+        ResearchLoop,
+        ResearchLoopConfig,
+        ResearchGoal,
+        ResearchResult,
+        ResearchTelemetry,
+    )
+
+    __all__.extend(
+        [
+            "ResearchLoop",
+            "ResearchLoopConfig",
+            "ResearchGoal",
+            "ResearchResult",
+            "ResearchTelemetry",
+        ]
+    )
+except ImportError:
+    pass
+
 # Sprint 6: LLM-based reflection
 try:
     from agi.meta.llm_reflection import (

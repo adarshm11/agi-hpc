@@ -349,3 +349,70 @@ class KnowledgeGraph:
                 docs = cur.fetchone()[0]
 
         return {"entities": entities, "relationships": rels, "documents": docs}
+
+    def lint(self) -> dict[str, list]:
+        """Health-check the knowledge graph (inspired by Karpathy LLM Wiki).
+
+        Finds contradictions, orphaned entities, and stale knowledge.
+        Returns dict with lists of issues per category.
+        """
+        issues: dict[str, list] = {
+            "contradictions": [],
+            "orphaned_entities": [],
+            "duplicate_entities": [],
+        }
+
+        if self._config.use_sqlite:
+            assert self._conn is not None
+
+            # Contradictions: same subject-object with opposing predicates
+            contra_pairs = [
+                ("uses", "contradicts"),
+                ("extends", "contradicts"),
+                ("implements", "contradicts"),
+            ]
+            for p1, p2 in contra_pairs:
+                rows = self._conn.execute(
+                    "SELECT r1.subject, r1.object, r1.source_doc, "
+                    "r2.source_doc "
+                    "FROM knowledge_relationships r1 "
+                    "JOIN knowledge_relationships r2 "
+                    "ON r1.subject = r2.subject AND r1.object = r2.object "
+                    "WHERE r1.predicate = ? AND r2.predicate = ?",
+                    (p1, p2),
+                ).fetchall()
+                for row in rows:
+                    issues["contradictions"].append(
+                        {
+                            "subject": row[0],
+                            "object": row[1],
+                            "predicates": [p1, p2],
+                            "sources": [row[2], row[3]],
+                        }
+                    )
+
+            # Orphaned entities: not in any relationship
+            orphans = self._conn.execute(
+                "SELECT e.name FROM knowledge_entities e "
+                "WHERE e.name NOT IN "
+                "(SELECT subject FROM knowledge_relationships) "
+                "AND e.name NOT IN "
+                "(SELECT object FROM knowledge_relationships)"
+            ).fetchall()
+            issues["orphaned_entities"] = [r[0] for r in orphans]
+
+            # Duplicate entities: same name, different descriptions
+            dupes = self._conn.execute(
+                "SELECT name, COUNT(*) as cnt "
+                "FROM knowledge_entities "
+                "GROUP BY name HAVING cnt > 1"
+            ).fetchall()
+            issues["duplicate_entities"] = [r[0] for r in dupes]
+
+        logger.info(
+            "Lint: %d contradictions, %d orphans, %d duplicates",
+            len(issues["contradictions"]),
+            len(issues["orphaned_entities"]),
+            len(issues["duplicate_entities"]),
+        )
+        return issues

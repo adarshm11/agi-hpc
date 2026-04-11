@@ -1,0 +1,22 @@
+# Knowledge Pipeline Configuration
+# Document-to-structured-knowledge extraction + autonomous research loop
+
+knowledge:
+  extraction:
+    llm_url: "http://localhost:8082"
+    model_name: "Qwen3-32B"
+    chunk_size: 2000
+    overlap: 200
+    timeout: 120
+
+  graph:
+    db_dsn: "dbname=atlas user=claude"
+    table_prefix: "knowledge"
+    # For testing: use_sqlite: true, sqlite_path: ":memory:"
+
+  research:
+    llm_url: "http://localhost:8082"
+    max_cycles: 3
+    min_confidence: 0.7
+    cooldown_seconds: 300
+    enabled: true

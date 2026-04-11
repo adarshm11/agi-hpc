@@ -43,6 +43,9 @@ __all__ = [
     "ProceduralMemory",
     "SemanticMemory",
     "MemoryService",
+    # Phase 3 (Knowledge pipeline)
+    "KnowledgeExtractor",
+    "KnowledgeGraph",
     # Legacy (gRPC-based)
     "UnifiedMemoryService",
     "UnifiedMemoryServicer",
@@ -71,13 +74,24 @@ try:
 except ImportError:
     pass
 
+# Phase 3: Knowledge pipeline
+try:
+    from agi.memory.knowledge.extractor import KnowledgeExtractor
+except ImportError:
+    pass
+
+try:
+    from agi.memory.knowledge.graph import KnowledgeGraph
+except ImportError:
+    pass
+
 # Legacy unified interface (gRPC-based, Sprint 1-6)
 try:
     from agi.memory.unified import (
+        PlanningContext,
+        UnifiedMemoryConfig,
         UnifiedMemoryService,
         UnifiedMemoryServicer,
-        UnifiedMemoryConfig,
-        PlanningContext,
     )
 except ImportError:
     pass

@@ -182,11 +182,14 @@ class MemoryService:
     STORE_SUBJECTS = {
         "agi.memory.store.episodic": "_handle_store_episodic",
         "agi.memory.store.procedural": "_handle_store_procedural",
+        "agi.knowledge.ingest": "_handle_ingest_document",
     }
     QUERY_SUBJECTS = {
         "agi.memory.query.semantic": "_handle_query_semantic",
         "agi.memory.query.episodic": "_handle_query_episodic",
         "agi.memory.query.procedural": "_handle_query_procedural",
+        "agi.knowledge.query.entity": "_handle_query_entity",
+        "agi.knowledge.query.stats": "_handle_query_knowledge_stats",
     }
 
     def __init__(self, config: Optional[MemoryServiceConfig] = None) -> None:
@@ -548,6 +551,121 @@ class MemoryService:
             self._telemetry.errors += 1
             logger.exception(
                 "[memory-service] error querying procedural trace=%s",
+                trace_id[:8],
+            )
+
+    # ------------------------------------------------------------------
+    # Knowledge pipeline handlers
+    # ------------------------------------------------------------------
+
+    async def _handle_ingest_document(self, event: Event) -> None:
+        """Ingest a document and extract structured knowledge."""
+        trace_id = event.trace_id or "unknown"
+        try:
+            from agi.memory.knowledge.extractor import (
+                KnowledgeExtractionConfig,
+                KnowledgeExtractor,
+            )
+            from agi.memory.knowledge.graph import (
+                KnowledgeGraph,
+                KnowledgeGraphConfig,
+            )
+
+            text = event.payload.get("text", "")
+            source = event.payload.get("source", "unknown")
+
+            extractor = KnowledgeExtractor(KnowledgeExtractionConfig())
+            knowledge = extractor.extract_from_text(text, source)
+
+            graph = KnowledgeGraph(KnowledgeGraphConfig(use_sqlite=True))
+            doc_id = graph.store(knowledge)
+
+            result_event = Event.create(
+                source="memory",
+                event_type="knowledge.ingest.result",
+                payload={
+                    "doc_id": doc_id,
+                    "entities": len(knowledge.entities),
+                    "relationships": len(knowledge.relationships),
+                    "concepts": knowledge.key_concepts,
+                    "summary": knowledge.summary,
+                },
+                trace_id=trace_id,
+            )
+            if self._fabric and self._fabric.is_connected:
+                await self._fabric.publish("agi.knowledge.result", result_event)
+
+            logger.info(
+                "[memory-service] ingested doc %s: " "%d entities, %d rels, trace=%s",
+                source[:30],
+                len(knowledge.entities),
+                len(knowledge.relationships),
+                trace_id[:8],
+            )
+        except Exception:
+            logger.exception(
+                "[memory-service] error ingesting document trace=%s",
+                trace_id[:8],
+            )
+
+    async def _handle_query_entity(self, event: Event) -> None:
+        """Query the knowledge graph for an entity."""
+        trace_id = event.trace_id or "unknown"
+        try:
+            from agi.memory.knowledge.graph import (
+                KnowledgeGraph,
+                KnowledgeGraphConfig,
+            )
+
+            name = event.payload.get("name", "")
+            graph = KnowledgeGraph(KnowledgeGraphConfig(use_sqlite=True))
+            entity = graph.query_entity(name)
+            payload = {}
+            if entity:
+                payload = {
+                    "name": entity.name,
+                    "type": entity.entity_type,
+                    "description": entity.description,
+                    "source": entity.source_doc,
+                }
+
+            result_event = Event.create(
+                source="memory",
+                event_type="knowledge.query.result",
+                payload=payload,
+                trace_id=trace_id,
+            )
+            if self._fabric and self._fabric.is_connected:
+                await self._fabric.publish("agi.knowledge.result", result_event)
+        except Exception:
+            logger.exception(
+                "[memory-service] error querying entity trace=%s",
+                trace_id[:8],
+            )
+
+    async def _handle_query_knowledge_stats(self, event: Event) -> None:
+        """Return knowledge graph statistics."""
+        trace_id = event.trace_id or "unknown"
+        try:
+            from agi.memory.knowledge.graph import (
+                KnowledgeGraph,
+                KnowledgeGraphConfig,
+            )
+
+            graph = KnowledgeGraph(KnowledgeGraphConfig(use_sqlite=True))
+            stats = graph.get_stats()
+
+            result_event = Event.create(
+                source="memory",
+                event_type="knowledge.stats.result",
+                payload=stats,
+                trace_id=trace_id,
+            )
+            if self._fabric and self._fabric.is_connected:
+                await self._fabric.publish("agi.knowledge.result", result_event)
+        except Exception:
+            logger.exception(
+                "[memory-service] error getting knowledge stats trace=%s",
                 trace_id[:8],
             )
 
