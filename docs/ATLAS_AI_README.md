@@ -38,7 +38,7 @@ User → Caddy (HTTPS) → OAuth2 (Google Auth) → RAG Server (8081)
 | 2c | Research Loop | Autonomous gap detection + research cycles | — | Active |
 | 3 | Safety Gateway | ErisML DEME 3-layer pipeline | 50055 | Active |
 | 4 | Id (Right Hemisphere) | Qwen 3 32B Q5 via llama.cpp, GPU 1 | 8082 | Active |
-| 4b | Ego (Mediator) | Gemma 4 26B-A4B MoE via llama.cpp, CPU | 8084 | Active |
+| 4b | Ego (Divine Council, 7 agents) | Gemma 4 26B-A4B MoE, 1 server --parallel 8, CPU | 8084 | Active |
 | 5 | Metacognition | Monitor + Reflector + Adjuster | — | Active |
 | 6 | Environment | System + Repo sensors | — | Active |
 | 7 | DHT Registry | Service discovery + config store | — | Active |
@@ -164,17 +164,24 @@ are detected, injects metacognitive warnings into the debate prompts —
 recovering ~33% of displaced verdicts. Scores distractor intensity on a
 graded scale: none → mild → vivid (matching benchmark dose-response design).
 
-**Divine Council (Minsky, 1986; Mercier & Sperber, 2011):**
-The Ego is not a single mediator but a council of four specialized sub-agents
-running in parallel on CPU (each a Gemma 4 26B-A4B MoE instance, ~14GB RAM, 4B active params per token):
+**Divine Council (Minsky, 1986; Mercier & Sperber, 2011; Schank, 1982; Simon, 1955):**
+The Ego is not a single mediator but a council of seven specialized sub-agents
+sharing a **single llama-server** process with `--parallel 8` on CPU (Gemma 4
+26B-A4B MoE, ~18 GB total: ~15 GB model + ~300 MB KV cache per slot):
 - **Judge** — Impartial evaluator, scores correctness and logic
 - **Advocate** — Devil's advocate, challenges consensus, finds flaws
 - **Synthesizer** — Integration expert, merges perspectives into coherent answer
 - **Ethicist** — Moral compass, flags bias/harm/fairness concerns
+- **Historian** — Precedent tracker, case-based reasoning from prior experience (Schank, 1982)
+- **Futurist** — Consequence mapper, second-order effects and long-term impact (Gilbert & Wilson, 2007)
+- **Pragmatist** — Feasibility assessor, resource constraints and viability (Simon, 1955)
 
-All four deliberate simultaneously on every complex query. The Advocate always
-challenges (preventing groupthink). The Ethicist can veto consensus if ethical
-concerns arise. With 221GB free RAM, the council adds minimal overhead.
+All seven deliberate simultaneously on every complex query via concurrent HTTP
+requests to the shared server. The Advocate always challenges (preventing
+groupthink). The Ethicist can veto consensus if ethical concerns arise.
+Consensus requires majority approval (4+ of 6 non-advocate members) with no
+ethical flags. The single-server architecture uses ~75% less RAM than running
+separate instances per member.
 
 **Executive Function (Miyake et al., 2000):**
 The prefrontal cortex of the architecture. Before any reasoning begins, the
@@ -195,10 +202,13 @@ executive function analyzes the query and decides:
 Instead of each hemisphere producing one answer, each generates 3 reasoning branches
 using different strategies (logical analysis, rules/precedent, evidence-based for the
 Superego; gut feeling, creative analogy, human impact for the Id). The **Divine Council**
-evaluates all 6 branches through 4-agent deliberation:
+evaluates all 6 branches through 7-agent deliberation:
 - The **Judge** scores each branch for accuracy, depth, and usefulness
 - The **Advocate** challenges weak reasoning and penalizes unsupported claims
 - The **Ethicist** reviews branches for bias, harm, and fairness concerns
+- The **Historian** checks branches against prior decisions and known failure modes
+- The **Futurist** traces second-order consequences and flags irreversible commitments
+- The **Pragmatist** assesses feasibility and resource requirements
 - The **Synthesizer** produces the final answer from the strongest branches
 
 This replaces the single-Ego evaluation with adversarial multi-agent review,

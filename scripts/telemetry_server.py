@@ -915,7 +915,7 @@ def build_telemetry():
             "ego": {
                 "status": services["ego"],
                 "model": "Gemma 4 26B-A4B",
-                "role": "Divine Council (4 x 26B-A4B MoE)",
+                "role": "Divine Council (7 agents, 1 server, --parallel 8)",
             },
         },
         "nats": _get_nats(),

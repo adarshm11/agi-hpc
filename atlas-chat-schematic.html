@@ -246,9 +246,9 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   </div>
 
   <div class="sub-card active" id="sc-ego">
-    <div class="card-header"><span class="status-dot on"></span><span class="name">Divine Council</span><span class="model-tag">4 x 26B-A4B MoE</span></div>
-    <div class="card-metric">Judge | Advocate | Synth | Ethicist</div>
-    <div class="card-metric">Workers: <span class="val" id="ego-slots">4</span> | CPU: <span class="val" id="ego-cpu-temp">--</span>&deg;C | Priv: <span class="val" id="ego-priv-badge">L0</span></div>
+    <div class="card-header"><span class="status-dot on"></span><span class="name">Divine Council</span><span class="model-tag">7 x 26B-A4B MoE</span></div>
+    <div class="card-metric">Judge | Advocate | Synth | Ethicist | Historian | Futurist | Pragmatist</div>
+    <div class="card-metric">Slots: <span class="val" id="ego-slots">8</span> (1 server) | CPU: <span class="val" id="ego-cpu-temp">--</span>&deg;C | Priv: <span class="val" id="ego-priv-badge">L0</span></div>
   </div>
 
   <div class="sub-card active" id="sc-memory">
@@ -443,11 +443,15 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         ['id',        'Id',                  cx+140,146, 110, 28, '#fb923c','rgba(251,146,60,0.12)','Qwen 3 32B | GPU 1'],
         // Calibration (between hemispheres)
         ['calibration','Calibration',        cx,  146,  80, 18, '#a78bfa','rgba(167,139,250,0.12)'],
-        // Divine Council row (4 members, below bus)
-        ['judge',     'Judge',               cx-150,214, 66, 22, '#4ade80','rgba(74,222,128,0.12)'],
-        ['advocate',  'Advocate',            cx-50, 214, 66, 22, '#f87171','rgba(248,113,113,0.12)'],
-        ['synth',     'Synthesizer',         cx+50, 214, 76, 22, '#4ade80','rgba(74,222,128,0.12)'],
-        ['ethicist',  'Ethicist',            cx+150,214, 66, 22, '#f59e0b','rgba(245,158,11,0.12)'],
+        // Divine Council — row 1: core evaluators
+        ['judge',     'Judge',               cx-112,206, 62, 20, '#4ade80','rgba(74,222,128,0.12)'],
+        ['advocate',  'Advocate',            cx-37, 206, 62, 20, '#f87171','rgba(248,113,113,0.12)'],
+        ['synth',     'Synthesizer',         cx+37, 206, 68, 20, '#4ade80','rgba(74,222,128,0.12)'],
+        ['ethicist',  'Ethicist',            cx+112,206, 62, 20, '#f59e0b','rgba(245,158,11,0.12)'],
+        // Divine Council — row 2: advisory members
+        ['historian', 'Historian',           cx-75, 230, 62, 20, '#a78bfa','rgba(167,139,250,0.12)'],
+        ['futurist',  'Futurist',            cx,    230, 58, 20, '#06b6d4','rgba(6,182,212,0.12)'],
+        ['pragmatist','Pragmatist',          cx+75, 230, 66, 20, '#ec4899','rgba(236,72,153,0.12)'],
         // Output row
         ['safety_out','Safety Output Gate',  cx,  256,  110, 18, '#f87171','rgba(248,113,113,0.12)'],
         ['episodes',  'Episodes Stored',     cx,  284,  100, 18, '#4ade80','rgba(74,222,128,0.12)'],
@@ -507,8 +511,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 
       // Debate Bus: horizontal bar between Superego and Id
       var busY = N('superego').y + N('superego').h/2 + 12;
-      var busLeft = N('judge').x - N('judge').w/2;
-      var busRight = N('ethicist').x + N('ethicist').w/2;
+      var busLeft = N('judge').x - N('judge').w/2 - 4;
+      var busRight = N('ethicist').x + N('ethicist').w/2 + 4;
       // Superego drops to bus
       svg.append('line')
         .attr('x1',N('superego').x).attr('y1',N('superego').y+N('superego').h/2)
@@ -529,8 +533,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         .attr('text-anchor','middle').attr('fill','#7a8ba8')
         .attr('font-size','7px').attr('font-style','italic')
         .text('NATS Pub/Sub Message Bus (agi.debate.*)');
-      // Bus drops to each council member
-      ['judge','advocate','synth','ethicist'].forEach(function(m){
+      // Bus drops to each council member (both rows)
+      ['judge','advocate','synth','ethicist','historian','futurist','pragmatist'].forEach(function(m){
         var n = N(m);
         svg.append('line')
           .attr('x1',n.x).attr('y1',busY)
@@ -542,13 +546,16 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       svg.append('text').attr('x',cx).attr('y',N('judge').y-N('judge').h/2-4)
         .attr('text-anchor','middle').attr('fill','#7a8ba8')
         .attr('font-size','7px').attr('font-style','italic')
-        .text('Divine Council (4 x 26B-A4B MoE on CPU)');
+        .text('Divine Council (7 agents, 1 server, --parallel 8)');
 
-      // Council -> Safety out
+      // Council -> Safety out (all 7 members)
       fanLine('judge','safety_out','#4ade80','a');
       fanLine('advocate','safety_out','#f87171','a');
       fanLine('synth','safety_out','#4ade80','a');
       fanLine('ethicist','safety_out','#f59e0b','a');
+      fanLine('historian','safety_out','#a78bfa','a');
+      fanLine('futurist','safety_out','#06b6d4','a');
+      fanLine('pragmatist','safety_out','#ec4899','a');
 
       // ── Side connections: Training loop (left) ──
       // Episodes → Training

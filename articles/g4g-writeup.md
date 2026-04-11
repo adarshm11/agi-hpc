@@ -17,19 +17,19 @@ Atlas orchestrates seven LLM instances via llama.cpp in a design that maps onto 
 
 - **Superego** (Gemma 4 31B, GPU 0): Analytical reasoning — ethical frameworks, evidence, precision. 2.2 tok/s on a Quadro GV100.
 - **Id** (Qwen 3 32B, GPU 1): Creative reasoning — intuition, analogy, human impact. 25.9 tok/s.
-- **Divine Council** (4 x Gemma 4 26B-A4B MoE, CPU): Four specialized agents that deliberate in parallel — **Judge** (scores accuracy), **Advocate** (challenges consensus), **Synthesizer** (integrates perspectives), **Ethicist** (flags harm). The 26B-A4B MoE activates only 4B params per token, delivering near-frontier reasoning (LMArena 1441) at edge speed. All four instances run concurrently in 23GB RAM.
+- **Divine Council** (7 x Gemma 4 26B-A4B MoE, single CPU server with `--parallel 8`): Seven specialized agents sharing one llama-server process — **Judge** (scores accuracy), **Advocate** (challenges consensus), **Synthesizer** (integrates perspectives), **Ethicist** (flags harm), **Historian** (precedent tracking), **Futurist** (consequence mapping), **Pragmatist** (feasibility assessment). The 26B-A4B MoE activates only 4B params per token. Single-server architecture uses ~18GB RAM (vs ~60GB for separate instances).
 
-Every complex query triggers a structured debate: both hemispheres answer, challenge each other, then the Divine Council evaluates through adversarial 4-agent deliberation. The Advocate *always* challenges — preventing the groupthink that plagues single-model systems.
+Every complex query triggers a structured debate: both hemispheres answer, challenge each other, then the Divine Council evaluates through adversarial 7-agent deliberation. The Advocate *always* challenges — preventing the groupthink that plagues single-model systems.
 
 ### How Gemma 4 Makes This Possible
 
 The architecture depends on Gemma 4 in ways no other model family enables:
 
 1. **Superego (31B)**: Strong ethical reasoning without extensive prompt engineering — critical for the safety pipeline.
-2. **Divine Council (4 x 26B-A4B MoE)**: The MoE architecture is the key innovation. With only 4B active parameters per token, four instances run at near-E4B speed on CPU while delivering 26B-quality evaluation. No other model at this efficiency point produces reliable structured scoring, adversarial challenge, and ethical review simultaneously.
+2. **Divine Council (7 agents, single 26B-A4B MoE server)**: The MoE architecture is the key innovation. With only 4B active parameters per token, seven concurrent agents run from a single llama-server process (`--parallel 8`) on CPU while delivering 26B-quality evaluation in ~18GB RAM. No other model at this efficiency point produces reliable structured scoring, adversarial challenge, temporal reasoning, feasibility assessment, and ethical review simultaneously.
 3. **Dreaming/LoRA**: Synaptic plasticity fine-tunes the council from high-certainty consolidated knowledge. Gemma 4's architecture supports efficient LoRA adaptation.
 
-Without Gemma 4's MoE variant, the Divine Council would require four GPUs instead of four CPU threads — breaking the entire local-deployment premise.
+Without Gemma 4's MoE variant, the Divine Council would require seven GPUs instead of one CPU process — breaking the entire local-deployment premise.
 
 ### Cognitive Control: Executive Function + Tree-of-Thought
 
@@ -39,7 +39,7 @@ An executive function module routes every query before committing resources:
 - **Multi-step decomposition**: Complex queries split into sub-queries answered sequentially, each feeding context to the next.
 - **Adaptive context**: Selects between minimal RAG, episodic memory, or deep semantic search based on query type.
 
-For Tree-of-Thought, each hemisphere generates three reasoning branches using different strategies. The Divine Council evaluates all six through adversarial deliberation — the Judge scores, the Advocate challenges weak branches, the Ethicist reviews for safety — then the strongest are synthesized.
+For Tree-of-Thought, each hemisphere generates three reasoning branches using different strategies. The Divine Council evaluates all six through adversarial 7-agent deliberation — the Judge scores, the Advocate challenges weak branches, the Historian checks precedent, the Futurist traces consequences, the Pragmatist assesses feasibility, the Ethicist reviews for safety — then the Synthesizer produces the final answer from the strongest branches.
 
 ### Safety Pipeline
 
@@ -82,7 +82,7 @@ The Divine Council upgrade from E4B to 26B-A4B MoE improved Tree-of-Thought accu
 | Knowledge base | 3.3M vectors (44K code + 102K ethics + 824K pubs) |
 | Unit tests | 570+ passing |
 | Distractor resistance | 100% accuracy with vivid distractors |
-| LLM instances | 7 (2 GPU + 4 CPU MoE council + 1 legacy) |
+| LLM instances | 4 servers (2 GPU hemispheres + 1 CPU council --parallel 8 + 1 legacy) |
 | Hardware cost | $2K (used HP Z840, 2x Quadro GV100) |
 
 ### Impact

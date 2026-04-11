@@ -108,7 +108,7 @@ _executive_stats = {
 
 # Initialise Divine Council (Minsky — Society of Mind)
 _divine_council = DivineCouncil()
-print("Divine Council initialised (4 x 26B-A4B MoE agents)")
+print("Divine Council initialised (7 agents, 1 server, --parallel 8)")
 print("Executive Function loaded")
 
 # Initialise Attention Filter (Posner — distractor detection)
@@ -123,9 +123,7 @@ _attention_stats = {
 print("Attention Filter loaded")
 
 # Initialise Calibration Loop (Bayesian — self-improvement)
-_disagreement = DisagreementMetric(
-    embed_model=embed_model, db_dsn=DB_DSN
-)
+_disagreement = DisagreementMetric(embed_model=embed_model, db_dsn=DB_DSN)
 _adaptive_temp = AdaptiveTemperatureRouter()
 _anomaly_detector = AnomalyDetector()
 _calibration_stats = {
@@ -1221,9 +1219,7 @@ def chat_completions():
 
             # Feed confidence to adaptive temperature
             temp_info = _adaptive_temp.update(topic, confidence)
-            _calibration_stats["last_temperature"] = (
-                temp_info["temperature"]
-            )
+            _calibration_stats["last_temperature"] = temp_info["temperature"]
 
             # Feed to anomaly detector for drift monitoring
             import time as _time
@@ -1233,9 +1229,7 @@ def chat_completions():
             )
             anomalies = [anomaly] if anomaly else []
             if anomalies:
-                _calibration_stats["anomalies_detected"] += len(
-                    anomalies
-                )
+                _calibration_stats["anomalies_detected"] += len(anomalies)
                 for a in anomalies:
                     logger.warning(
                         "[calibration] anomaly: %s (%s)",
