@@ -20,7 +20,7 @@ User → Caddy (HTTPS) → OAuth2 (Google Auth) → RAG Server (8081)
   → Freudian Psyche Debate (System 2 only):
       GPU 0: Superego (Gemma 4 31B) — analytical, moral, precise
       GPU 1: Id (Qwen 3 32B) — creative, instinctual, intuitive
-      CPU:   Ego (Gemma 4 E4B) — mediator, arbiter, dungeon master
+      CPU:   Ego (Gemma 4 26B-A4B MoE) — mediator, arbiter, dungeon master
   → 4-round debate → Ego synthesizes when disagreement is high
   → Safety Gateway checks output
   → Confidence metric from psyche disagreement
@@ -34,9 +34,11 @@ User → Caddy (HTTPS) → OAuth2 (Google Auth) → RAG Server (8081)
 | 0 | Event Fabric | NATS JetStream | 4222 | Active |
 | 1 | Superego (Left Hemisphere) | **Gemma 4 31B** Q5 via llama.cpp, GPU 0 | 8080 | Active |
 | 2 | Memory | PostgreSQL + pgvector + SQLite | 50300 | Active |
+| 2b | Knowledge Graph | LLM-extracted entities + relationships | — | Active |
+| 2c | Research Loop | Autonomous gap detection + research cycles | — | Active |
 | 3 | Safety Gateway | ErisML DEME 3-layer pipeline | 50055 | Active |
 | 4 | Id (Right Hemisphere) | Qwen 3 32B Q5 via llama.cpp, GPU 1 | 8082 | Active |
-| 4b | Ego (Mediator) | Gemma 4 E4B via llama.cpp, CPU | 8084 | Active |
+| 4b | Ego (Mediator) | Gemma 4 26B-A4B MoE via llama.cpp, CPU | 8084 | Active |
 | 5 | Metacognition | Monitor + Reflector + Adjuster | — | Active |
 | 6 | Environment | System + Repo sensors | — | Active |
 | 7 | DHT Registry | Service discovery + config store | — | Active |
@@ -52,7 +54,7 @@ User → Caddy (HTTPS) → OAuth2 (Google Auth) → RAG Server (8081)
 |-------|-----|--------|----------|------|
 | **Gemma 4 31B Q5** | GPU 0 (full offload) | 13.9 tok/s | 2.2 tok/s | Superego — System 2 debate |
 | **Qwen 3 32B Q5** | GPU 1 (full offload) | 186.1 tok/s | 25.9 tok/s | Id — System 1 fast path + debate |
-| **Gemma 4 E4B** | CPU (24 threads) | ~8 tok/s | ~8 tok/s | Ego — arbiter + dungeon master |
+| **Gemma 4 26B-A4B MoE** | CPU (10 threads x 4) | ~8 tok/s | ~8 tok/s | Ego — arbiter + dungeon master |
 
 System 1 queries (simple factual) → Id at 25.9 tok/s → **~1.3-3.5s response time**.
 System 2 queries (complex/ambiguous) → Superego+Id debate → ~60-120s response time.
@@ -65,7 +67,7 @@ Id (Qwen 3) runs at 25.9 tok/s on the same hardware.
 ## Gemma 4 Good Hackathon
 
 Atlas AI is submitted to the **Gemma 4 Good Hackathon** ($200K total prizes).
-Gemma 4 powers two of three psyche components: the Superego (31B, analytical) and the Ego (E4B, mediator/DM).
+Gemma 4 powers two of three psyche components: the Superego (31B, analytical) and the Ego/Council (26B-A4B MoE, mediator/DM).
 
 **Tracks:**
 - Main Track ($100K) — Full cognitive architecture with dual-process debate
@@ -164,7 +166,7 @@ graded scale: none → mild → vivid (matching benchmark dose-response design).
 
 **Divine Council (Minsky, 1986; Mercier & Sperber, 2011):**
 The Ego is not a single mediator but a council of four specialized sub-agents
-running in parallel on CPU (each a Gemma 4 E4B instance, ~6GB RAM):
+running in parallel on CPU (each a Gemma 4 26B-A4B MoE instance, ~14GB RAM, 4B active params per token):
 - **Judge** — Impartial evaluator, scores correctness and logic
 - **Advocate** — Devil's advocate, challenges consensus, finds flaws
 - **Synthesizer** — Integration expert, merges perspectives into coherent answer
@@ -178,17 +180,30 @@ concerns arise. With 221GB free RAM, the council adds minimal overhead.
 The prefrontal cortex of the architecture. Before any reasoning begins, the
 executive function analyzes the query and decides:
 - **Mode selection** (Shifting): simple factual → System 1, analysis → debate, deep ethical → Tree-of-Thought
-- **Task decomposition** (Planning): multi-part queries split into sub-queries
+- **Multi-step decomposition** (Planning): complex multi-part queries are split into
+  sub-queries that are answered sequentially — each answer feeds into the next as
+  context, then the Ego synthesizes all steps into a coherent response
 - **Inhibition control**: ambiguous queries get a clarifying question, not a guess
-- **Goal tracking** (Updating): detects multi-turn conversations building toward a larger goal
-- **Context strategy**: selects episodic recall for "remember when..." vs deep semantic search for research questions
+- **Goal tracking** (Updating): detects multi-turn conversations building toward a
+  larger goal; automatically boosts episodic context for continuation queries
+- **Context strategy routing**: selects the optimal RAG strategy per query —
+  `minimal` (skip RAG for simple factual), `episodic_recent` (recent conversation
+  memory for follow-ups), `semantic_deep` (2x results for complex research), or
+  `default` (standard wiki + pgvector + FTS)
 
-**Tree-of-Thought Debate (Yao et al., 2023):**
+**Tree-of-Thought + Divine Council (Yao et al., 2023; Minsky, 1986):**
 Instead of each hemisphere producing one answer, each generates 3 reasoning branches
 using different strategies (logical analysis, rules/precedent, evidence-based for the
-Superego; gut feeling, creative analogy, human impact for the Id). The Ego evaluates
-all 6 branches, selects the top 2 (one from each hemisphere), and synthesizes them.
-This produces measurably better answers on complex questions.
+Superego; gut feeling, creative analogy, human impact for the Id). The **Divine Council**
+evaluates all 6 branches through 4-agent deliberation:
+- The **Judge** scores each branch for accuracy, depth, and usefulness
+- The **Advocate** challenges weak reasoning and penalizes unsupported claims
+- The **Ethicist** reviews branches for bias, harm, and fairness concerns
+- The **Synthesizer** produces the final answer from the strongest branches
+
+This replaces the single-Ego evaluation with adversarial multi-agent review,
+producing measurably better answers on complex questions while catching
+reasoning errors that a single evaluator would miss.
 
 **Daily Training (Ego as Dungeon Master):**
 The Ego generates training scenarios from three sources: (1) ErisML Greek Tragedy

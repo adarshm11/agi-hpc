@@ -246,7 +246,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   </div>
 
   <div class="sub-card active" id="sc-ego">
-    <div class="card-header"><span class="status-dot on"></span><span class="name">Divine Council</span><span class="model-tag">4 x E4B</span></div>
+    <div class="card-header"><span class="status-dot on"></span><span class="name">Divine Council</span><span class="model-tag">4 x 26B-A4B MoE</span></div>
     <div class="card-metric">Judge | Advocate | Synth | Ethicist</div>
     <div class="card-metric">Workers: <span class="val" id="ego-slots">4</span> | CPU: <span class="val" id="ego-cpu-temp">--</span>&deg;C | Priv: <span class="val" id="ego-priv-badge">L0</span></div>
   </div>
@@ -270,22 +270,54 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     <div class="card-metric">Episodes: <span class="val" id="dream-episodes">0</span> | Pending: <span class="val" id="dream-unconsolidated">0</span></div>
   </div>
 
+  <div class="sub-card active" id="sc-knowledge">
+    <div class="card-header"><span class="status-dot on"></span><span class="name">Knowledge Graph</span><span class="model-tag">LLM Wiki</span></div>
+    <div class="card-metric">Entities: <span class="val" id="kg-entities">0</span> | Rels: <span class="val" id="kg-rels">0</span></div>
+    <div class="card-metric">Docs: <span class="val" id="kg-docs">0</span> | Contradictions: <span class="val" id="kg-contradictions">0</span></div>
+  </div>
+
+  <div class="sub-card active" id="sc-research">
+    <div class="card-header"><span class="status-dot on"></span><span class="name">Research Loop</span><span class="model-tag">Curiosity</span></div>
+    <div class="card-metric">Goals: <span class="val" id="rl-goals">0</span> | Done: <span class="val" id="rl-done">0</span> | Conf: <span class="val" id="rl-conf">--</span></div>
+    <div class="card-metric">Added: <span class="val" id="rl-added">0</span> | Last: <span class="val" id="rl-last">--</span></div>
+  </div>
+
   <div class="sub-card active" id="sc-training">
-    <div class="card-header"><span class="status-dot on"></span><span class="name">DM Training</span><span class="model-tag">Ego</span></div>
+    <div class="card-header"><span class="status-dot on"></span><span class="name">DM Training</span><span class="model-tag">Hebbian</span></div>
     <div class="card-metric">Sessions: <span class="val" id="training-sessions">0</span> | Score: <span class="val" id="training-score">--</span></div>
     <div class="card-metric">Retro: <span class="val" id="training-retro">0</span> | Last: <span class="val" id="training-last">--</span></div>
+    <div class="card-metric" style="display:flex;align-items:center;gap:4px">
+      Timer: <span class="val" id="training-timer">--</span>
+      <span id="training-next" style="font-size:10px;color:var(--dim);margin-left:auto"></span>
+    </div>
+    <svg id="training-sparkline" width="100%" height="28" style="display:block;margin-top:4px">
+      <polyline id="training-spark-line" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.8"/>
+    </svg>
+    <div id="training-domains" style="margin-top:4px"></div>
+    <div style="margin-top:6px;text-align:right">
+      <button id="training-start-btn" onclick="startTraining()"
+        style="font-size:10px;padding:2px 8px;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:4px;cursor:pointer"
+        title="Requires L3 privilege">Start Training</button>
+    </div>
   </div>
 
   <div class="sub-card active" id="sc-executive">
     <div class="card-header"><span class="status-dot on"></span><span class="name">Executive Function</span><span class="model-tag">Miyake</span></div>
     <div class="card-metric">Mode: <span class="val" id="ef-mode">--</span> | Complexity: <span class="val" id="ef-complexity">--</span></div>
-    <div class="card-metric">Goal: <span class="val" id="ef-goal">none</span> | Inhibit: <span class="val" id="ef-inhibit">no</span></div>
+    <div class="card-metric">Context: <span class="val" id="ef-context">default</span> | Inhibit: <span class="val" id="ef-inhibit">no</span></div>
+    <div class="card-metric">Goal: <span class="val" id="ef-goal">none</span> | Decomp: <span class="val" id="ef-decomp">0</span></div>
   </div>
 
   <div class="sub-card active" id="sc-attention">
     <div class="card-header"><span class="status-dot on"></span><span class="name">Attention</span><span class="model-tag">Posner</span></div>
     <div class="card-metric">Distractors: <span class="val" id="attn-detected">0</span> | Warnings: <span class="val" id="attn-warnings">0</span></div>
     <div class="card-metric">Intensity: <span class="val" id="attn-intensity">none</span> | Score: <span class="val" id="attn-score">0.0</span></div>
+  </div>
+
+  <div class="sub-card active" id="sc-calibration">
+    <div class="card-header"><span class="status-dot on"></span><span class="name">Calibration</span><span class="model-tag">Bayesian</span></div>
+    <div class="card-metric">Conf: <span class="val" id="cal-confidence">--</span> | Sim: <span class="val" id="cal-similarity">--</span></div>
+    <div class="card-metric">Temp: <span class="val" id="cal-temperature">0.7</span> | Arb: <span class="val" id="cal-arbitrations">0</span> | Anom: <span class="val" id="cal-anomalies">0</span></div>
   </div>
 
   <div class="sub-card active" id="sc-curriculum">
@@ -376,7 +408,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 
       <rect id="topo-ego" x="230" y="138" width="140" height="34" rx="6" fill="rgba(74,222,128,0.15)" stroke="#4ade80" stroke-width="1.5"/>
       <text x="300" y="152" text-anchor="middle" fill="#e0e6f0" font-size="9" font-weight="bold">Ego</text>
-      <text x="300" y="165" text-anchor="middle" fill="#7a8ba8" font-size="7">Gemma 4 E4B | CPU</text>
+      <text x="300" y="165" text-anchor="middle" fill="#7a8ba8" font-size="7">Gemma 4 26B-A4B MoE | CPU</text>
 
       <rect id="topo-id" x="410" y="138" width="140" height="34" rx="6" fill="rgba(251,146,60,0.15)" stroke="#fb923c" stroke-width="1.5"/>
       <text x="480" y="152" text-anchor="middle" fill="#e0e6f0" font-size="9" font-weight="bold">Id</text>
@@ -409,6 +441,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         // Psyche row: Superego + Id
         ['superego',  'Superego',            cx-140,146, 110, 28, '#4a9eff','rgba(74,158,255,0.12)','Gemma 4 31B | GPU 0'],
         ['id',        'Id',                  cx+140,146, 110, 28, '#fb923c','rgba(251,146,60,0.12)','Qwen 3 32B | GPU 1'],
+        // Calibration (between hemispheres)
+        ['calibration','Calibration',        cx,  146,  80, 18, '#a78bfa','rgba(167,139,250,0.12)'],
         // Divine Council row (4 members, below bus)
         ['judge',     'Judge',               cx-150,214, 66, 22, '#4ade80','rgba(74,222,128,0.12)'],
         ['advocate',  'Advocate',            cx-50, 214, 66, 22, '#f87171','rgba(248,113,113,0.12)'],
@@ -418,6 +452,11 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         ['safety_out','Safety Output Gate',  cx,  256,  110, 18, '#f87171','rgba(248,113,113,0.12)'],
         ['episodes',  'Episodes Stored',     cx,  284,  100, 18, '#4ade80','rgba(74,222,128,0.12)'],
         ['response',  'Response',            cx,  310,  90,  18, '#4a9eff','rgba(74,158,255,0.12)'],
+        // Learning subsystems (side nodes)
+        ['training',  'DM Training',         62, 284, 100, 28, '#d97706','rgba(217,119,6,0.12)','Ego as DM'],
+        ['dreaming',  'Dreaming',           W-62, 284, 100, 28, '#7c3aed','rgba(124,58,237,0.12)','LoRA + Wiki'],
+        ['memory',    'Memory',             W-62, 114, 100, 26, '#4ade80','rgba(74,222,128,0.12)','3.3M vectors'],
+        ['curriculum','Curriculum',          62,  114, 100, 26, '#d97706','rgba(217,119,6,0.12)','Gap Detect'],
       ];
       var nodes = {};
       specs.forEach(function(s){ nodes[s[0]] = {id:s[0],label:s[1],x:s[2],y:s[3],w:s[4],h:s[5],color:s[6],bg:s[7],sub:s[8]}; });
@@ -503,7 +542,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       svg.append('text').attr('x',cx).attr('y',N('judge').y-N('judge').h/2-4)
         .attr('text-anchor','middle').attr('fill','#7a8ba8')
         .attr('font-size','7px').attr('font-style','italic')
-        .text('Divine Council (4 x Gemma 4 E4B on CPU)');
+        .text('Divine Council (4 x 26B-A4B MoE on CPU)');
 
       // Council -> Safety out
       fanLine('judge','safety_out','#4ade80','a');
@@ -511,29 +550,47 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       fanLine('synth','safety_out','#4ade80','a');
       fanLine('ethicist','safety_out','#f59e0b','a');
 
-      // Feedback: Retrospective (left side, wider arc)
-      var ep = N('episodes'), ex = N('executive');
-      var lx = 8;
-      svg.append('path')
-        .attr('d','M'+(ep.x-ep.w/2)+','+ep.y+' C '+lx+','+ep.y+' '+lx+','+ex.y+' '+(ex.x-ex.w/2)+','+ex.y)
-        .attr('fill','none').attr('stroke','#d97706').attr('stroke-width',1).attr('stroke-dasharray','4,3')
+      // ── Side connections: Training loop (left) ──
+      // Episodes → Training
+      fanLine('episodes','training','#d97706','ay');
+      // Training → Curriculum (feedback loop up left side)
+      var tr = N('training'), cu = N('curriculum');
+      svg.append('line')
+        .attr('x1',tr.x).attr('y1',tr.y-tr.h/2)
+        .attr('x2',cu.x).attr('y2',cu.y+cu.h/2)
+        .attr('stroke','#d97706').attr('stroke-width',1)
+        .attr('stroke-dasharray','4,3')
         .attr('marker-end','url(#ay)').attr('opacity',0.7);
-      svg.append('text').attr('x',lx+2).attr('y',(ep.y+ex.y)/2+4)
-        .attr('fill','#d97706').attr('font-size','7px').attr('opacity',0.8)
-        .attr('transform','rotate(-90,'+(lx+2)+','+((ep.y+ex.y)/2+4)+')')
-        .attr('text-anchor','middle').text('Retrospective');
+      // Curriculum → RAG (gap-biased context)
+      fanLine('curriculum','rag','#d97706','ay');
 
-      // Feedback: Dreaming (right side, wider arc)
-      var rg = N('rag');
-      var rx = W-8;
-      svg.append('path')
-        .attr('d','M'+(ep.x+ep.w/2)+','+ep.y+' C '+rx+','+ep.y+' '+rx+','+rg.y+' '+(rg.x+rg.w/2)+','+rg.y)
-        .attr('fill','none').attr('stroke','#7c3aed').attr('stroke-width',1).attr('stroke-dasharray','4,3')
+      // ── Side connections: Dreaming loop (right) ──
+      // Episodes → Dreaming
+      fanLine('episodes','dreaming','#7c3aed','ap');
+      // Dreaming → Memory (consolidated wiki)
+      var dm = N('dreaming'), me = N('memory');
+      svg.append('line')
+        .attr('x1',dm.x).attr('y1',dm.y-dm.h/2)
+        .attr('x2',me.x).attr('y2',me.y+me.h/2)
+        .attr('stroke','#7c3aed').attr('stroke-width',1)
+        .attr('stroke-dasharray','4,3')
         .attr('marker-end','url(#ap)').attr('opacity',0.7);
-      svg.append('text').attr('x',rx-2).attr('y',(ep.y+rg.y)/2+4)
-        .attr('fill','#7c3aed').attr('font-size','7px').attr('opacity',0.8)
-        .attr('transform','rotate(90,'+(rx-2)+','+((ep.y+rg.y)/2+4)+')')
-        .attr('text-anchor','middle').text('Dreaming + LoRA');
+      // Memory → RAG (wiki feeds retrieval)
+      fanLine('memory','rag','#4ade80','ag');
+
+      // ── Calibration connections ──
+      // Superego → Calibration ← Id (disagreement measurement)
+      var cal = N('calibration');
+      svg.append('line')
+        .attr('x1',N('superego').x+N('superego').w/2).attr('y1',cal.y)
+        .attr('x2',cal.x-cal.w/2).attr('y2',cal.y)
+        .attr('stroke','#a78bfa').attr('stroke-width',1)
+        .attr('stroke-dasharray','3,2').attr('opacity',0.6);
+      svg.append('line')
+        .attr('x1',N('id').x-N('id').w/2).attr('y1',cal.y)
+        .attr('x2',cal.x+cal.w/2).attr('y2',cal.y)
+        .attr('stroke','#a78bfa').attr('stroke-width',1)
+        .attr('stroke-dasharray','3,2').attr('opacity',0.6);
 
       // Draw nodes (on top)
       specs.forEach(function(s){
@@ -878,6 +935,33 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     renderFeed();
   }
 
+  function startTraining(){
+    var btn = document.getElementById('training-start-btn');
+    if(btn && btn.disabled) return;
+    if(!confirm('Start a manual DM training session (10 episodes)?')) return;
+    btn.textContent = 'Starting...';
+    btn.disabled = true;
+    fetch('/api/training/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({episodes: 10, difficulty: 2})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok){
+        addFeedEvent('Training session <strong>started</strong> (' + d.episodes + ' eps)', 'var(--green)');
+        btn.textContent = 'Running...';
+      } else {
+        addFeedEvent('Training failed: ' + d.error, 'var(--red)');
+        btn.textContent = 'Start Training';
+        btn.disabled = false;
+      }
+    }).catch(function(e){
+      addFeedEvent('Training request failed: ' + e, 'var(--red)');
+      btn.textContent = 'Start Training';
+      btn.disabled = false;
+    });
+  }
+
   function renderFeed(){
     var list = el('feed-list');
     if(!list) return;
@@ -1173,6 +1257,21 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     el('dream-unconsolidated').textContent = mem.unconsolidated_episodes || 0;
     el('dream-episodes').textContent = mem.episodic_episodes || 0;
 
+    // ─ Knowledge Graph ─
+    var kg = t.knowledge || {};
+    el('kg-entities').textContent = kg.entities || 0;
+    el('kg-rels').textContent = kg.relationships || 0;
+    el('kg-docs').textContent = kg.documents || 0;
+    el('kg-contradictions').textContent = kg.contradictions || 0;
+
+    // ─ Research Loop ─
+    var rl = t.research || {};
+    el('rl-goals').textContent = rl.goals_detected || 0;
+    el('rl-done').textContent = rl.goals_completed || 0;
+    el('rl-conf').textContent = rl.avg_confidence ? (rl.avg_confidence * 100).toFixed(0) + '%' : '--';
+    el('rl-added').textContent = rl.knowledge_added || 0;
+    el('rl-last').textContent = rl.last_cycle ? new Date(rl.last_cycle).toLocaleTimeString() : '--';
+
     // ─ DM Training (Hebbian, 1949) ─
     var trn = t.training || {};
     el('training-sessions').textContent = trn.total_sessions || 0;
@@ -1185,6 +1284,56 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     } else {
       el('training-last').textContent = 'never';
     }
+    // Timer status
+    el('training-timer').textContent = trn.timer_active ? 'active' : 'off';
+    el('training-timer').style.color = trn.timer_active ? 'var(--green)' : 'var(--dim)';
+    if(trn.next_training) el('training-next').textContent = 'Next: ' + trn.next_training;
+
+    // Score sparkline (last 20 scores)
+    var scores = trn.recent_scores || [];
+    if(scores.length > 1) {
+      var svg = el('training-sparkline');
+      var svgW = svg.clientWidth || 180, svgH = 28;
+      var pts = scores.slice().reverse();
+      var step = svgW / (pts.length - 1 || 1);
+      var path = pts.map(function(s, i){ return (i*step).toFixed(1) + ',' + (svgH - s*svgH).toFixed(1); }).join(' ');
+      el('training-spark-line').setAttribute('points', path);
+      svg.style.display = 'block';
+    }
+
+    // Domain breakdown mini-bars
+    var domains = trn.domain_breakdown || [];
+    if(domains.length > 0) {
+      var dhtml = '<div style="font-size:10px;color:var(--dim);margin-bottom:2px">Domain Mastery:</div>';
+      domains.forEach(function(d) {
+        var w = Math.round(d.avg_score * 100);
+        var c = d.avg_score > 0.7 ? 'var(--green)' : d.avg_score > 0.4 ? '#f59e0b' : 'var(--red)';
+        var label = (d.domain || '').replace(/_/g, ' ');
+        if(label.length > 18) label = label.substring(0, 18) + '..';
+        dhtml += '<div style="display:flex;align-items:center;gap:4px;margin:1px 0">';
+        dhtml += '<span style="font-size:9px;color:var(--dim);width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + d.domain + '">' + label + '</span>';
+        dhtml += '<div style="flex:1;height:4px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden">';
+        dhtml += '<div style="width:'+w+'%;height:100%;background:'+c+';border-radius:2px"></div></div>';
+        dhtml += '<span style="font-size:9px;color:var(--text);min-width:22px;text-align:right">' + w + '%</span>';
+        dhtml += '</div>';
+      });
+      el('training-domains').innerHTML = dhtml;
+    }
+
+    // Training start button state
+    var privLevel = (t.ego_privileges || {}).current_level || 0;
+    var btn = document.getElementById('training-start-btn');
+    if(btn) {
+      if(privLevel < 3) {
+        btn.disabled = true;
+        btn.title = 'Requires L3 (current: L' + privLevel + ')';
+        btn.style.opacity = '0.4';
+      } else {
+        btn.disabled = false;
+        btn.title = 'Start manual training session';
+        btn.style.opacity = '1';
+      }
+    }
 
     // ─ Executive Function (Miyake, 2000) ─
     var ef = t.executive_function || {};
@@ -1192,11 +1341,19 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     el('ef-complexity').textContent = ef.last_complexity || '--';
     el('ef-goal').textContent = ef.last_goal || 'none';
     el('ef-inhibit').textContent = ef.last_inhibit ? 'YES' : 'no';
+    el('ef-context').textContent = ef.last_context_strategy || 'default';
+    el('ef-decomp').textContent = ef.last_sub_queries || 0;
     // Color mode badge
     var modeEl = el('ef-mode');
     if(modeEl){
       var m = ef.last_mode || '';
       modeEl.style.color = m === 'tot' ? 'var(--yellow)' : m === 'debate' ? 'var(--accent)' : 'var(--green)';
+    }
+    // Color context strategy
+    var ctxEl = el('ef-context');
+    if(ctxEl){
+      var c = ef.last_context_strategy || '';
+      ctxEl.style.color = c === 'semantic_deep' ? 'var(--yellow)' : c === 'episodic_recent' ? 'var(--accent)' : c === 'minimal' ? 'var(--dim)' : 'var(--text)';
     }
 
     // ─ Curriculum (Vygotsky, 1978) ─
@@ -1211,6 +1368,19 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     if(attnEl){
       var ai = attn.last_intensity || 'none';
       attnEl.style.color = ai === 'vivid' ? 'var(--red)' : ai === 'mild' ? 'var(--yellow)' : 'var(--green)';
+    }
+
+    // ─ Calibration (Bayesian self-improvement) ─
+    var cal = t.calibration || {};
+    el('cal-confidence').textContent = cal.last_confidence ? cal.last_confidence.toFixed(2) : '--';
+    el('cal-similarity').textContent = cal.last_similarity ? cal.last_similarity.toFixed(2) : '--';
+    el('cal-temperature').textContent = cal.last_temperature ? cal.last_temperature.toFixed(2) : '0.70';
+    el('cal-arbitrations').textContent = cal.ego_arbitrations || 0;
+    el('cal-anomalies').textContent = cal.anomalies_detected || 0;
+    // Color confidence
+    var confEl = el('cal-confidence');
+    if(confEl && cal.last_confidence){
+      confEl.style.color = cal.last_confidence > 0.7 ? 'var(--green)' : cal.last_confidence > 0.4 ? 'var(--yellow)' : 'var(--red)';
     }
 
     // ─ Curriculum (Vygotsky, 1978) ─
@@ -1413,17 +1583,23 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       jobsEl.innerHTML = html;
     }
 
-    // ─ Training status ─
+    // ─ Training status (right panel) ─
     var trainEl = el('training-status');
     if(t.training && t.training.active){
-      var ttype = t.training.type || 'unknown';
+      var ttype = t.training.type || 'DM Session';
       var prog = t.training.progress || '';
       trainEl.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
         + '<span style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.5s infinite"></span>'
         + '<strong style="color:var(--text)">' + ttype + '</strong></div>'
         + '<div style="font-size:11px;color:var(--dim);word-break:break-all">' + prog + '</div>';
+      // Update start button
+      var btn = document.getElementById('training-start-btn');
+      if(btn) { btn.textContent = 'Running...'; btn.disabled = true; }
     } else {
-      trainEl.innerHTML = '<span style="color:var(--dim)">Idle (next: midnight PST)</span>';
+      var timerStr = (trn.timer_active) ? 'Timer active (10 AM UTC)' : 'Timer off';
+      trainEl.innerHTML = '<span style="color:var(--dim)">Idle | ' + timerStr + '</span>';
+      var btn2 = document.getElementById('training-start-btn');
+      if(btn2 && btn2.textContent === 'Running...') { btn2.textContent = 'Start Training'; btn2.disabled = false; }
     }
 
     // ─ AtlasGym ─
@@ -1431,7 +1607,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     if(t.gym && t.gym.total_episodes > 0){
       var html = '<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
         + '<span style="color:var(--text)">Episodes: <strong>' + t.gym.total_episodes + '</strong></span>'
-        + '<span style="color:' + (t.gym.streak > 3 ? 'var(--green)' : 'var(--dim)') + '">\uD83D\uDD25 Streak: ' + t.gym.streak + '</span>'
+        + '<span style="color:' + (t.gym.streak > 3 ? 'var(--green)' : 'var(--dim)') + '">Streak: ' + t.gym.streak + '</span>'
         + '</div>';
 
       // Environment cards
@@ -1440,19 +1616,32 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         var e = envs[ename];
         var barWidth = Math.round(e.avg_score * 100);
         var barColor = e.avg_score > 0.7 ? 'var(--green)' : e.avg_score > 0.4 ? '#f59e0b' : 'var(--red)';
+        // Curriculum level badge
+        var levelColors = ['var(--dim)', '#6366f1', '#8b5cf6', '#a855f7', '#c084fc'];
+        var lvlColor = levelColors[Math.min(e.level, 4)];
 
         html += '<div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin:4px 0">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         html += '<span style="font-size:12px;color:var(--text);font-weight:600">' + ename + '</span>';
-        html += '<span style="font-size:10px;color:var(--accent)">L' + e.level + ' \u2022 ' + e.episodes + ' eps</span>';
+        html += '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + lvlColor + ';color:#fff">L' + e.level + '</span>';
         html += '</div>';
 
-        // Score bar
+        // Score bar with episode count
         html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
         html += '<div style="flex:1;height:5px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden">';
         html += '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:3px;transition:width 0.8s"></div></div>';
         html += '<span style="font-size:11px;color:var(--text);min-width:35px;text-align:right">' + (e.avg_score*100).toFixed(0) + '%</span>';
         html += '</div>';
+
+        // Curriculum progress bar (to next level: 80% success rate threshold)
+        var successRate = e.avg_score;
+        var promoThresh = 0.8;
+        var promoPct = Math.min(100, Math.round((successRate / promoThresh) * 100));
+        html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">';
+        html += '<span style="font-size:9px;color:var(--dim);width:50px">Promo:</span>';
+        html += '<div style="flex:1;height:3px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden">';
+        html += '<div style="width:'+promoPct+'%;height:100%;background:'+lvlColor+';border-radius:2px"></div></div>';
+        html += '<span style="font-size:9px;color:var(--dim)">' + promoPct + '%</span></div>';
 
         // Sparkline of recent scores
         if(e.recent_scores && e.recent_scores.length > 1){
@@ -1465,8 +1654,11 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
           html += '</svg>';
         }
 
-        // Min/max range
-        html += '<div style="font-size:10px;color:var(--dim)">Range: ' + (e.min_score*100).toFixed(0) + '% - ' + (e.max_score*100).toFixed(0) + '%</div>';
+        // Stats row
+        html += '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:2px">';
+        html += '<span>' + e.episodes + ' eps</span>';
+        html += '<span>Range: ' + (e.min_score*100).toFixed(0) + '-' + (e.max_score*100).toFixed(0) + '%</span>';
+        html += '</div>';
         html += '</div>';
       }
 
@@ -1503,6 +1695,25 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     if(gpus[1]) el('bot-gpu1').style.color = tempColor(gpus[1].temp);
 
     prevTelemetry = JSON.parse(JSON.stringify(t));
+  }
+
+  // ─── Fetch server-side events (logins, NATS, system) ───
+  var lastEventTs = '';
+  async function pollEvents(){
+    try {
+      var res = await fetch('/api/events');
+      if(!res.ok) return;
+      var events = await res.json();
+      if(!Array.isArray(events) || events.length === 0) return;
+      // Only add new events (check timestamp)
+      for(var i = events.length - 1; i >= 0; i--){
+        var ev = events[i];
+        if(ev.timestamp && ev.timestamp > lastEventTs){
+          addFeedEvent(ev.message || ev.summary || 'event', ev.color || 'var(--accent)');
+        }
+      }
+      if(events[0] && events[0].timestamp) lastEventTs = events[0].timestamp;
+    } catch(e){}
   }
 
   // ─── Fetch loop ───
@@ -1544,7 +1755,9 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 
   // ─── Init ───
   poll();
+  pollEvents();
   setInterval(poll, 5000);
+  setInterval(pollEvents, 15000);
   tickUptime();
   setInterval(tickUptime, 1000);
 

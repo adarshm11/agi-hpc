@@ -22,7 +22,9 @@ import time
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 log = logging.getLogger("telemetry")
 
 STATIC_DIR = os.environ.get("ATLAS_STATIC", "/home/claude/atlas-chat")
@@ -40,18 +42,26 @@ def _run(cmd, timeout=3):
 
 def _get_gpu():
     gpus = []
-    out = _run([
-        "nvidia-smi",
-        "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total",
-        "--format=csv,noheader,nounits",
-    ])
+    out = _run(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+    )
     for line in out.split("\n"):
         p = [x.strip() for x in line.split(",")]
         if len(p) >= 6:
-            gpus.append({
-                "index": int(p[0]), "name": p[1], "temp": int(p[2]),
-                "util": int(p[3]), "mem_used": int(p[4]), "mem_total": int(p[5]),
-            })
+            gpus.append(
+                {
+                    "index": int(p[0]),
+                    "name": p[1],
+                    "temp": int(p[2]),
+                    "util": int(p[3]),
+                    "mem_used": int(p[4]),
+                    "mem_total": int(p[5]),
+                }
+            )
     return gpus
 
 
@@ -160,15 +170,9 @@ def _get_system_deep():
             if len(parts) >= 5:
                 mount = parts[-1]
                 key = "root" if mount == "/" else "raid5"
-                result[f"disk_{key}_total_gb"] = int(
-                    parts[1].rstrip("G")
-                )
-                result[f"disk_{key}_used_gb"] = int(
-                    parts[2].rstrip("G")
-                )
-                result[f"disk_{key}_avail_gb"] = int(
-                    parts[3].rstrip("G")
-                )
+                result[f"disk_{key}_total_gb"] = int(parts[1].rstrip("G"))
+                result[f"disk_{key}_used_gb"] = int(parts[2].rstrip("G"))
+                result[f"disk_{key}_avail_gb"] = int(parts[3].rstrip("G"))
                 result[f"disk_{key}_pct"] = parts[4]
     except Exception:
         pass
@@ -181,12 +185,8 @@ def _get_system_deep():
                 parts = line.split(":")
                 if len(parts) == 2:
                     nums = parts[1].split()
-                    result["net_rx_gb"] = round(
-                        int(nums[0]) / 1073741824, 2
-                    )
-                    result["net_tx_gb"] = round(
-                        int(nums[8]) / 1073741824, 2
-                    )
+                    result["net_rx_gb"] = round(int(nums[0]) / 1073741824, 2)
+                    result["net_tx_gb"] = round(int(nums[8]) / 1073741824, 2)
     except Exception:
         pass
 
@@ -221,10 +221,16 @@ def _get_system_deep():
 
 
 def _get_db_counts():
-    counts = {"semantic_chunks": 0, "repos": 0, "episodic_episodes": 0,
-              "ethics_chunks": 0, "publications": 0}
+    counts = {
+        "semantic_chunks": 0,
+        "repos": 0,
+        "episodic_episodes": 0,
+        "ethics_chunks": 0,
+        "publications": 0,
+    }
     try:
         import psycopg2
+
         conn = psycopg2.connect(DB_DSN)
         cur = conn.cursor()
         for key, query in [
@@ -250,21 +256,26 @@ def _get_tqpro_stats():
     stats = {"enabled": False, "tables": {}}
     try:
         import psycopg2
+
         conn = psycopg2.connect(DB_DSN)
         cur = conn.cursor()
         for table in ["chunks", "episodes", "ethics_chunks"]:
             try:
                 cur.execute(f"SELECT COUNT(*) FROM {table} WHERE embedding IS NOT NULL")
                 total = cur.fetchone()[0]
-                cur.execute(f"SELECT COUNT(*) FROM {table} WHERE embedding_pca384 IS NOT NULL")
+                cur.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE embedding_pca384 IS NOT NULL"
+                )
                 compressed = cur.fetchone()[0]
                 if compressed > 0:
                     stats["enabled"] = True
                     orig_mb = round(total * 1024 * 4 / 1048576, 1)
                     comp_mb = round(compressed * 384 * 4 / 1048576, 1)
                     stats["tables"][table] = {
-                        "total": total, "compressed": compressed,
-                        "original_mb": orig_mb, "compressed_mb": comp_mb,
+                        "total": total,
+                        "compressed": compressed,
+                        "original_mb": orig_mb,
+                        "compressed_mb": comp_mb,
                         "saved_mb": round(orig_mb - comp_mb, 1),
                         "ratio": 2.67,
                     }
@@ -288,6 +299,7 @@ def _get_safety_from_rag(base_status):
     """Get safety stats from the RAG server's telemetry."""
     try:
         import urllib.request
+
         r = urllib.request.urlopen("http://localhost:8081/api/telemetry", timeout=3)
         data = json.loads(r.read())
         safety = data.get("safety", {})
@@ -300,6 +312,7 @@ def _get_safety_from_rag(base_status):
 def _get_nats():
     try:
         import urllib.request
+
         r = urllib.request.urlopen("http://localhost:8222/varz", timeout=2)
         data = json.loads(r.read())
         result = {
@@ -327,6 +340,7 @@ def _get_nats():
 def _check_port(port, timeout=1):
     """Check if a TCP port is listening."""
     import socket
+
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
@@ -338,8 +352,14 @@ def _check_port(port, timeout=1):
 
 
 def _get_services():
-    services = {"lh": "offline", "rh": "offline", "ego": "offline",
-                "safety": "offline", "metacognition": "offline", "dht": "offline"}
+    services = {
+        "lh": "offline",
+        "rh": "offline",
+        "ego": "offline",
+        "safety": "offline",
+        "metacognition": "offline",
+        "dht": "offline",
+    }
     # Check LLM hemispheres by port
     if _check_port(8080):
         services["lh"] = "online"
@@ -358,11 +378,15 @@ def _get_services():
     if _check_port(4222):
         services["dht"] = "online"
     # Also check tmux sessions as fallback
-    for name, session in [("safety", "safety"),
-                          ("metacognition", "metacognition"), ("dht", "dht")]:
+    for name, session in [
+        ("safety", "safety"),
+        ("metacognition", "metacognition"),
+        ("dht", "dht"),
+    ]:
         if services[name] != "online":
-            r = subprocess.run(["tmux", "has-session", "-t", session],
-                               capture_output=True, timeout=2)
+            r = subprocess.run(
+                ["tmux", "has-session", "-t", session], capture_output=True, timeout=2
+            )
             if r.returncode == 0:
                 services[name] = "online"
     return services
@@ -377,23 +401,49 @@ def _get_jobs():
         name = line.split(":")[0].strip()
         job = {"name": name, "status": "running", "description": name}
 
-        ps_out = _run(["ps", "--ppid",
-                        _run(["tmux", "list-panes", "-t", name, "-F", "#{pane_pid}"]),
-                        "-o", "pid,pcpu,rss,etime,comm", "--no-headers"])
+        pane_pid = _run(["tmux", "list-panes", "-t", name, "-F", "#{pane_pid}"])
+        # Try children first, then pane process itself
+        ps_out = _run(
+            [
+                "ps",
+                "--ppid",
+                pane_pid,
+                "-o",
+                "pid,pcpu,rss,etime,comm",
+                "--no-headers",
+            ]
+        )
+        if not ps_out and pane_pid:
+            # Shell may have exec'd — check the pane PID itself
+            ps_out = _run(
+                [
+                    "ps",
+                    "-p",
+                    pane_pid,
+                    "-o",
+                    "pid,pcpu,rss,etime,comm",
+                    "--no-headers",
+                ]
+            )
         if ps_out:
-            parts = ps_out.split()
+            # Take first line only (may have multiple children)
+            first_line = ps_out.strip().split("\n")[0]
+            parts = first_line.split()
             if len(parts) >= 5:
                 job["cpu"] = parts[1] + "%"
-                job["mem"] = str(round(int(parts[2]) / 1024)) + "MB"
+                try:
+                    job["mem"] = str(round(int(parts[2]) / 1024)) + "MB"
+                except ValueError:
+                    pass
                 job["elapsed"] = parts[3]
 
         desc_map = {
             "spock": ("Superego: Gemma 4 31B", 0),
             "kirk": ("Id: Qwen 3 32B", 1),
-            "ego": ("Council Judge: Gemma 4 E4B", None),
-            "tot-worker-0": ("Council Advocate: E4B", None),
-            "tot-worker-1": ("Council Synthesizer: E4B", None),
-            "tot-worker-2": ("Council Ethicist: E4B", None),
+            "ego": ("Council Judge: Gemma 4 26B-A4B", None),
+            "tot-worker-0": ("Council Advocate: 26B-A4B", None),
+            "tot-worker-1": ("Council Synthesizer: 26B-A4B", None),
+            "tot-worker-2": ("Council Ethicist: 26B-A4B", None),
             "nats": ("NATS JetStream", None),
             "rag": ("RAG Server", None),
             "caddy": ("HTTPS / Let's Encrypt", None),
@@ -420,7 +470,7 @@ def _get_jobs():
     systemd_services = [
         ("atlas-superego", "Superego: Gemma 4 31B", 0),
         ("atlas-id", "Id: Qwen 3 32B", 1),
-        ("atlas-ego", "Council Judge: Gemma 4 E4B", None),
+        ("atlas-ego", "Council Judge: Gemma 4 26B-A4B", None),
         ("atlas-rag-server", "RAG Server", None),
         ("atlas-nats", "NATS JetStream", None),
         ("atlas-telemetry", "Telemetry", None),
@@ -472,10 +522,7 @@ def _get_jobs():
                         parts = ps.split()
                         if len(parts) >= 3:
                             job["cpu"] = parts[0] + "%"
-                            job["mem"] = (
-                                str(round(int(parts[1]) / 1024))
-                                + "MB"
-                            )
+                            job["mem"] = str(round(int(parts[1]) / 1024)) + "MB"
                             job["elapsed"] = parts[2]
                 jobs.append(job)
         except Exception:
@@ -488,9 +535,8 @@ def _get_rag_telemetry():
     """Fetch enriched telemetry from the RAG server (short timeout)."""
     try:
         import urllib.request
-        r = urllib.request.urlopen(
-            "http://localhost:8081/api/telemetry", timeout=2
-        )
+
+        r = urllib.request.urlopen("http://localhost:8081/api/telemetry", timeout=2)
         return json.loads(r.read())
     except Exception:
         return {}
@@ -512,12 +558,12 @@ def _get_training_stats():
     stats = {"total_sessions": 0}
     try:
         import psycopg2
+
         conn = psycopg2.connect(DB_DSN)
         cur = conn.cursor()
         try:
             cur.execute(
-                "SELECT COUNT(*), AVG(score), MAX(timestamp) "
-                "FROM training_results"
+                "SELECT COUNT(*), AVG(score), MAX(timestamp) " "FROM training_results"
             )
             row = cur.fetchone()
             if row and row[0] > 0:
@@ -551,10 +597,184 @@ def _get_training_stats():
         except Exception:
             conn.rollback()
 
+        # Daily score history (last 30 days)
+        try:
+            cur.execute("""
+                SELECT DATE(timestamp) AS day,
+                       COUNT(*) AS episodes,
+                       ROUND(AVG(score)::numeric, 3) AS avg_score,
+                       ROUND(MIN(score)::numeric, 3) AS min_score,
+                       ROUND(MAX(score)::numeric, 3) AS max_score
+                FROM training_results
+                WHERE timestamp >= NOW() - INTERVAL '30 days'
+                GROUP BY DATE(timestamp)
+                ORDER BY day
+            """)
+            stats["daily_history"] = [
+                {
+                    "date": str(r[0]),
+                    "episodes": r[1],
+                    "avg_score": float(r[2]) if r[2] else 0,
+                    "min_score": float(r[3]) if r[3] else 0,
+                    "max_score": float(r[4]) if r[4] else 0,
+                }
+                for r in cur.fetchall()
+            ]
+        except Exception:
+            conn.rollback()
+            stats["daily_history"] = []
+
+        # Per-domain breakdown (from metadata)
+        try:
+            cur.execute("""
+                SELECT metadata->>'domain' AS domain,
+                       COUNT(*) AS eps,
+                       ROUND(AVG(score)::numeric, 3) AS avg
+                FROM training_results
+                WHERE metadata->>'domain' IS NOT NULL
+                GROUP BY metadata->>'domain'
+                ORDER BY avg DESC
+            """)
+            stats["domain_breakdown"] = [
+                {"domain": r[0], "episodes": r[1], "avg_score": float(r[2])}
+                for r in cur.fetchall()
+            ]
+        except Exception:
+            conn.rollback()
+            stats["domain_breakdown"] = []
+
+        # Score trend (last 20 scores for sparkline)
+        try:
+            cur.execute(
+                "SELECT score FROM training_results " "ORDER BY timestamp DESC LIMIT 20"
+            )
+            stats["recent_scores"] = [round(float(r[0]), 3) for r in cur.fetchall()]
+        except Exception:
+            conn.rollback()
+            stats["recent_scores"] = []
+
+        # Check training timer status
+        try:
+            import subprocess
+
+            r = subprocess.run(
+                ["systemctl", "--user", "is-active", "atlas-training.timer"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            stats["timer_active"] = r.stdout.strip() == "active"
+            # Next trigger time
+            r2 = subprocess.run(
+                [
+                    "systemctl",
+                    "--user",
+                    "show",
+                    "atlas-training.timer",
+                    "--property=NextElapseUSecRealtime",
+                    "--value",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            if r2.stdout.strip():
+                stats["next_training"] = r2.stdout.strip()
+        except Exception:
+            stats["timer_active"] = False
+
         conn.close()
     except Exception:
         pass
     return stats
+
+
+def _get_training_history(days=30):
+    """Full training history for /api/training/history endpoint."""
+    result = {"daily": [], "by_env": {}, "by_domain": [], "totals": {}}
+    try:
+        import psycopg2
+
+        conn = psycopg2.connect(DB_DSN)
+        cur = conn.cursor()
+
+        # Daily aggregates
+        cur.execute("""
+            SELECT DATE(timestamp) AS day,
+                   COUNT(*), ROUND(AVG(score)::numeric, 3),
+                   ROUND(MIN(score)::numeric, 3),
+                   ROUND(MAX(score)::numeric, 3)
+            FROM training_results
+            WHERE timestamp >= NOW() - INTERVAL '%s days'
+            GROUP BY DATE(timestamp)
+            ORDER BY day
+        """ % int(days))
+        result["daily"] = [
+            {
+                "date": str(r[0]),
+                "episodes": r[1],
+                "avg": float(r[2]),
+                "min": float(r[3]),
+                "max": float(r[4]),
+            }
+            for r in cur.fetchall()
+        ]
+
+        # Per-environment history
+        cur.execute("""
+            SELECT env_name, DATE(timestamp) AS day,
+                   COUNT(*), ROUND(AVG(score)::numeric, 3)
+            FROM training_results
+            WHERE timestamp >= NOW() - INTERVAL '%s days'
+            GROUP BY env_name, DATE(timestamp)
+            ORDER BY env_name, day
+        """ % int(days))
+        for r in cur.fetchall():
+            env = r[0]
+            if env not in result["by_env"]:
+                result["by_env"][env] = []
+            result["by_env"][env].append(
+                {"date": str(r[1]), "episodes": r[2], "avg": float(r[3])}
+            )
+
+        # Domain averages
+        cur.execute("""
+            SELECT metadata->>'domain', COUNT(*),
+                   ROUND(AVG(score)::numeric, 3)
+            FROM training_results
+            WHERE metadata->>'domain' IS NOT NULL
+            GROUP BY metadata->>'domain'
+            ORDER BY AVG(score) DESC
+        """)
+        result["by_domain"] = [
+            {"domain": r[0], "episodes": r[1], "avg": float(r[2])}
+            for r in cur.fetchall()
+        ]
+
+        # Totals
+        cur.execute(
+            "SELECT COUNT(*), ROUND(AVG(score)::numeric, 3) " "FROM training_results"
+        )
+        row = cur.fetchone()
+        result["totals"] = {
+            "episodes": row[0] if row else 0,
+            "avg_score": float(row[1]) if row and row[1] else 0,
+        }
+
+        # Promotion/demotion counts
+        cur.execute("""
+            SELECT metadata->>'curriculum_action', COUNT(*)
+            FROM training_results
+            WHERE metadata->>'curriculum_action' IS NOT NULL
+            GROUP BY metadata->>'curriculum_action'
+        """)
+        for r in cur.fetchall():
+            result["totals"][r[0] + "s"] = r[1]
+
+        conn.close()
+    except Exception:
+        pass
+    return result
 
 
 def _get_dreaming_stats():
@@ -581,10 +801,44 @@ def _get_dreaming_stats():
     return stats
 
 
+def _get_knowledge_stats():
+    """Get knowledge graph statistics."""
+    try:
+        from agi.memory.knowledge.graph import KnowledgeGraph, KnowledgeGraphConfig
+
+        graph = KnowledgeGraph(KnowledgeGraphConfig(db_dsn=DB_DSN))
+        stats = graph.get_stats()
+        lint = graph.lint()
+        stats["contradictions"] = len(lint.get("contradictions", []))
+        return stats
+    except Exception:
+        return {"entities": 0, "relationships": 0, "documents": 0, "contradictions": 0}
+
+
+def _get_research_stats():
+    """Get research loop telemetry (read from last saved state)."""
+    try:
+        state_file = Path("/home/claude/agi-hpc/data/research_telemetry.json")
+        if state_file.exists():
+            import json
+
+            return json.loads(state_file.read_text())
+    except Exception:
+        pass
+    return {
+        "goals_detected": 0,
+        "goals_completed": 0,
+        "knowledge_added": 0,
+        "avg_confidence": 0,
+        "last_cycle": None,
+    }
+
+
 def _get_curriculum_gaps():
     """Get knowledge gap summary (read-only)."""
     try:
         from agi.metacognition.curriculum_planner import CurriculumPlanner
+
         planner = CurriculumPlanner(db_dsn=DB_DSN, lookback_episodes=50)
         plan = planner.analyze()
         return {
@@ -615,6 +869,7 @@ def build_telemetry():
     # Unconsolidated episode count
     try:
         import psycopg2
+
         conn = psycopg2.connect(DB_DSN)
         cur = conn.cursor()
         try:
@@ -654,15 +909,13 @@ def build_telemetry():
                 "model": "Qwen 3 32B",
                 "role": "Id (creative)",
                 "note": (
-                    "Role-played by Superego"
-                    if services["rh"] == "fallback"
-                    else ""
+                    "Role-played by Superego" if services["rh"] == "fallback" else ""
                 ),
             },
             "ego": {
                 "status": services["ego"],
-                "model": "Gemma 4 E4B",
-                "role": "Divine Council (4 x E4B)",
+                "model": "Gemma 4 26B-A4B",
+                "role": "Divine Council (4 x 26B-A4B MoE)",
             },
         },
         "nats": _get_nats(),
@@ -684,14 +937,20 @@ def build_telemetry():
             "services_online": online,
             "services_total": total_services,
         },
-        "ego_privileges": rag_privs if rag_privs else {
-            "current_level": 0,
-            "level_name": "READ_ONLY",
-        },
+        "ego_privileges": (
+            rag_privs
+            if rag_privs
+            else {
+                "current_level": 0,
+                "level_name": "READ_ONLY",
+            }
+        ),
         "system_deep": _get_system_deep(),
         "attention": rag_data.get("attention", {"checks": 0, "last_intensity": "none"}),
         "training": _get_training_stats(),
         "dreaming": _get_dreaming_stats(),
+        "knowledge": _get_knowledge_stats(),
+        "research": _get_research_stats(),
         "curriculum": _get_curriculum_gaps(),
         "jobs": _get_jobs(),
         "turboquant": _get_tqpro_stats(),
@@ -703,20 +962,25 @@ def _get_visitors(limit=50):
     visitors = []
     try:
         import psycopg2
+
         conn = psycopg2.connect(DB_DSN)
         cur = conn.cursor()
         cur.execute(
             "SELECT email, ip, path, user_agent, timestamp "
-            "FROM visitor_log ORDER BY timestamp DESC LIMIT %s", (limit,))
+            "FROM visitor_log ORDER BY timestamp DESC LIMIT %s",
+            (limit,),
+        )
         for row in cur.fetchall():
-            visitors.append({
-                "email": row[0] or "",
-                "ip": row[1] or "",
-                "path": row[2] or "",
-                "user_agent": row[3] or "",
-                "timestamp": row[4].isoformat() if row[4] else "",
-                "type": "login",
-            })
+            visitors.append(
+                {
+                    "email": row[0] or "",
+                    "ip": row[1] or "",
+                    "path": row[2] or "",
+                    "user_agent": row[3] or "",
+                    "timestamp": row[4].isoformat() if row[4] else "",
+                    "type": "login",
+                }
+            )
         cur.execute("SELECT COUNT(DISTINCT email) FROM visitor_log")
         unique = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM visitor_log")
@@ -731,11 +995,14 @@ def _log_visitor(email, ip, path, user_agent):
     """Log a visitor to PostgreSQL."""
     try:
         import psycopg2
+
         conn = psycopg2.connect(DB_DSN)
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO visitor_log (email, ip, path, user_agent) VALUES (%s, %s, %s, %s)",
-            (email, ip, path, user_agent[:200] if user_agent else ""))
+            "INSERT INTO visitor_log (email, ip, path, user_agent)"
+            " VALUES (%s, %s, %s, %s)",
+            (email, ip, path, user_agent[:200] if user_agent else ""),
+        )
         conn.commit()
         conn.close()
         return True
@@ -751,22 +1018,29 @@ def _build_events():
     for v in visitor_data.get("recent", []):
         email = v.get("email", "unknown")
         name = email.split("@")[0] if "@" in email else email
-        events.append({
-            "type": "login",
-            "message": f"{name} logged in",
-            "detail": v.get("path", "/"),
-            "timestamp": v.get("timestamp", ""),
-            "color": "var(--green)",
-        })
+        events.append(
+            {
+                "type": "login",
+                "message": f"{name} logged in",
+                "detail": v.get("path", "/"),
+                "timestamp": v.get("timestamp", ""),
+                "color": "var(--green)",
+            }
+        )
     # NATS stats as system events
     nats = _get_nats()
     if nats.get("status") == "online":
-        events.append({
-            "type": "system",
-            "message": f"NATS: {nats.get('in_msgs', 0)} msgs in, {nats.get('connections', 0)} connections",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "color": "var(--accent)",
-        })
+        events.append(
+            {
+                "type": "system",
+                "message": (
+                    f"NATS: {nats.get('in_msgs', 0)} msgs in, "
+                    f"{nats.get('connections', 0)} connections"
+                ),
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "color": "var(--accent)",
+            }
+        )
     return events
 
 
@@ -790,6 +1064,15 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response(_build_events())
         elif self.path == "/api/visitors" or self.path.startswith("/api/visitors?"):
             self._json_response(_get_visitors())
+        elif self.path.startswith("/api/training/history"):
+            # Parse ?days=N parameter
+            days = 30
+            if "?" in self.path:
+                from urllib.parse import parse_qs, urlparse
+
+                qs = parse_qs(urlparse(self.path).query)
+                days = int(qs.get("days", ["30"])[0])
+            self._json_response(_get_training_history(min(days, 365)))
         elif self.path.startswith("/api/"):
             self._json_response({})
         else:
@@ -804,24 +1087,97 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             except Exception:
                 data = {}
             email = data.get("email") or self.headers.get("X-Forwarded-Email", "")
-            ip = data.get("ip") or self.headers.get("X-Forwarded-For", self.client_address[0])
+            ip = data.get("ip") or self.headers.get(
+                "X-Forwarded-For", self.client_address[0]
+            )
             path = data.get("path", "/")
             ua = data.get("user_agent") or self.headers.get("User-Agent", "")
             if email:
                 _log_visitor(email, ip, path, ua)
                 log.info(f"Visitor logged: {email} from {ip}")
             self._json_response({"ok": True})
+        elif self.path == "/api/training/start":
+            self._handle_training_start()
         else:
             self.send_response(404)
             self.end_headers()
 
+    def _handle_training_start(self):
+        """Start a manual training session (requires L3 privilege)."""
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length else b"{}"
+        try:
+            data = json.loads(body)
+        except Exception:
+            data = {}
+
+        episodes = min(data.get("episodes", 10), 50)
+        difficulty = min(data.get("difficulty", 2), 4)
+
+        # Check privilege level from RAG server
+        try:
+            import urllib.request
+
+            r = urllib.request.urlopen("http://localhost:8081/api/telemetry", timeout=3)
+            rag = json.loads(r.read())
+            priv_level = rag.get("ego_privileges", {}).get("current_level", 0)
+        except Exception:
+            priv_level = 0
+
+        if priv_level < 3:
+            self._json_response(
+                {
+                    "ok": False,
+                    "error": "Requires L3 (EXECUTE) privilege",
+                    "current_level": priv_level,
+                },
+                status=403,
+            )
+            return
+
+        # Check if training is already running
+        r = subprocess.run(
+            ["tmux", "has-session", "-t", "train"],
+            capture_output=True,
+            timeout=3,
+        )
+        if r.returncode == 0:
+            self._json_response(
+                {"ok": False, "error": "Training session already running"},
+                status=409,
+            )
+            return
+
+        # Launch training in tmux
+        cmd = (
+            f"tmux new-session -d -s train "
+            f"'cd /home/claude/agi-hpc && bash scripts/daily_training_session.sh "
+            f"--episodes {episodes} --difficulty {difficulty}'"
+        )
+        subprocess.run(["bash", "-c", cmd], capture_output=True, timeout=5)
+        log.info(
+            "Manual training started: %d episodes, difficulty %d",
+            episodes,
+            difficulty,
+        )
+        self._json_response(
+            {
+                "ok": True,
+                "episodes": episodes,
+                "difficulty": difficulty,
+                "message": (f"Training started ({episodes} eps, L{difficulty})"),
+            }
+        )
+
     def log_message(self, fmt, *args):
-        if "/api/telemetry" not in (args[0] if args else ""):
+        first = str(args[0]) if args else ""
+        if "/api/telemetry" not in first:
             log.info(fmt % args)
 
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
