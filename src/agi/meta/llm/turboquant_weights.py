@@ -67,8 +67,11 @@ except ImportError:
 
 _DEFAULT_SKIP_PATTERNS: List[str] = [
     r".*embed.*",
+    r".*wte.*",
+    r".*wpe.*",
     r".*lm_head.*",
     r".*norm.*",
+    r".*ln_.*",
     r".*bias$",
 ]
 
@@ -98,6 +101,7 @@ class WeightCompressionConfig:
         default_factory=lambda: list(_DEFAULT_SKIP_PATTERNS)
     )
     min_matrix_elements: int = 4096
+    use_gpu: bool = False
     seed: int = 42
 
 
@@ -202,6 +206,8 @@ class TurboQuantWeights:
     def __init__(self, config: Optional[WeightCompressionConfig] = None) -> None:
         self.config = config or WeightCompressionConfig()
         self._compiled_skip = [re.compile(p) for p in self.config.skip_patterns]
+        # Cache TurboQuantKV instances to avoid O(d^3) QR per forward pass
+        self._tq_cache: Dict[Tuple, TurboQuantKV] = {}
 
     # ------------------------------------------------------------------ #
     # Rank selection                                                      #
@@ -273,21 +279,9 @@ class TurboQuantWeights:
 
         energy = float(np.sum(S_k**2) / max(np.sum(S**2), 1e-30))
 
-        # --- TurboQuant on factors ---
-        tq_u = TurboQuantKV(
-            head_dim=k,
-            n_heads=1,
-            bits=self.config.bits,
-            use_gpu=False,
-            seed=self.config.seed,
-        )
-        tq_vt = TurboQuantKV(
-            head_dim=d_in,
-            n_heads=1,
-            bits=self.config.bits,
-            use_gpu=False,
-            seed=self.config.seed + 1,
-        )
+        # --- TurboQuant on factors (cached instances avoid repeat QR) ---
+        tq_u = self._get_tq(k, self.config.seed)
+        tq_vt = self._get_tq(d_in, self.config.seed + 1)
 
         # Reshape to (1, 1, n_vectors, dim) for TQ API
         U_4d = U_k.reshape(1, 1, d_out, k)
@@ -362,31 +356,51 @@ class TurboQuantWeights:
         h = h * cw.S  # (..., k) — broadcast multiply
         return h @ U_k.T  # (..., d_out)
 
+    def _get_tq(self, head_dim: int, seed: int) -> TurboQuantKV:
+        """Get a cached TurboQuantKV instance (avoids O(d^3) QR per call)."""
+        key = (head_dim, self.config.bits, seed)
+        if key not in self._tq_cache:
+            self._tq_cache[key] = TurboQuantKV(
+                head_dim=head_dim,
+                n_heads=1,
+                bits=self.config.bits,
+                use_gpu=self.config.use_gpu,
+                seed=seed,
+            )
+        return self._tq_cache[key]
+
     def _decompress_factors(
         self, cw: CompressedWeight
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Decompress U and Vt factors from a CompressedWeight."""
         if cw.quantized:
-            tq_u = TurboQuantKV(
-                head_dim=cw.rank,
-                n_heads=1,
-                bits=self.config.bits,
-                use_gpu=False,
-                seed=self.config.seed,
-            )
-            tq_vt = TurboQuantKV(
-                head_dim=cw.original_shape[1],
-                n_heads=1,
-                bits=self.config.bits,
-                use_gpu=False,
-                seed=self.config.seed + 1,
-            )
+            tq_u = self._get_tq(cw.rank, self.config.seed)
+            tq_vt = self._get_tq(cw.original_shape[1], self.config.seed + 1)
             U_k = tq_u.decompress(cw.U_compressed).reshape(cw.U_shape)
             Vt_k = tq_vt.decompress(cw.Vt_compressed).reshape(cw.Vt_shape)
         else:
             U_k = cw.U_compressed.reshape(cw.U_shape)
             Vt_k = cw.Vt_compressed.reshape(cw.Vt_shape)
         return U_k, Vt_k
+
+    def precompute_factors(
+        self, compressed: CompressedModel
+    ) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+        """Decompress all factors once for maximum inference speed.
+
+        Trades memory for latency — stores decompressed U_k and Vt_k
+        as float32 arrays.
+
+        Args:
+            compressed: CompressedModel to precompute.
+
+        Returns:
+            Dict mapping layer name to (U_k, Vt_k) numpy arrays.
+        """
+        factors = {}
+        for name, cw in compressed.weights.items():
+            factors[name] = self._decompress_factors(cw)
+        return factors
 
     # ------------------------------------------------------------------ #
     # Model-level compression                                             #
@@ -457,7 +471,10 @@ class TurboQuantWeights:
         model: Any,
         compressed: CompressedModel,
     ) -> Any:
-        """Replace nn.Linear layers with CompressedLinear modules.
+        """Replace nn.Linear / Conv1D layers with CompressedLinear modules.
+
+        Handles both nn.Linear (weight shape d_out x d_in, forward = x @ W.T)
+        and Conv1D (weight shape d_in x d_out, forward = x @ W) used by GPT-2.
 
         Args:
             model: A torch.nn.Module.
@@ -466,7 +483,8 @@ class TurboQuantWeights:
         Returns:
             The patched model (modified in place).
         """
-        import torch  # noqa: F811 — lazy import
+        import torch
+        import torch.nn as nn
 
         for name, cw in compressed.weights.items():
             # Navigate to parent module
@@ -475,16 +493,29 @@ class TurboQuantWeights:
             for part in parts[:-1]:
                 parent = getattr(parent, part)
             attr = parts[-1]
-            getattr(parent, attr)  # verify exists
+            old_module = getattr(parent, attr)
+
+            # Skip non-linear modules (Embedding, LayerNorm, etc.)
+            is_linear = isinstance(old_module, nn.Linear)
+            is_conv1d = type(old_module).__name__ == "Conv1D"
+            if not (is_linear or is_conv1d):
+                logger.debug(
+                    "[tq-weights] Skipping %s (type=%s)",
+                    name,
+                    type(old_module).__name__,
+                )
+                continue
 
             bias = None
             bias_name = name.replace(".weight", ".bias")
             if bias_name in compressed.uncompressed:
-                bias = torch.from_numpy(compressed.uncompressed[bias_name])
+                bias = torch.from_numpy(compressed.uncompressed[bias_name].copy())
 
-            new_module = CompressedLinear(cw, self, bias=bias)
+            new_module = _make_compressed_linear(
+                cw, self, bias=bias, transposed=is_conv1d
+            )
             setattr(parent, attr, new_module)
-            logger.debug("[tq-weights] Patched %s", name)
+            logger.debug("[tq-weights] Patched %s (Conv1D=%s)", name, is_conv1d)
 
         return model
 
@@ -689,15 +720,90 @@ class TurboQuantWeights:
 # ------------------------------------------------------------------ #
 
 
-class CompressedLinear:
-    """Drop-in replacement for nn.Linear using compressed weights.
+def _make_compressed_linear(
+    cw: CompressedWeight,
+    engine: TurboQuantWeights,
+    bias: Any = None,
+    transposed: bool = False,
+) -> Any:
+    """Create a CompressedLinear nn.Module (requires torch).
 
-    Decompresses SVD factors on each forward pass and performs
-    factored matmul to avoid materializing the full weight matrix.
+    Args:
+        cw: Compressed weight.
+        engine: TurboQuantWeights engine.
+        bias: Optional bias tensor.
+        transposed: If True, the original layer used ``x @ W`` (Conv1D)
+            instead of ``x @ W.T`` (nn.Linear).  The SVD was computed
+            on W as-is, so the factored matmul direction must match.
+    """
+    import torch
+    import torch.nn as nn
 
-    Note: This is a plain class, not an nn.Module, to avoid requiring
-    torch at import time. Use :meth:`TurboQuantWeights.patch_torch_model`
-    which wraps this in an actual Module.
+    class CompressedLinear(nn.Module):
+        """Drop-in nn.Linear/Conv1D replacement using SVD + TurboQuant.
+
+        Decompresses factors on first forward pass and caches them.
+        """
+
+        def __init__(
+            self,
+            compressed_weight: CompressedWeight,
+            tq_engine: TurboQuantWeights,
+            bias_tensor: Any = None,
+            is_transposed: bool = False,
+        ) -> None:
+            super().__init__()
+            self._cw = compressed_weight
+            self._engine = tq_engine
+            self._transposed = is_transposed
+            self._U_k: Optional[torch.Tensor] = None
+            self._Vt_k: Optional[torch.Tensor] = None
+            self._S: Optional[torch.Tensor] = None
+            if bias_tensor is not None:
+                self.register_buffer("bias", bias_tensor.float())
+            else:
+                self.bias = None
+
+        def _ensure_factors(self) -> None:
+            if self._U_k is not None:
+                return
+            U_k, Vt_k = self._engine._decompress_factors(self._cw)
+            self._U_k = torch.from_numpy(U_k)
+            self._Vt_k = torch.from_numpy(Vt_k)
+            self._S = torch.from_numpy(self._cw.S)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            self._ensure_factors()
+            assert self._U_k is not None and self._Vt_k is not None
+            assert self._S is not None
+            U = self._U_k.to(x.device, x.dtype)
+            Vt = self._Vt_k.to(x.device, x.dtype)
+            S = self._S.to(x.device, x.dtype)
+
+            if self._transposed:
+                # Conv1D: original forward is x @ W where W = U @ diag(S) @ Vt
+                # x @ U @ diag(S) @ Vt
+                h = x @ U  # (..., k)
+                h = h * S
+                out = h @ Vt  # (..., d_out)
+            else:
+                # nn.Linear: original forward is x @ W.T
+                # x @ Vt.T @ diag(S) @ U.T
+                h = x @ Vt.T  # (..., k)
+                h = h * S
+                out = h @ U.T  # (..., d_out)
+
+            if self.bias is not None:
+                out = out + self.bias.to(x.dtype)
+            return out
+
+    return CompressedLinear(cw, engine, bias, transposed)
+
+
+class CompressedLinearNumpy:
+    """NumPy-only compressed linear (no torch dependency).
+
+    For use in pure-numpy inference or testing without PyTorch.
     """
 
     def __init__(

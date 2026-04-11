@@ -324,40 +324,40 @@ class TestModelCompression:
 # ------------------------------------------------------------------ #
 
 
-class TestCompressedLinear:
-    """Tests for the drop-in nn.Linear replacement."""
+class TestCompressedLinearNumpy:
+    """Tests for the NumPy-only compressed linear."""
 
     def test_forward_shape(self) -> None:
-        from agi.meta.llm.turboquant_weights import CompressedLinear
+        from agi.meta.llm.turboquant_weights import CompressedLinearNumpy
 
         engine = TurboQuantWeights()
         W = _random_weight(128, 64)
         cw = engine.compress_weight(W)
-        linear = CompressedLinear(cw, engine)
+        linear = CompressedLinearNumpy(cw, engine)
         x = np.random.default_rng(99).standard_normal((4, 64)).astype(np.float32)
         out = linear(x)
         assert out.shape == (4, 128)
 
     def test_with_bias(self) -> None:
-        from agi.meta.llm.turboquant_weights import CompressedLinear
+        from agi.meta.llm.turboquant_weights import CompressedLinearNumpy
 
         engine = TurboQuantWeights()
         W = _random_weight(128, 64)
         cw = engine.compress_weight(W)
         bias = np.ones(128, dtype=np.float32)
-        linear = CompressedLinear(cw, engine, bias=bias)
+        linear = CompressedLinearNumpy(cw, engine, bias=bias)
         x = np.zeros((1, 64), dtype=np.float32)
         out = linear(x)
         # With zero input, output should be close to bias
         np.testing.assert_allclose(out, bias.reshape(1, -1), atol=0.5)
 
     def test_matches_engine_output(self) -> None:
-        from agi.meta.llm.turboquant_weights import CompressedLinear
+        from agi.meta.llm.turboquant_weights import CompressedLinearNumpy
 
         engine = TurboQuantWeights()
         W = _random_weight(256, 128)
         cw = engine.compress_weight(W)
-        linear = CompressedLinear(cw, engine)
+        linear = CompressedLinearNumpy(cw, engine)
         x = np.random.default_rng(99).standard_normal((2, 128)).astype(np.float32)
         np.testing.assert_array_equal(linear(x), engine.compressed_linear(x, cw))
 
@@ -476,3 +476,133 @@ class TestEstimation:
         est3 = TurboQuantWeights.estimate_compression(1024, 1024, rank=128, bits=3)
         est4 = TurboQuantWeights.estimate_compression(1024, 1024, rank=128, bits=4)
         assert est3["ratio"] > est4["ratio"]
+
+
+# ------------------------------------------------------------------ #
+# Test: Cached Decompression                                          #
+# ------------------------------------------------------------------ #
+
+
+class TestCachedDecompression:
+    """Tests that TurboQuantKV instances are cached (no repeat QR)."""
+
+    def test_cache_populated(self) -> None:
+        engine = TurboQuantWeights()
+        W = _random_weight(128, 128)
+        engine.compress_weight(W)
+        assert len(engine._tq_cache) > 0
+
+    def test_same_dims_reuse_instance(self) -> None:
+        engine = TurboQuantWeights()
+        W1 = _random_weight(128, 128, seed=1)
+        W2 = _random_weight(128, 128, seed=2)
+        engine.compress_weight(W1)
+        cache_before = dict(engine._tq_cache)
+        engine.compress_weight(W2)
+        # Same dimensions → same cached instances
+        for key in cache_before:
+            assert engine._tq_cache[key] is cache_before[key]
+
+    def test_different_dims_different_instances(self) -> None:
+        engine = TurboQuantWeights()
+        W1 = _random_weight(128, 128)
+        W2 = _random_weight(256, 128)
+        engine.compress_weight(W1)
+        engine.compress_weight(W2)
+        # Different output dims → rank may differ → separate cache entries
+        assert len(engine._tq_cache) >= 2
+
+
+# ------------------------------------------------------------------ #
+# Test: Precompute Factors                                            #
+# ------------------------------------------------------------------ #
+
+
+class TestPrecomputeFactors:
+    """Tests for precompute_factors (trade memory for speed)."""
+
+    def test_precomputed_matches_on_the_fly(self) -> None:
+        engine = TurboQuantWeights()
+        sd = {"proj.weight": _random_weight(256, 256)}
+        cm = engine.compress_state_dict(sd)
+        factors = engine.precompute_factors(cm)
+
+        # Precomputed factors should match on-the-fly decompression
+        for name, (U_pre, Vt_pre) in factors.items():
+            U_otf, Vt_otf = engine._decompress_factors(cm.weights[name])
+            np.testing.assert_array_equal(U_pre, U_otf)
+            np.testing.assert_array_equal(Vt_pre, Vt_otf)
+
+    def test_precomputed_all_layers(self) -> None:
+        engine = TurboQuantWeights()
+        rng = np.random.default_rng(42)
+        sd = {
+            "a.weight": rng.standard_normal((128, 128)).astype(np.float32),
+            "b.weight": rng.standard_normal((256, 128)).astype(np.float32),
+            "norm.weight": rng.standard_normal(128).astype(np.float32),
+        }
+        cm = engine.compress_state_dict(sd)
+        factors = engine.precompute_factors(cm)
+        assert set(factors.keys()) == set(cm.weights.keys())
+
+
+# ------------------------------------------------------------------ #
+# Test: CompressedLinear as nn.Module                                 #
+# ------------------------------------------------------------------ #
+
+
+class TestCompressedLinearModule:
+    """Tests that CompressedLinear works as a torch.nn.Module."""
+
+    @pytest.fixture()
+    def _setup(self):
+        import torch
+
+        engine = TurboQuantWeights()
+        W = _random_weight(128, 64)
+        cw = engine.compress_weight(W)
+        return engine, cw, torch
+
+    def test_is_nn_module(self, _setup) -> None:
+        import torch.nn as nn
+
+        from agi.meta.llm.turboquant_weights import _make_compressed_linear
+
+        engine, cw, torch = _setup
+        module = _make_compressed_linear(cw, engine)
+        assert isinstance(module, nn.Module)
+
+    def test_forward_shape(self, _setup) -> None:
+        from agi.meta.llm.turboquant_weights import _make_compressed_linear
+
+        engine, cw, torch = _setup
+        module = _make_compressed_linear(cw, engine)
+        x = torch.randn(4, 64)
+        out = module(x)
+        assert out.shape == (4, 128)
+
+    def test_no_gradient_through_weights(self, _setup) -> None:
+        from agi.meta.llm.turboquant_weights import _make_compressed_linear
+
+        engine, cw, torch = _setup
+        module = _make_compressed_linear(cw, engine)
+        x = torch.randn(2, 64, requires_grad=True)
+        out = module(x)
+        # Output should be differentiable w.r.t. input
+        out.sum().backward()
+        assert x.grad is not None
+        # But the module should have no trainable parameters
+        assert sum(p.numel() for p in module.parameters()) == 0
+
+    def test_with_bias(self, _setup) -> None:
+        from agi.meta.llm.turboquant_weights import _make_compressed_linear
+
+        engine, cw, torch = _setup
+        bias = torch.ones(128)
+        module = _make_compressed_linear(cw, engine, bias=bias)
+        x = torch.zeros(1, 64)
+        out = module(x)
+        # Zero input + bias → output ≈ bias
+        np.testing.assert_allclose(
+            out.detach().numpy(), bias.numpy().reshape(1, -1), atol=0.5
+        )
