@@ -506,10 +506,9 @@ class TestCachedDecompression:
     def test_different_dims_different_instances(self) -> None:
         engine = TurboQuantWeights()
         W1 = _random_weight(128, 128)
-        W2 = _random_weight(256, 128)
+        W2 = _random_weight(256, 256)  # different d_in → different TQ
         engine.compress_weight(W1)
         engine.compress_weight(W2)
-        # Different output dims → rank may differ → separate cache entries
         assert len(engine._tq_cache) >= 2
 
 

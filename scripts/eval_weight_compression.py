@@ -114,6 +114,7 @@ def evaluate_config(
     bits: int,
     texts: list,
     max_length: int = 1024,
+    method: str = "beam",
 ) -> dict:
     """Evaluate one compression configuration."""
     import torch
@@ -140,8 +141,9 @@ def evaluate_config(
     print(f"  Baseline PPL: {baseline['perplexity']:.2f}")
 
     # Compress
-    print(f"  Compressing (energy={energy}, bits={bits})...")
+    print(f"  Compressing (method={method}, energy={energy}, bits={bits})...")
     config = WeightCompressionConfig(
+        method=method,
         energy_threshold=energy,
         bits=bits,
     )
@@ -176,6 +178,7 @@ def evaluate_config(
 
     return {
         "model": model_name,
+        "method": method,
         "energy_threshold": energy,
         "bits": bits,
         "baseline_ppl": baseline["perplexity"],
@@ -225,6 +228,13 @@ def main() -> None:
         help="Max sequence length for eval",
     )
     parser.add_argument(
+        "--method",
+        type=str,
+        default="beam",
+        choices=["beam", "svd", "both"],
+        help="Compression method (default: beam)",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="benchmarks/weight_compression_ppl.json",
@@ -238,25 +248,23 @@ def main() -> None:
     texts = load_wikitext(max_samples=max_samples)
     print(f"  {len(texts)} text samples loaded")
 
-    # Configure sweep
+    # Configure sweep: (method, energy, bits)
+    methods = ["beam", "svd"] if args.method == "both" else [args.method]
     if args.sweep:
         configs = [
-            (0.85, 3),
-            (0.90, 3),
-            (0.95, 3),
-            (0.99, 3),
-            (0.95, 2),
-            (0.95, 4),
+            (m, e, b)
+            for m in methods
+            for e, b in [(0.85, 3), (0.90, 3), (0.95, 3), (0.99, 3), (0.95, 4)]
         ]
     elif args.quick:
-        configs = [(0.95, 3)]
+        configs = [(m, 0.95, 3) for m in methods]
     else:
-        configs = [(0.90, 3), (0.95, 3), (0.95, 4)]
+        configs = [(m, 0.95, 3) for m in methods] + [(m, 0.95, 4) for m in methods]
 
     results = []
     print(f"\nEvaluating {len(configs)} configurations on {args.model}...")
 
-    for energy, bits in configs:
+    for method, energy, bits in configs:
         try:
             r = evaluate_config(
                 args.model,
@@ -264,26 +272,27 @@ def main() -> None:
                 bits,
                 texts,
                 max_length=args.max_length,
+                method=method,
             )
             results.append(r)
         except Exception as e:
             print(f"  FAILED: {e}")
 
     # Print summary table
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 90)
     print(
-        f"{'Energy':>8}  {'Bits':>4}  {'Base PPL':>9}  {'Comp PPL':>9}  "
+        f"{'Method':>6}  {'Energy':>6}  {'Bits':>4}  {'Base PPL':>9}  {'Comp PPL':>9}  "
         f"{'PPL Ratio':>9}  {'Comp Ratio':>10}  {'Savings':>8}"
     )
-    print("-" * 80)
+    print("-" * 90)
     for r in results:
         print(
-            f"{r['energy_threshold']:>8.2f}  {r['bits']:>4}  "
+            f"{r['method']:>6}  {r['energy_threshold']:>6.2f}  {r['bits']:>4}  "
             f"{r['baseline_ppl']:>9.2f}  {r['compressed_ppl']:>9.2f}  "
             f"{r['ppl_ratio']:>9.4f}  {r['compression_ratio']:>10.1f}x  "
             f"{r['savings_pct']:>7.1f}%"
         )
-    print("=" * 80)
+    print("=" * 90)
 
     # Save
     output = {

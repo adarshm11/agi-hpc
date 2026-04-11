@@ -5,35 +5,27 @@
 # Licensed under the AGI-HPC Responsible AI License v1.0.
 
 """
-TurboQuant model weight compression via SVD + PolarQuant.
+TurboQuant model weight compression.
 
-Compresses transformer weight matrices by factorizing with truncated SVD,
-then applying TurboQuant (PolarQuant + bit-packing) to the resulting
-factors.  The combination achieves higher compression than GGUF Q4
-while preserving model quality.
+Two compression methods:
 
-Pipeline::
+**Beam** (``method="beam"``): Direct PolarQuant on weight matrix rows.
+Each row is treated as a beam vector — rotated, scalar-quantized, and
+bit-packed with its L2 norm preserved.  No decomposition; one error
+source.  Achieves ~5.1x compression at >0.95 cosine similarity (3-bit).
+Adapted from Theory Radar's TurboBeam search compression.
 
-    W (d_out x d_in, fp16)
-      -> SVD:  U (d_out x k)  S (k,)  Vt (k x d_in)
-      -> TQ3:  compress(U), compress(Vt), keep S as fp32
-      -> Store CompressedWeight
-
-Inference (factored matmul, avoids materializing full W)::
-
-    x (batch, d_in)
-      -> h = x @ Vt.T      (batch, k)
-      -> h = h * S          (batch, k)
-      -> out = h @ U.T      (batch, d_out)
+**SVD** (``method="svd"``): Truncated SVD followed by PolarQuant on the
+factors.  Higher compression (~10-20x) but two error sources (rank
+truncation + quantization) that compound across layers.
 
 Theory:
-    - Eckart-Young-Mirsky theorem: truncated SVD is the optimal rank-k
-      approximation in both Frobenius and spectral norms.
     - Zandieh et al. (ICLR 2026): random rotation decorrelates
-      dimensions for near-optimal scalar quantization.
-    - The SVD factors U and Vt have orthonormal columns/rows, making
-      their entries approximately i.i.d. Gaussian after rotation --
-      ideal for the Lloyd-Max codebook.
+      dimensions for near-optimal scalar quantization (both methods).
+    - Eckart-Young-Mirsky theorem: truncated SVD is optimal rank-k
+      approximation (SVD method).
+    - Theory Radar TurboBeam: direction-preserving vector quantization
+      maintains similarity structure (beam method).
 
 Reuses :class:`TurboQuantKV` from ``turboquant_kv.py`` for the
 rotation + quantization + bit-packing pipeline (shape-agnostic).
@@ -78,20 +70,25 @@ _DEFAULT_SKIP_PATTERNS: List[str] = [
 
 @dataclass
 class WeightCompressionConfig:
-    """Configuration for SVD + TurboQuant weight compression.
+    """Configuration for TurboQuant weight compression.
 
     Attributes:
+        method: Compression method — ``"beam"`` (direct PolarQuant,
+            ~5x compression, high quality) or ``"svd"`` (SVD + PolarQuant,
+            ~10-20x compression, lower quality).
         energy_threshold: Fraction of Frobenius-norm energy to retain
-            when selecting the SVD truncation rank (0.0-1.0).
-        bits: TurboQuant bit width for factor quantization (2, 3, or 4).
-        min_rank: Floor on SVD rank per layer.
-        max_rank_ratio: Ceiling as fraction of min(d_out, d_in).
-        pack_factors: Bit-pack quantized factors for max compression.
+            when selecting the SVD truncation rank (SVD method only).
+        bits: TurboQuant bit width for quantization (2, 3, or 4).
+        min_rank: Floor on SVD rank per layer (SVD method only).
+        max_rank_ratio: Ceiling as fraction of min(d_out, d_in) (SVD only).
+        pack_factors: Bit-pack quantized data for max compression.
         skip_patterns: Regex patterns for layer names to skip.
         min_matrix_elements: Minimum weight elements to bother compressing.
+        use_gpu: Use CuPy GPU kernels if available.
         seed: Random seed for TurboQuant rotation matrices.
     """
 
+    method: str = "beam"
     energy_threshold: float = 0.95
     bits: int = 3
     min_rank: int = 16
@@ -112,35 +109,41 @@ class WeightCompressionConfig:
 
 @dataclass
 class CompressedWeight:
-    """A single compressed weight matrix (SVD factors + TurboQuant).
+    """A single compressed weight matrix.
 
-    Stores the truncated SVD factors U_k, S_k, Vt_k where U and Vt
-    are optionally TurboQuant-compressed.
+    For ``method="svd"``: stores truncated SVD factors U_k, S_k, Vt_k.
+    For ``method="beam"``: stores the full weight via U_compressed with
+    S=[1.0] and Vt_compressed as a dummy empty array.
     """
 
     U_compressed: Union[CompressedKV, np.ndarray]
-    S: np.ndarray  # (k,) singular values, always fp32
+    S: np.ndarray  # (k,) singular values (svd) or [1.0] (beam)
     Vt_compressed: Union[CompressedKV, np.ndarray]
     rank: int
     original_shape: Tuple[int, int]
     original_dtype: np.dtype
     energy_retained: float
-    quantized: bool  # True if TQ was applied to factors
+    quantized: bool  # True if TQ was applied
+    method: str = "svd"  # "svd" or "beam"
 
     # Shapes needed for decompression reshape
-    U_shape: Tuple[int, int] = (0, 0)  # (d_out, k)
-    Vt_shape: Tuple[int, int] = (0, 0)  # (k, d_in)
+    U_shape: Tuple[int, int] = (0, 0)  # (d_out, k) or (d_out, d_in) for beam
+    Vt_shape: Tuple[int, int] = (0, 0)  # (k, d_in) or (0, 0) for beam
 
     def nbytes(self) -> int:
         """Total bytes of the compressed representation."""
         s_bytes = self.S.nbytes
+
+        def _size(obj: Union[CompressedKV, np.ndarray]) -> int:
+            if isinstance(obj, np.ndarray):
+                return obj.nbytes
+            return obj.nbytes()  # CompressedKV
+
+        if self.method == "beam":
+            return _size(self.U_compressed) + s_bytes
         if self.quantized:
-            u_bytes = self.U_compressed.nbytes()
-            vt_bytes = self.Vt_compressed.nbytes()
-        else:
-            u_bytes = self.U_compressed.nbytes
-            vt_bytes = self.Vt_compressed.nbytes
-        return u_bytes + s_bytes + vt_bytes
+            return _size(self.U_compressed) + s_bytes + _size(self.Vt_compressed)
+        return self.U_compressed.nbytes + s_bytes + self.Vt_compressed.nbytes
 
     def original_nbytes(self) -> int:
         """Bytes of the original uncompressed weight."""
@@ -249,18 +252,77 @@ class TurboQuantWeights:
         weight: np.ndarray,
         name: str = "",
     ) -> CompressedWeight:
-        """Compress a single weight matrix via SVD + TurboQuant.
+        """Compress a single weight matrix.
+
+        Uses the method specified in config: ``"beam"`` (direct PolarQuant)
+        or ``"svd"`` (truncated SVD + PolarQuant on factors).
 
         Args:
             weight: 2-D weight matrix (d_out, d_in).
             name: Layer name (for logging).
 
         Returns:
-            CompressedWeight with quantized SVD factors.
+            CompressedWeight.
         """
         if weight.ndim != 2:
             raise ValueError(f"Expected 2-D weight, got shape {weight.shape}")
 
+        if self.config.method == "beam":
+            return self._compress_beam(weight, name)
+        return self._compress_svd(weight, name)
+
+    def _compress_beam(
+        self,
+        weight: np.ndarray,
+        name: str = "",
+    ) -> CompressedWeight:
+        """Beam compression: direct PolarQuant on weight rows.
+
+        Each row is treated as a beam vector — the rotation decorrelates
+        dimensions, the Lloyd-Max codebook quantizes, and the L2 norm
+        is stored exactly.  No SVD, no rank truncation.
+        """
+        d_out, d_in = weight.shape
+        original_dtype = weight.dtype
+        W = weight.astype(np.float32)
+
+        tq = self._get_tq(d_in, self.config.seed)
+
+        # Treat rows as vectors: (1, 1, d_out, d_in)
+        W_4d = W.reshape(1, 1, d_out, d_in)
+        W_comp = tq.compress(W_4d, packed=self.config.pack_factors)
+
+        cw = CompressedWeight(
+            U_compressed=W_comp,
+            S=np.array([1.0], dtype=np.float32),
+            Vt_compressed=np.empty(0, dtype=np.float32),
+            rank=d_in,  # full rank — no truncation
+            original_shape=(d_out, d_in),
+            original_dtype=np.dtype(original_dtype),
+            energy_retained=1.0,
+            quantized=True,
+            method="beam",
+            U_shape=(d_out, d_in),
+            Vt_shape=(0, 0),
+        )
+
+        logger.info(
+            "[tq-weights] %s: (%d, %d) beam %d-bit, %.1fx compression",
+            name or "weight",
+            d_out,
+            d_in,
+            self.config.bits,
+            cw.compression_ratio(),
+        )
+
+        return cw
+
+    def _compress_svd(
+        self,
+        weight: np.ndarray,
+        name: str = "",
+    ) -> CompressedWeight:
+        """SVD compression: truncated SVD + PolarQuant on factors."""
         d_out, d_in = weight.shape
         original_dtype = weight.dtype
         W = weight.astype(np.float32)
@@ -273,17 +335,16 @@ class TurboQuantWeights:
 
         # --- Rank selection ---
         k = self.select_rank(S)
-        U_k = np.ascontiguousarray(U[:, :k])  # (d_out, k)
+        U_k = np.ascontiguousarray(U[:, :k])
         S_k = S[:k].astype(np.float32)
-        Vt_k = np.ascontiguousarray(Vt[:k, :])  # (k, d_in)
+        Vt_k = np.ascontiguousarray(Vt[:k, :])
 
         energy = float(np.sum(S_k**2) / max(np.sum(S**2), 1e-30))
 
-        # --- TurboQuant on factors (cached instances avoid repeat QR) ---
+        # --- TurboQuant on factors ---
         tq_u = self._get_tq(k, self.config.seed)
         tq_vt = self._get_tq(d_in, self.config.seed + 1)
 
-        # Reshape to (1, 1, n_vectors, dim) for TQ API
         U_4d = U_k.reshape(1, 1, d_out, k)
         Vt_4d = Vt_k.reshape(1, 1, k, d_in)
 
@@ -299,6 +360,7 @@ class TurboQuantWeights:
             original_dtype=np.dtype(original_dtype),
             energy_retained=energy,
             quantized=True,
+            method="svd",
             U_shape=(d_out, k),
             Vt_shape=(k, d_in),
         )
@@ -329,19 +391,26 @@ class TurboQuantWeights:
         Returns:
             Reconstructed weight matrix (d_out, d_in) in float32.
         """
+        if cw.method == "beam":
+            return self._decompress_beam(cw)
         U_k, Vt_k = self._decompress_factors(cw)
         W_approx = (U_k * cw.S[np.newaxis, :]) @ Vt_k
         return W_approx
+
+    def _decompress_beam(self, cw: CompressedWeight) -> np.ndarray:
+        """Decompress a beam-compressed weight matrix."""
+        tq = self._get_tq(cw.original_shape[1], self.config.seed)
+        return tq.decompress(cw.U_compressed).reshape(cw.original_shape)
 
     def compressed_linear(
         self,
         x: np.ndarray,
         cw: CompressedWeight,
     ) -> np.ndarray:
-        """Compute a linear transform using factored matmul.
+        """Compute a linear transform using compressed weights.
 
-        Equivalent to ``x @ W.T`` but avoids materializing the full
-        weight matrix, reducing peak memory.
+        For beam: decompresses full W, computes ``x @ W.T``.
+        For SVD: factored matmul ``x @ Vt.T @ diag(S) @ U.T``.
 
         Args:
             x: Input tensor (..., d_in).
@@ -350,10 +419,13 @@ class TurboQuantWeights:
         Returns:
             Output tensor (..., d_out).
         """
+        if cw.method == "beam":
+            W = self._decompress_beam(cw)
+            return x @ W.T
+
         U_k, Vt_k = self._decompress_factors(cw)
-        # x @ W.T = x @ (U @ diag(S) @ Vt).T = x @ Vt.T @ diag(S) @ U.T
         h = x @ Vt_k.T  # (..., k)
-        h = h * cw.S  # (..., k) — broadcast multiply
+        h = h * cw.S  # (..., k)
         return h @ U_k.T  # (..., d_out)
 
     def _get_tq(self, head_dim: int, seed: int) -> TurboQuantKV:
@@ -372,7 +444,15 @@ class TurboQuantWeights:
     def _decompress_factors(
         self, cw: CompressedWeight
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Decompress U and Vt factors from a CompressedWeight."""
+        """Decompress U and Vt factors from a CompressedWeight.
+
+        For beam: returns (W_decompressed, empty_array).
+        For SVD: returns (U_k, Vt_k).
+        """
+        if cw.method == "beam":
+            W = self._decompress_beam(cw)
+            return W, np.empty(0, dtype=np.float32)
+
         if cw.quantized:
             tq_u = self._get_tq(cw.rank, self.config.seed)
             tq_vt = self._get_tq(cw.original_shape[1], self.config.seed + 1)
@@ -388,14 +468,14 @@ class TurboQuantWeights:
     ) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
         """Decompress all factors once for maximum inference speed.
 
-        Trades memory for latency — stores decompressed U_k and Vt_k
-        as float32 arrays.
+        For beam: stores (W_decompressed, empty).
+        For SVD: stores (U_k, Vt_k).
 
         Args:
             compressed: CompressedModel to precompute.
 
         Returns:
-            Dict mapping layer name to (U_k, Vt_k) numpy arrays.
+            Dict mapping layer name to (factor1, factor2) numpy arrays.
         """
         factors = {}
         for name, cw in compressed.weights.items():
@@ -535,6 +615,7 @@ class TurboQuantWeights:
         arrays: Dict[str, np.ndarray] = {}
         meta: Dict[str, Any] = {
             "config": {
+                "method": compressed.config.method,
                 "energy_threshold": compressed.config.energy_threshold,
                 "bits": compressed.config.bits,
                 "min_rank": compressed.config.min_rank,
@@ -549,7 +630,10 @@ class TurboQuantWeights:
         for name, cw in compressed.weights.items():
             prefix = f"c_{name}"
             arrays[f"{prefix}_S"] = cw.S
-            if cw.quantized:
+            if cw.method == "beam":
+                arrays[f"{prefix}_U_indices"] = cw.U_compressed.indices
+                arrays[f"{prefix}_U_norms"] = cw.U_compressed.norms
+            elif cw.quantized:
                 arrays[f"{prefix}_U_indices"] = cw.U_compressed.indices
                 arrays[f"{prefix}_U_norms"] = cw.U_compressed.norms
                 arrays[f"{prefix}_Vt_indices"] = cw.Vt_compressed.indices
@@ -558,7 +642,10 @@ class TurboQuantWeights:
                 arrays[f"{prefix}_U"] = cw.U_compressed
                 arrays[f"{prefix}_Vt"] = cw.Vt_compressed
 
+            has_tq_u = isinstance(cw.U_compressed, CompressedKV)
+            has_tq_vt = isinstance(cw.Vt_compressed, CompressedKV)
             meta["compressed_layers"][name] = {
+                "method": cw.method,
                 "rank": cw.rank,
                 "original_shape": list(cw.original_shape),
                 "original_dtype": str(cw.original_dtype),
@@ -566,12 +653,12 @@ class TurboQuantWeights:
                 "quantized": cw.quantized,
                 "U_shape": list(cw.U_shape),
                 "Vt_shape": list(cw.Vt_shape),
-                "bits": cw.U_compressed.bits if cw.quantized else 0,
-                "packed": cw.U_compressed.packed if cw.quantized else False,
-                "U_n_values": cw.U_compressed.n_values if cw.quantized else 0,
-                "U_idx_shape": list(cw.U_compressed.shape) if cw.quantized else [],
-                "Vt_n_values": cw.Vt_compressed.n_values if cw.quantized else 0,
-                "Vt_idx_shape": list(cw.Vt_compressed.shape) if cw.quantized else [],
+                "bits": cw.U_compressed.bits if has_tq_u else 0,
+                "packed": cw.U_compressed.packed if has_tq_u else False,
+                "U_n_values": cw.U_compressed.n_values if has_tq_u else 0,
+                "U_idx_shape": list(cw.U_compressed.shape) if has_tq_u else [],
+                "Vt_n_values": cw.Vt_compressed.n_values if has_tq_vt else 0,
+                "Vt_idx_shape": list(cw.Vt_compressed.shape) if has_tq_vt else [],
             }
 
         for name, arr in compressed.uncompressed.items():
@@ -604,8 +691,23 @@ class TurboQuantWeights:
         for name, layer_meta in meta["compressed_layers"].items():
             prefix = f"c_{name}"
             S = data[f"{prefix}_S"]
+            method = layer_meta.get("method", "svd")
 
-            if layer_meta["quantized"]:
+            U_comp: Union[CompressedKV, np.ndarray]
+            Vt_comp: Union[CompressedKV, np.ndarray]
+
+            if method == "beam":
+                U_comp = CompressedKV(
+                    indices=data[f"{prefix}_U_indices"],
+                    norms=data[f"{prefix}_U_norms"],
+                    bits=layer_meta["bits"],
+                    original_dtype=np.dtype(np.float32),
+                    packed=layer_meta["packed"],
+                    n_values=layer_meta["U_n_values"],
+                    shape=tuple(layer_meta["U_idx_shape"]),
+                )
+                Vt_comp = np.empty(0, dtype=np.float32)
+            elif layer_meta["quantized"]:
                 U_comp = CompressedKV(
                     indices=data[f"{prefix}_U_indices"],
                     norms=data[f"{prefix}_U_norms"],
@@ -637,6 +739,7 @@ class TurboQuantWeights:
                 original_dtype=np.dtype(layer_meta["original_dtype"]),
                 energy_retained=layer_meta["energy_retained"],
                 quantized=layer_meta["quantized"],
+                method=method,
                 U_shape=tuple(layer_meta["U_shape"]),
                 Vt_shape=tuple(layer_meta["Vt_shape"]),
             )
@@ -767,31 +870,39 @@ def _make_compressed_linear(
         def _ensure_factors(self) -> None:
             if self._U_k is not None:
                 return
-            U_k, Vt_k = self._engine._decompress_factors(self._cw)
-            self._U_k = torch.from_numpy(U_k)
-            self._Vt_k = torch.from_numpy(Vt_k)
-            self._S = torch.from_numpy(self._cw.S)
+            if self._cw.method == "beam":
+                W = self._engine._decompress_beam(self._cw)
+                self._U_k = torch.from_numpy(W)
+                self._Vt_k = torch.empty(0)
+                self._S = torch.empty(0)
+            else:
+                U_k, Vt_k = self._engine._decompress_factors(self._cw)
+                self._U_k = torch.from_numpy(U_k)
+                self._Vt_k = torch.from_numpy(Vt_k)
+                self._S = torch.from_numpy(self._cw.S)
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             self._ensure_factors()
-            assert self._U_k is not None and self._Vt_k is not None
-            assert self._S is not None
-            U = self._U_k.to(x.device, x.dtype)
-            Vt = self._Vt_k.to(x.device, x.dtype)
-            S = self._S.to(x.device, x.dtype)
+            assert self._U_k is not None
 
-            if self._transposed:
-                # Conv1D: original forward is x @ W where W = U @ diag(S) @ Vt
-                # x @ U @ diag(S) @ Vt
-                h = x @ U  # (..., k)
-                h = h * S
-                out = h @ Vt  # (..., d_out)
+            if self._cw.method == "beam":
+                W = self._U_k.to(x.device, x.dtype)
+                if self._transposed:
+                    out = x @ W
+                else:
+                    out = x @ W.T
             else:
-                # nn.Linear: original forward is x @ W.T
-                # x @ Vt.T @ diag(S) @ U.T
-                h = x @ Vt.T  # (..., k)
-                h = h * S
-                out = h @ U.T  # (..., d_out)
+                U = self._U_k.to(x.device, x.dtype)
+                Vt = self._Vt_k.to(x.device, x.dtype)
+                S = self._S.to(x.device, x.dtype)
+                if self._transposed:
+                    h = x @ U
+                    h = h * S
+                    out = h @ Vt
+                else:
+                    h = x @ Vt.T
+                    h = h * S
+                    out = h @ U.T
 
             if self.bias is not None:
                 out = out + self.bias.to(x.dtype)
