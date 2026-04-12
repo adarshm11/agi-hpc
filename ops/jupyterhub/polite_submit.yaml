@@ -1,0 +1,38 @@
+# Default polite-submit config baked into the user notebook image.
+# Students inherit this; they may override per-project by creating
+# ./polite_submit.yaml in their working directory.
+#
+# Docs: https://github.com/ahb-sjsu/polite-submit
+
+cluster:
+  # null = talk to local Slurm (the host's slurmctld, visible via the
+  # bind-mounted munge socket). Atlas-specific.
+  host: null
+  partition: cpu  # sensible default; students can override with -p
+
+politeness:
+  # On Atlas (single-node, 2 GPUs, shared with research), these are
+  # deliberately conservative. Tune in PR with rationale if needed.
+  max_concurrent_jobs: 2
+  max_pending_jobs: 2
+  queue_depth_threshold: 10
+  utilization_threshold: 0.75
+
+peak_hours:
+  enabled: true
+  schedule:
+    - [9, 17]  # 9 AM – 5 PM Pacific
+  max_concurrent: 1
+  weekend_exempt: true
+
+backoff:
+  initial_seconds: 30
+  max_seconds: 1800
+  multiplier: 2.0
+  max_attempts: 20
+  jitter: true
+
+logging:
+  level: INFO
+  # Per-user log; students can tail this from their notebook.
+  file: ~/polite_submit.log

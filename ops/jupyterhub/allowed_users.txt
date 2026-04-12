@@ -1,0 +1,21 @@
+# Atlas JupyterHub — student allowlist
+#
+# One GitHub username per line.
+# Lines starting with '#' are comments and ignored.
+# Empty lines are ignored.
+# Usernames are matched case-insensitively.
+#
+# Usage:
+#   1. Add a student's GitHub username below.
+#   2. Restart the hub: `docker compose restart jupyterhub`
+#   3. Student logs in via https://<domain>/ and gets OAuth'd.
+#
+# This file is git-tracked: every change is in the audit trail.
+
+# ---- Admin --------------------------------------------------------------
+ahb-sjsu
+
+# ---- Students -----------------------------------------------------------
+# Add student GitHub usernames below. Example format:
+# alice-student
+# bob-student

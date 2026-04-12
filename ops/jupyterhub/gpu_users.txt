@@ -1,0 +1,16 @@
+# Atlas JupyterHub — GPU opt-in list
+#
+# Users on this list spawn with NVIDIA runtime and access to 1 GPU.
+# Everyone else is CPU-only.
+#
+# Format: one GitHub username per line. '#' comments, case-insensitive.
+#
+# Why opt-in:
+# - Atlas has 2x GV100 GPUs shared with production workloads
+# - Students can OOM each other or Andrew's research accidentally
+# - Opt-in + explicit approval lets us pace who gets GPU access
+#
+# To grant GPU access:
+#   1. Add the username here
+#   2. Restart the hub: `docker compose restart jupyterhub`
+#   3. Next spawn, the user will have CUDA available

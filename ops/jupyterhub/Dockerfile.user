@@ -1,0 +1,86 @@
+# Atlas JupyterHub — User notebook image
+# Extends jupyter/scipy-notebook with:
+#   - PyTorch + HuggingFace stack for Quests
+#   - slurm-client (so students can squeue / sinfo / scancel from notebooks)
+#   - polite-submit (the gated sbatch entry point)
+#   - /usr/local/bin/sbatch wrapper that refuses direct use
+#
+# Copyright (c) 2026 Andrew H. Bond. Licensed under AGI-HPC Responsible AI License v1.0.
+
+FROM quay.io/jupyter/scipy-notebook:2026-03-31
+
+# ------------------------------------------------------------------
+# Root section — install OS packages and Slurm client
+# ------------------------------------------------------------------
+USER root
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git \
+        build-essential \
+        slurm-client \
+        munge \
+        libmunge2 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Slurm and munge expect specific UIDs/GIDs to match the host.
+# The install-slurm-atlas.sh script creates munge and slurm users on the
+# host with distro-default UIDs; we align with those here so that the
+# bind-mounted /var/run/munge socket is readable inside the container.
+#
+# On Ubuntu 24.04, distro defaults are:
+#   munge: UID 106, GID 115 (may vary)
+#   slurm: UID 64030, GID 64030
+# We don't create these users in the image — they would conflict with
+# the host-side accounts. Instead, file permissions on the mounted
+# socket are managed on the host side (see docker-compose.yml).
+
+# ------------------------------------------------------------------
+# Install sbatch wrapper at high-priority PATH location
+# ------------------------------------------------------------------
+COPY bin/sbatch-wrapper.sh /usr/local/bin/sbatch
+RUN chmod 755 /usr/local/bin/sbatch
+
+# ------------------------------------------------------------------
+# Bake the default polite-submit config (students can override)
+# ------------------------------------------------------------------
+COPY polite_submit.yaml /etc/skel/polite_submit.yaml
+
+# ------------------------------------------------------------------
+# Drop back to the notebook user. NB_UID is overridden at runtime by
+# JupyterHub via pre_spawn_hook so each student runs as their own UID
+# (matching their Linux account on Atlas).
+# ------------------------------------------------------------------
+USER ${NB_UID}
+
+# ------------------------------------------------------------------
+# Python dependencies
+# ------------------------------------------------------------------
+# Scientific + ML stack
+RUN pip install --no-cache-dir \
+    "torch==2.4.0" \
+    "transformers>=4.40" \
+    "datasets>=2.18" \
+    "scikit-learn>=1.5" \
+    "pydantic>=2.6" \
+    "rich>=13.7" \
+    "matplotlib>=3.8"
+
+# erisml-lib with I-EIP extras (main branch; pin to a tag when one exists)
+RUN pip install --no-cache-dir \
+    "git+https://github.com/ahb-sjsu/erisml-lib.git@main#egg=erisml-lib[ieip]"
+
+# polite-submit (installed from PyPI)
+RUN pip install --no-cache-dir "polite-submit"
+
+# Copy the default polite-submit config from skel into the home dir so
+# it's present on first login, before DockerSpawner's home-dir mount
+# takes over.
+RUN cp /etc/skel/polite_submit.yaml /home/${NB_USER}/polite_submit.yaml
+
+# Welcome notebook
+COPY --chown=${NB_UID}:${NB_GID} welcome.ipynb /home/${NB_USER}/welcome.ipynb
+
+WORKDIR /home/${NB_USER}
+
+CMD ["start-notebook.sh", "--ServerApp.default_url=/lab/tree/welcome.ipynb"]

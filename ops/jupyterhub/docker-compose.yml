@@ -1,0 +1,83 @@
+services:
+  # ---- Caddy (reverse proxy + TLS) ----------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: jhub_caddy
+    restart: unless-stopped
+    ports:
+      - "8443:8443"   # matches the Comcast port-forward 443 -> atlas:8443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN}
+    networks:
+      - jhub_edge
+    depends_on:
+      - jupyterhub
+
+  # ---- JupyterHub itself --------------------------------------------
+  jupyterhub:
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    image: atlas-jupyterhub:local
+    container_name: jhub_hub
+    restart: unless-stopped
+    # Bind only to localhost — Caddy is the only ingress.
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # OAuth (populated from .env)
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL}
+      # User resource caps
+      - USER_CPU_LIMIT=${USER_CPU_LIMIT:-2.0}
+      - USER_MEM_LIMIT=${USER_MEM_LIMIT:-8G}
+      - USER_CONTAINER_IMAGE=atlas-jupyterhub-user:local
+      - USER_NETWORK=jhub_users
+      - IDLE_CULL_SECONDS=${IDLE_CULL_SECONDS:-3600}
+    volumes:
+      # Hub state (user DB, cookie secret)
+      - jhub_data:/srv/jupyterhub
+      # Mount the Docker socket so the hub can spawn user containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount config and allowlists read-only
+      - ./jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py:ro
+      - ./allowed_users.txt:/srv/jupyterhub/allowed_users.txt:ro
+      - ./gpu_users.txt:/srv/jupyterhub/gpu_users.txt:ro
+      # UID map (produced by sync-student-accounts.sh, mounted ro)
+      - /var/lib/atlas-jhub/uid-map.json:/srv/jupyterhub/uid-map.json:ro
+    networks:
+      - jhub_edge
+      - jhub_users
+    depends_on:
+      - user-image-builder
+
+  # ---- Builder-only service to produce the user notebook image ------
+  user-image-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.user
+    image: atlas-jupyterhub-user:local
+    command: ["true"]
+    restart: "no"
+    deploy:
+      replicas: 0
+
+volumes:
+  caddy_data:
+  caddy_config:
+  jhub_data:
+
+networks:
+  jhub_edge:
+    driver: bridge
+    internal: false   # Caddy needs egress for Let's Encrypt
+  jhub_users:
+    driver: bridge
+    internal: false   # user containers need egress for pypi/huggingface
+    driver_opts:
+      com.docker.network.bridge.name: br_jhub_users

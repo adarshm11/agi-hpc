@@ -1,0 +1,63 @@
+# Atlas JupyterHub — Caddy reverse proxy
+#
+# Handles TLS termination and HTTP-to-HTTPS redirect. Forwards everything
+# else to the hub on 127.0.0.1:8000 (not reachable from outside because
+# the hub binds to localhost only).
+
+{
+	# ACME email for Let's Encrypt — change to a real address you monitor.
+	email ahbond@example.com
+
+	# Use non-standard HTTP port inside the container (8443); the Comcast
+	# port-forward maps WAN 443 -> atlas 8443.
+	servers :8443 {
+		protocols h1 h2
+	}
+}
+
+{$DOMAIN}:8443 {
+	# Automatic TLS via Let's Encrypt. For this to work:
+	# 1. {$DOMAIN} must resolve to your public IP
+	# 2. Comcast port 80 must briefly be open OR you configure DNS-01
+	#
+	# The default HTTP-01 challenge needs port 80. If your router already
+	# forwards 80 to atlas, uncomment the `disable_h1_challenges off`
+	# line below. If not, use DNS-01 with a plugin — out of scope here.
+	#
+	# tls {
+	#     dns cloudflare {env.CF_API_TOKEN}
+	# }
+
+	# Reverse proxy to the hub. The hub is on jhub_edge; Caddy resolves
+	# 'jupyterhub' via Docker's embedded DNS.
+	reverse_proxy jupyterhub:8000 {
+		# JupyterHub uses websockets for terminal and kernel I/O.
+		# Caddy v2 handles these transparently, but we spell it out.
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+
+		# Long-running kernel connections — don't time out aggressively.
+		transport http {
+			read_timeout 86400s
+			write_timeout 86400s
+		}
+	}
+
+	# Basic hardening headers.
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# CSP is deliberately permissive because JupyterLab needs inline
+		# scripts and eval. Tighten only if you understand the implications.
+	}
+
+	# Access log goes to stdout (collected by docker compose logs).
+	log {
+		output stdout
+		format console
+	}
+}

@@ -1,0 +1,69 @@
+# ================================================================
+# Atlas Slurm configuration TEMPLATE
+# ================================================================
+# This is a REFERENCE COPY of what install-slurm-atlas.sh generates.
+# The actual file is at /etc/slurm/slurm.conf on Atlas, regenerated
+# by the install script. Keep this template in sync if you change
+# the live config.
+# ================================================================
+
+ClusterName=atlas
+SlurmctldHost=atlas
+AuthType=auth/munge
+StateSaveLocation=/var/spool/slurmctld
+SlurmdSpoolDir=/var/spool/slurmd
+SwitchType=switch/none
+MpiDefault=none
+ProctrackType=proctrack/cgroup
+SlurmctldPidFile=/run/slurmctld.pid
+SlurmdPidFile=/run/slurmd.pid
+SlurmUser=slurm
+SlurmdUser=root
+SlurmctldPort=6817
+SlurmdPort=6818
+ReturnToService=2
+
+# Scheduling
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_CPU_Memory
+
+# Accounting (filetxt; suitable for single-node cluster)
+AccountingStorageType=accounting_storage/filetxt
+AccountingStorageLoc=/var/log/slurm/accounting
+JobAcctGatherType=jobacct_gather/cgroup
+
+# Logging
+SlurmctldDebug=info
+SlurmctldLogFile=/var/log/slurm/slurmctld.log
+SlurmdDebug=info
+SlurmdLogFile=/var/log/slurm/slurmd.log
+
+# Node: values filled in by install script based on actual hardware
+GresTypes=gpu
+NodeName=atlas CPUs=<CPUs> RealMemory=<MemMB> Gres=gpu:gv100:2 State=UNKNOWN
+
+# ---------------------------------------------------------------
+# Partitions
+# ---------------------------------------------------------------
+# interactive: fast-turnaround cells from Jupyter notebooks
+PartitionName=interactive Nodes=atlas \
+    MaxTime=00:30:00 MaxCPUsPerNode=2 MaxMemPerNode=8192 \
+    DefaultTime=00:10:00 State=UP Priority=100
+
+# cpu: general CPU compute, student default
+PartitionName=cpu Nodes=atlas \
+    MaxTime=04:00:00 MaxCPUsPerNode=8 MaxMemPerNode=32768 \
+    DefaultTime=00:30:00 State=UP Priority=50
+
+# gpu: student GPU access (opt-in via gpu_users.txt → gpu_users Linux group)
+PartitionName=gpu Nodes=atlas \
+    MaxTime=04:00:00 MaxCPUsPerNode=8 MaxMemPerNode=65536 \
+    DefaultTime=00:30:00 State=UP Priority=50 \
+    AllowAccounts=gpu_users
+
+# research: Andrew's partition, preempts student jobs
+PartitionName=research Nodes=atlas \
+    MaxTime=UNLIMITED Default=YES State=UP Priority=1000 \
+    AllowAccounts=research \
+    PreemptMode=requeue
