@@ -1,0 +1,84 @@
+{
+  "benchmark_info": {
+    "description": "TurboQuant weight compression on Atlas",
+    "hardware": "2x GV100 32GB, 251GB RAM"
+  },
+  "results": [
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "params_b": 7.6,
+      "method": "beam",
+      "bits": 3,
+      "baseline_ppl": 9.36,
+      "compressed_ppl": 21335.4,
+      "ppl_ratio": 2279.42,
+      "compression_ratio": 4.5,
+      "original_mb": 29051,
+      "compressed_mb": 6498,
+      "savings_pct": 77.6,
+      "compress_time_s": 60,
+      "eval_time_s": 312
+    },
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "params_b": 7.6,
+      "method": "beam",
+      "bits": 4,
+      "baseline_ppl": 9.36,
+      "compressed_ppl": 74.85,
+      "ppl_ratio": 8.0,
+      "compression_ratio": 4.0,
+      "original_mb": 29051,
+      "compressed_mb": 7276,
+      "savings_pct": 75.0,
+      "compress_time_s": 45,
+      "eval_time_s": 251
+    },
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "params_b": 7.6,
+      "method": "beam_mixed",
+      "bits": 3,
+      "baseline_ppl": 9.36,
+      "compressed_ppl": 687709.4,
+      "ppl_ratio": 73473.23,
+      "compression_ratio": 2.8,
+      "original_mb": 29051,
+      "compressed_mb": 10389,
+      "savings_pct": 64.2,
+      "compress_time_s": 386,
+      "eval_time_s": 517
+    },
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "params_b": 7.6,
+      "method": "beam_mixed",
+      "bits": 4,
+      "baseline_ppl": 9.36,
+      "compressed_ppl": 687709.4,
+      "ppl_ratio": 73473.23,
+      "compression_ratio": 2.8,
+      "original_mb": 29051,
+      "compressed_mb": 10389,
+      "savings_pct": 64.2,
+      "compress_time_s": 373,
+      "eval_time_s": 517
+    },
+    {
+      "model": "Qwen/Qwen2.5-14B-Instruct",
+      "params_b": 14.7,
+      "method": "beam",
+      "bits": 4,
+      "baseline_ppl": 7.97,
+      "compressed_ppl": -1,
+      "ppl_ratio": -1,
+      "compression_ratio": 4.6,
+      "original_mb": 56343,
+      "compressed_mb": 12251,
+      "savings_pct": 78.3,
+      "compress_time_s": 94,
+      "eval_time_s": -1,
+      "note": "Compression succeeded. PPL eval crashed \u2014 decompressed float32 weights exceed VRAM, needs fp16 casting fix."
+    }
+  ]
+}
