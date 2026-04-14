@@ -1,9 +1,19 @@
-# 🧠 AGI-HPC  
-### Embodied, safety-aware AGI architecture for High Performance Computing clusters
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/atlas_mark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/brand/atlas_mark_light.svg">
+    <img src="docs/brand/atlas_mark.svg" width="280" alt="Atlas AI — sphere + Eris apple">
+  </picture>
+</p>
+
+# AGI-HPC
+### Atlas AI — embodied, safety-aware AGI architecture for High Performance Computing clusters
 
 ![CI](https://github.com/ahb-sjsu/agi-hpc/actions/workflows/ci.yaml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
+
+> **Brand assets:** [erisml.org/brand/](https://erisml.org/brand/) · local: [`docs/brand/`](docs/brand/)
 
 AGI-HPC is a **modular, distributed, safety-gated cognitive architecture** designed to run on **university-scale HPC clusters** (SJSU CoE HPC) using:
 
