@@ -191,6 +191,27 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   .topbar .logo .subtitle{display:none}
   .gpu-row{flex-direction:column;align-items:center}
 }
+
+/* ─── Pitch Mode ─── */
+.pitch-toggle{margin-left:8px;background:var(--surface);border:1px solid var(--border);color:var(--text-dim);font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all .2s}
+.pitch-toggle:hover{color:var(--accent);border-color:var(--accent)}
+.pitch-toggle[aria-pressed="true"]{background:var(--accent-dim);color:var(--accent);border-color:var(--accent)}
+body.pitch .topbar .uptime,
+body.pitch .col-right,
+body.pitch #sc-fabric,
+body.pitch #sc-memory,
+body.pitch .metric-panel:has(#spark-line),
+body.pitch #ms-load,body.pitch #ms-tcp,body.pitch #ms-fds,body.pitch #ms-ctxsw,body.pitch #ms-netrx,body.pitch #ms-nettx{display:none}
+body.pitch .dashboard{grid-template-columns:260px 1fr}
+body.pitch .topbar .logo h1{font-size:19px}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce){
+  .sub-card.processing{animation:none !important}
+  .gauge-fg{transition:none !important}
+  .topbar .nav a,.pitch-toggle,.topbar .conn-status{transition:none !important}
+  .vram-bar-fill,#ram-used-fill,#ram-cache-fill,#ram-free-fill{transition:none !important}
+}
 </style>
 </head>
 <body>
@@ -198,14 +219,15 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 <!-- ═══════════════════ TOP BAR ═══════════════════ -->
 <div class="topbar">
   <div class="logo">
-    <svg viewBox="0 0 32 32" fill="none">
-      <circle cx="16" cy="16" r="14" stroke="#4a9eff" stroke-width="1.5" opacity=".3"/>
-      <circle cx="16" cy="16" r="9" stroke="#4a9eff" stroke-width="1.5" opacity=".6"/>
-      <circle cx="16" cy="16" r="4" fill="#4a9eff" opacity=".9"/>
-      <line x1="16" y1="2" x2="16" y2="7" stroke="#4a9eff" stroke-width="1" opacity=".4"/>
-      <line x1="16" y1="25" x2="16" y2="30" stroke="#4a9eff" stroke-width="1" opacity=".4"/>
-      <line x1="2" y1="16" x2="7" y2="16" stroke="#4a9eff" stroke-width="1" opacity=".4"/>
-      <line x1="25" y1="16" x2="30" y2="16" stroke="#4a9eff" stroke-width="1" opacity=".4"/>
+    <svg viewBox="20 45 160 110" fill="none" role="img" aria-label="Atlas AI">
+      <title>Atlas AI</title>
+      <circle cx="75" cy="100" r="50" fill="none" stroke="#4a9eff" stroke-width="2"/>
+      <ellipse cx="75" cy="100" rx="50" ry="14" fill="none" stroke="#63b3ed" stroke-width="1" opacity="0.6"/>
+      <ellipse cx="75" cy="100" rx="14" ry="50" fill="none" stroke="#63b3ed" stroke-width="1" opacity="0.6"/>
+      <line x1="125" y1="100" x2="134" y2="90" stroke="#e0e6f0" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.55"/>
+      <circle cx="150" cy="90" r="16" fill="#f5c147"/>
+      <path d="M 148 76 Q 149 70 153 72" fill="none" stroke="#f5c147" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M 156 72 Q 164 68 166 76 Q 160 78 156 72 Z" fill="#4ade80" opacity="0.9"/>
     </svg>
     <h1>Atlas AI</h1>
     <span class="subtitle">Operations Dashboard</span>
@@ -217,6 +239,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     <a href="/oauth2/sign_out" class="logout">Logout</a>
   </div>
   <div class="uptime">UPTIME <span id="sys-uptime">--:--:--</span></div>
+  <button type="button" id="pitch-toggle" class="pitch-toggle" title="Toggle pitch mode" aria-pressed="false">Pitch</button>
   <div class="conn-status ok" id="conn-dot" title="Telemetry connection"></div>
 </div>
 
@@ -262,6 +285,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     <div class="card-header"><span class="status-dot on"></span><span class="name">Safety Gateway</span><span class="model-tag" id="safety-layer">reflex</span></div>
     <div class="card-metric">In: <span class="val" id="safety-in">0</span> | Out: <span class="val" id="safety-out">0</span> | Vetoes: <span class="val" id="safety-vetoes">0</span></div>
     <div class="card-metric">Latency: <span class="val" id="safety-latency">0</span>ms | Audit: <span class="val" id="safety-audit">0</span></div>
+    <div class="card-metric">Veto: <span class="val" id="safety-veto-rate">--</span> | Fallback: <span class="val" id="safety-fallback-rate">--</span> | Consensus: <span class="val" id="safety-consensus-rate">--</span></div>
   </div>
 
   <div class="sub-card active" id="sc-dreaming">
@@ -1255,6 +1279,10 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     el('safety-latency').textContent = (safety.avg_latency_ms || 0).toFixed(1);
     el('safety-audit').textContent = safety.audit_log_size || 0;
     el('safety-layer').textContent = safety.layer || 'reflex';
+    var pct = function(v){ return (v == null) ? '--' : (v * 100).toFixed(1) + '%'; };
+    el('safety-veto-rate').textContent = pct(safety.veto_rate);
+    el('safety-fallback-rate').textContent = pct(safety.fallback_rate);
+    el('safety-consensus-rate').textContent = pct(safety.consensus_rate);
 
     // ─ Dreaming (Default Mode Network, Raichle 2001) ─
     var drm = t.dreaming || {};
@@ -1758,6 +1786,18 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       label = durationStr(elapsed);
     }
     el('sys-uptime').textContent = label;
+  }
+
+  // ─── Pitch Mode ───
+  var pitchBtn = el('pitch-toggle');
+  if(pitchBtn){
+    var saved = localStorage.getItem('atlas-pitch-mode') === '1';
+    if(saved){ document.body.classList.add('pitch'); pitchBtn.setAttribute('aria-pressed','true'); }
+    pitchBtn.addEventListener('click', function(){
+      var on = document.body.classList.toggle('pitch');
+      pitchBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      localStorage.setItem('atlas-pitch-mode', on ? '1' : '0');
+    });
   }
 
   // ─── Init ───
