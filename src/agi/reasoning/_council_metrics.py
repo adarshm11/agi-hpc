@@ -29,7 +29,14 @@ except ImportError:  # pragma: no cover - import-guard
     _PROM_AVAILABLE = False
 
     class _NoOp:
-        """Stand-in for prometheus_client objects when the lib is missing."""
+        """Stand-in for prometheus_client objects when the lib is missing.
+
+        Accepts (and ignores) the same construction args as the real
+        Counter/Gauge/Histogram so callers don't have to branch.
+        """
+
+        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+            pass
 
         def labels(self, **_kwargs: Any) -> "_NoOp":
             return self
