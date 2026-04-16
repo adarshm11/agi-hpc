@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agi.reasoning._council_backend import BackendRequest, BackendResponse
 from agi.reasoning.divine_council import (
     CouncilVerdict,
     CouncilVote,
@@ -27,6 +28,29 @@ from agi.reasoning.tree_of_thought import (
     TreeOfThought,
     TreeResult,
 )
+
+
+class _NullBackend:
+    """Minimal CouncilBackend stub for tests that only need a council
+    instance wired into TreeOfThought without actually deliberating."""
+
+    name = "null"
+
+    def chat(self, request: BackendRequest) -> BackendResponse:
+        return BackendResponse(
+            ok=True,
+            content="score 7/10",
+            backend_name=self.name,
+            attempts=1,
+            latency_s=0.0,
+        )
+
+    def health_snapshot(self) -> dict:
+        return {"name": self.name}
+
+
+def _make_council() -> DivineCouncil:
+    return DivineCouncil(_NullBackend())
 
 
 @pytest.fixture()
@@ -234,7 +258,7 @@ class TestCouncilIntegration:
     """Tests for Divine Council as ToT evaluator."""
 
     def test_tot_accepts_council_parameter(self) -> None:
-        council = DivineCouncil()
+        council = _make_council()
         tot = TreeOfThought(council=council)
         assert tot._council is council
 
@@ -243,7 +267,7 @@ class TestCouncilIntegration:
         assert tot._council is None
 
     def test_council_evaluate_method_exists(self) -> None:
-        council = DivineCouncil()
+        council = _make_council()
         tot = TreeOfThought(council=council)
         assert hasattr(tot, "_council_evaluate")
 
