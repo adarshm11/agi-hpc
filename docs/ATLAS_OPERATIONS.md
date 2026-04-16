@@ -289,6 +289,9 @@ All critical services are managed by systemd with auto-restart and boot persiste
 | RAG Server | atlas-rag-server | 8081 | Search + hemisphere routing |
 | Spock LLM | atlas-llm-spock | 8080 | Qwen 72B Q5_K_M on GPU 0 |
 | Telemetry | atlas-telemetry | 8085 | System metrics + event stream |
+| NATS | atlas-nats | 4222, 7422, 8222 | JetStream hub + leaf listener ([§3.5](#35-nats-bursting-k8s-cloud-bursting)) |
+| NATS cert sync | sync-nats-cert.path | — | Path unit: reloads NATS on Caddy cert rotation |
+| Burst controller | nats-bursting | — | [`nats-bursting`](https://github.com/ahb-sjsu/nats-bursting) NATS→K8s dispatcher |
 
 ```bash
 # Check all services
@@ -312,12 +315,13 @@ sudo bash deploy/systemd/install-services.sh --uninstall
 
 | Service | Port | How to Start |
 |---------|------|-------------|
-| NATS JetStream | 4222 | `nats-server -c /home/claude/nats.conf` |
 | Research Portal | 8443 | Runs independently |
 | Kirk LLM (GPU 1) | 8082 | Via start_atlas.sh when GPU 1 free |
 | Memory NATS Service | 50300 | `python -m agi.memory.nats_service` |
 | Safety NATS Service | 50055 | `python -m agi.safety.nats_service` |
 | Metacognition | — | `python -m agi.metacognition.nats_service` |
+
+> **Note:** NATS was moved under systemd as `atlas-nats.service` (2026-04-16) when the leaf-node listener for NRP bursting was added. The process still runs as `/home/claude/bin/nats-server` but is now config-driven (`/home/claude/nats.conf`) and starts at boot. See [§3.5](#35-nats-bursting-k8s-cloud-bursting).
 
 ### 3.3 Request Flow
 
@@ -337,6 +341,134 @@ Browser → Caddy (:443, TLS)
 
 Telemetry: Caddy routes /api/telemetry, /api/events, /api/visitors
   directly to Telemetry Server (:8085), bypassing OAuth2.
+```
+
+### 3.5 nats-bursting (K8s cloud bursting)
+
+Atlas bursts training jobs and long-tail inference to **NRP Nautilus**
+via [`nats-bursting`](https://github.com/ahb-sjsu/nats-bursting). The
+remote cluster participates in the local `agi.*` NATS fabric as a
+first-class leaf node — burst pods subscribe to the same subjects as
+local services.
+
+**NRP namespace:** `ssu-atlas-ai` (SSU allocation under NRP federation).
+**NRP API:** `https://67.58.53.148:443` (OIDC via
+`authentik.nrp-nautilus.io`).
+
+#### Topology
+
+```
+      ┌──────────────── Atlas ────────────────┐             ┌──── NRP (ssu-atlas-ai) ────┐
+      │                                       │             │                            │
+      │  agi.* subsystems ─► NATS :4222 (hub) │             │  Burst pods                │
+      │                         ▲             │             │   ↕                        │
+      │                         │             │             │  atlas-nats leaf service   │
+      │                         │             │             │   ↕                        │
+      │                  :7422 leaf listener ◄─── TLS ──────┤  NATS leaf pod (Deployment)│
+      │                  (TLS via Caddy cert) │  outbound   │                            │
+      │                         ▲             │  only       │                            │
+      │  nats-bursting ─────────┘             │             │                            │
+      │  (Go controller, systemd)             │             │                            │
+      └───────────────────────────────────────┘             └────────────────────────────┘
+
+             Router NAT: 0.0.0.0:7422 → 192.168.0.7:7422
+                   Public hostname: atlas-sjsu.duckdns.org
+```
+
+#### Key files on Atlas
+
+| Path | Role |
+|------|------|
+| `/usr/local/bin/nats-bursting` | Go controller binary |
+| `/etc/nats-bursting/config.yaml` | Controller config (user/group `claude`, mode `0640`) |
+| `/etc/systemd/system/nats-bursting.service` | Systemd unit (`Requires=atlas-nats.service`) |
+| `/home/claude/nats.conf` | NATS config with `leafnodes {}` block on :7422 |
+| `/etc/nats/certs/atlas.{crt,key}` | Caddy-managed Let's Encrypt cert, synced for nats-server |
+| `/usr/local/bin/sync-nats-cert.sh` | Cert sync + HUP helper |
+| `/etc/systemd/system/sync-nats-cert.path` | Path unit watching Caddy cert for rotation |
+| `/home/claude/.kube/config` | NRP kubeconfig (OIDC, refresh tokens in `~/.kube/cache/oidc-login/`) |
+
+#### Submitting a job
+
+From any Python script on Atlas or any machine that can reach NATS:
+
+```python
+from nats_bursting import Client, JobDescriptor, Resources
+
+client = Client(nats_url="nats://localhost:4222")
+result = client.submit_and_wait(
+    JobDescriptor(
+        name="hello",
+        image="python:3.12-slim",
+        command=["python", "-c", "print('hello from NRP')"],
+        resources=Resources(cpu="100m", memory="128Mi"),
+    ),
+    timeout=60,
+)
+```
+
+From a Jupyter notebook:
+
+```python
+%load_ext nats_bursting.magic
+%%burst --gpu 1 --memory 24Gi
+import torch
+model = load_qwen_72b()
+```
+
+The `%%burst` magic probes `nvidia-smi` and only bursts if every local
+GPU is saturated. `--always` / `--never` override the check.
+
+#### Politeness defaults
+
+Tuned conservatively for NRP's shared-cluster policy (400-pod
+namespace cap, soft social contract against flooding):
+
+| Threshold | Value |
+|---|---|
+| `max_concurrent_jobs` | 10 |
+| `max_pending_jobs` | 5 |
+| `queue_depth_threshold` | 100 cluster-wide pending pods |
+| `utilization_threshold` | 0.85 |
+| `initial_backoff` | 30 s → `max_backoff` 15 min |
+| `backoff_multiplier` | 2.0 |
+| `max_attempts` | 15 |
+
+Override in `/etc/nats-bursting/config.yaml`.
+
+#### Common ops
+
+```bash
+# Controller state
+systemctl status nats-bursting
+sudo journalctl -u nats-bursting -f
+
+# NATS hub state (leaf connections, JetStream)
+curl -s http://localhost:8222/leafz   | jq .
+curl -s http://localhost:8222/jsz     | jq .
+
+# Restart hub (leaf listener TLS will re-init; NRP leaf auto-reconnects)
+sudo systemctl restart atlas-nats
+
+# Remote: see the bridge pod
+KUBECONFIG=~/.kube/config kubectl -n ssu-atlas-ai \
+  logs deploy/atlas-nats-leaf -f
+
+# Submit a test job from Atlas
+nats --server nats://localhost:4222 pub burst.submit \
+  '{"job_id":"test","descriptor":{"name":"ping","image":"alpine","command":["echo","hi"]}}'
+```
+
+#### Cert rotation
+
+Caddy rotates the `atlas-sjsu.duckdns.org` Let's Encrypt cert ~30 days
+before expiry. The `sync-nats-cert.path` systemd unit watches Caddy's
+storage dir and triggers the sync+HUP on change — no manual action
+needed, but if something's off:
+
+```bash
+sudo systemctl status sync-nats-cert.path
+sudo /usr/local/bin/sync-nats-cert.sh      # force sync
 ```
 
 ---
