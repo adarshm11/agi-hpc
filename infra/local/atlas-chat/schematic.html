@@ -813,15 +813,16 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     </div>
   </div>
 
-  <div class="section-header" style="margin-top:16px">NRP Burst Jobs</div>
+  <div class="section-header" style="margin-top:16px">NRP Burst · <span style="font-weight:400;font-size:10px;color:var(--text-dim)">ssu-atlas-ai</span></div>
   <div id="nrp-burst" style="font-size:11px;padding:4px 0">
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-      <span style="color:var(--text-dim)">Pods:</span>
       <span style="color:var(--green)" id="nrp-succeeded">0</span><span style="color:var(--text-muted)"> done</span>
       <span style="color:var(--accent)" id="nrp-running">0</span><span style="color:var(--text-muted)"> run</span>
       <span style="color:var(--yellow)" id="nrp-pending">0</span><span style="color:var(--text-muted)"> pend</span>
       <span style="color:var(--red)" id="nrp-failed">0</span><span style="color:var(--text-muted)"> fail</span>
+      <span style="color:var(--text-dim);margin-left:6px" id="nrp-total"></span>
     </div>
+    <div id="nrp-jobs-table" style="font-family:var(--mono);font-size:10px;max-height:200px;overflow-y:auto;margin-bottom:4px"></div>
     <div id="nrp-batches" style="color:var(--text-dim);font-family:var(--mono);font-size:10px"></div>
   </div>
 
@@ -1773,6 +1774,22 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   }
 
   // ─── NRP Burst Jobs polling ───
+  function nrpAge(iso){
+    if(!iso) return '';
+    try {
+      var s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+      if(s < 60) return s + 's';
+      if(s < 3600) return Math.floor(s/60) + 'm';
+      if(s < 86400) return Math.floor(s/3600) + 'h';
+      return Math.floor(s/86400) + 'd';
+    } catch(e){ return ''; }
+  }
+  function nrpStateColor(s){
+    if(s==='Running') return 'var(--accent)';
+    if(s==='Succeeded') return 'var(--green)';
+    if(s==='Failed') return 'var(--red)';
+    return 'var(--yellow)';
+  }
   async function pollNRP(){
     try {
       var res = await fetch('/api/nrp-burst');
@@ -1782,13 +1799,37 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       el('nrp-running').textContent = d.running || 0;
       el('nrp-pending').textContent = d.pending || 0;
       el('nrp-failed').textContent = d.failed || 0;
+      var totalEl = el('nrp-total');
+      if(totalEl) totalEl.textContent = '(' + (d.total || 0) + ' total)';
+      // Job detail table
+      var tbl = el('nrp-jobs-table');
+      if(tbl && d.jobs && d.jobs.length){
+        var html = '<table style="width:100%;border-collapse:collapse">' +
+          '<tr style="color:var(--text-dim);font-size:9px;text-transform:uppercase">' +
+          '<th style="text-align:left;padding:2px 4px">Job</th>' +
+          '<th style="text-align:left;padding:2px 4px">State</th>' +
+          '<th style="text-align:left;padding:2px 4px">Batch</th>' +
+          '<th style="text-align:right;padding:2px 4px">Age</th></tr>';
+        d.jobs.forEach(function(j){
+          html += '<tr style="border-top:1px solid rgba(255,255,255,0.05)">' +
+            '<td style="padding:2px 4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + j.name + '">' + j.name + '</td>' +
+            '<td style="padding:2px 4px;color:' + nrpStateColor(j.state) + '">' + j.state + '</td>' +
+            '<td style="padding:2px 4px;color:var(--text-dim)">' + (j.batch || '') + '</td>' +
+            '<td style="padding:2px 4px;text-align:right;color:var(--text-dim)">' + nrpAge(j.created) + '</td></tr>';
+        });
+        html += '</table>';
+        tbl.innerHTML = html;
+      } else if(tbl){
+        tbl.innerHTML = '<span style="color:var(--text-dim)">no jobs</span>';
+      }
+      // Batch summary
       var bEl = el('nrp-batches');
       if(d.batches && d.batches.length){
         bEl.innerHTML = d.batches.map(function(b){
           return b.label + ': ' + b.total + ' pods';
-        }).join('<br>');
+        }).join(' &middot; ');
       } else {
-        bEl.textContent = 'no active batches';
+        bEl.textContent = '';
       }
     } catch(e){}
   }

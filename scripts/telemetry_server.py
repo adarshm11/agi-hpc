@@ -1082,45 +1082,100 @@ _nrp_cache = {"data": {}, "ts": 0}
 
 
 def _get_nrp_burst_status():
-    """Query NRP for nats-bursting pod status. Cached for 30s."""
+    """Query NRP for nats-bursting job + pod status. Cached for 30s."""
     now = time.time()
     if now - _nrp_cache["ts"] < 30:
         return _nrp_cache["data"]
     try:
-        result = subprocess.run(
-            [
-                "kubectl",
-                "--kubeconfig",
-                os.path.expanduser("~/.kube/config"),
-                "-n",
-                "ssu-atlas-ai",
-                "get",
-                "pods",
-                "-l",
-                "app.kubernetes.io/managed-by=nats-bursting",
-                "-o",
-                "json",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if result.returncode != 0:
-            return {"error": result.stderr[:200]}
         import json as _json
 
-        data = _json.loads(result.stdout)
+        kubeconfig = os.path.expanduser("~/.kube/config")
+        ns = "ssu-atlas-ai"
+
+        # ── Jobs (all in namespace, not just labelled) ──
+        jobs_result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+             "get", "jobs", "-o", "json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        jobs_list = []
+        if jobs_result.returncode == 0:
+            for item in _json.loads(jobs_result.stdout).get("items", []):
+                meta = item.get("metadata", {})
+                status = item.get("status", {})
+                spec = item.get("spec", {})
+                active = status.get("active", 0)
+                succeeded = status.get("succeeded", 0)
+                failed = status.get("failed", 0)
+                if active > 0:
+                    state = "Running"
+                elif succeeded >= (spec.get("completions", 1) or 1):
+                    state = "Succeeded"
+                elif failed > 0:
+                    state = "Failed"
+                else:
+                    state = "Pending"
+                jobs_list.append({
+                    "name": meta.get("name", ""),
+                    "state": state,
+                    "active": active,
+                    "succeeded": succeeded,
+                    "failed": failed,
+                    "created": meta.get("creationTimestamp", ""),
+                    "managed_by": meta.get("labels", {}).get(
+                        "app.kubernetes.io/managed-by", ""),
+                    "batch": meta.get("labels", {}).get(
+                        "neurogolf.io/batch", ""),
+                })
+
+        # ── Pods ──
+        pods_result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+             "get", "pods", "-o", "json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        pods_list = []
         phases = {}
         batches = {}
-        for pod in data.get("items", []):
-            phase = pod.get("status", {}).get("phase", "Unknown")
-            phases[phase] = phases.get(phase, 0) + 1
-            batch = pod.get("metadata", {}).get("labels", {}).get(
-                "neurogolf.io/batch", ""
-            )
-            if batch:
-                batches.setdefault(batch, 0)
-                batches[batch] += 1
+        if pods_result.returncode == 0:
+            for pod in _json.loads(pods_result.stdout).get("items", []):
+                meta = pod.get("metadata", {})
+                status = pod.get("status", {})
+                spec = pod.get("spec", {})
+                phase = status.get("phase", "Unknown")
+                phases[phase] = phases.get(phase, 0) + 1
+                batch = meta.get("labels", {}).get("neurogolf.io/batch", "")
+                if batch:
+                    batches.setdefault(batch, 0)
+                    batches[batch] += 1
+                # Resource summary from first container
+                res = {}
+                containers = spec.get("containers", [])
+                if containers:
+                    req = containers[0].get("resources", {}).get("requests", {})
+                    lim = containers[0].get("resources", {}).get("limits", {})
+                    res["cpu"] = req.get("cpu", "")
+                    res["memory"] = req.get("memory", "")
+                    gpu = lim.get("nvidia.com/gpu", "")
+                    if gpu:
+                        res["gpu"] = gpu
+                pods_list.append({
+                    "name": meta.get("name", ""),
+                    "phase": phase,
+                    "node": spec.get("nodeName", ""),
+                    "resources": res,
+                    "created": meta.get("creationTimestamp", ""),
+                    "job": meta.get("labels", {}).get("job-name", ""),
+                })
+
+        # Sort: running/pending first, then newest
+        jobs_list.sort(key=lambda j: (
+            j["state"] not in ("Running", "Pending"), j["created"]
+        ))
+        pods_list.sort(key=lambda p: (
+            p["phase"] not in ("Running", "Pending"), p["created"]
+        ))
+
         out = {
             "succeeded": phases.get("Succeeded", 0),
             "running": phases.get("Running", 0),
@@ -1130,6 +1185,8 @@ def _get_nrp_burst_status():
             "batches": [
                 {"label": k, "total": v} for k, v in sorted(batches.items())
             ],
+            "jobs": jobs_list,
+            "pods": pods_list,
         }
         _nrp_cache["data"] = out
         _nrp_cache["ts"] = now
