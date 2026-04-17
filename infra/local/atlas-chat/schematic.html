@@ -731,15 +731,15 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       <div id="nats-live-stream" style="font-family:var(--mono);font-size:10px;max-height:220px;overflow-y:auto;line-height:1.5;scrollbar-width:thin"></div>
     </div>
 
-    <!-- NATS Topology + Active Pods -->
-    <div class="metric-panel">
+    <!-- NATS Topology + Active Pods (full width) -->
+    <div class="metric-panel" style="grid-column:span 2">
       <div class="panel-title"><span class="icon">&#9670;</span> NATS Topology
         <span style="font-size:9px;font-weight:400;color:var(--text-dim)">
           In: <span id="nats-in">0</span> Out: <span id="nats-out">0</span> Conns: <span id="nats-conns">0</span> JS: <span id="nats-js-msgs">0</span>
         </span>
       </div>
-      <svg id="nats-topo-svg" viewBox="0 0 440 160" style="width:100%;height:130px;display:block;margin-bottom:4px"></svg>
-      <div id="nats-active-pods" style="font-family:var(--mono);font-size:9px;max-height:120px;overflow-y:auto;scrollbar-width:thin"></div>
+      <svg id="nats-topo-svg" viewBox="0 0 800 180" style="width:100%;height:160px;display:block;margin-bottom:4px"></svg>
+      <div id="nats-active-pods" style="font-family:var(--mono);font-size:10px;max-height:120px;overflow-y:auto;scrollbar-width:thin"></div>
     </div>
 
     <!-- Memory Tiers -->
@@ -1900,63 +1900,65 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         var nPods = activePods.length;
         // Layout: Atlas(40,50) -- leaf(150,50) -- pods fanned right
         var s = '';
+        var hubX = 280, hubY = 90, hubR = 30;
+        var leafX = 520, leafY = 90, leafR = 24;
         // Zone backgrounds
-        s += '<rect x="0" y="0" width="155" height="160" rx="8" fill="rgba(74,158,255,0.04)" stroke="rgba(74,158,255,0.15)" stroke-width="0.5"/>';
-        s += '<text x="78" y="14" text-anchor="middle" fill="rgba(74,158,255,0.5)" font-size="10" font-weight="600">LOCAL (Novato)</text>';
-        s += '<rect x="165" y="0" width="275" height="160" rx="8" fill="rgba(34,211,238,0.04)" stroke="rgba(34,211,238,0.15)" stroke-width="0.5"/>';
-        s += '<text x="300" y="14" text-anchor="middle" fill="rgba(34,211,238,0.5)" font-size="10" font-weight="600">NRP NAUTILUS</text>';
-        // Atlas hub
-        s += '<circle cx="65" cy="55" r="22" fill="rgba(74,158,255,0.1)" stroke="#4a9eff" stroke-width="2"/>';
-        s += '<text x="65" y="51" text-anchor="middle" fill="#4a9eff" font-size="11" font-weight="700">NATS</text>';
-        s += '<text x="65" y="63" text-anchor="middle" fill="#4a9eff" font-size="8">hub :4222</text>';
-        // Local clients fanning left from hub (mirror of pods fanning right from leaf)
-        var maxClients = Math.min(nLocal, 6);
-        var cSpacing = Math.min(20, 110 / Math.max(maxClients,1));
-        var cStartY = 55 - (maxClients - 1) * cSpacing / 2;
+        s += '<rect x="0" y="0" width="370" height="180" rx="8" fill="rgba(74,158,255,0.04)" stroke="rgba(74,158,255,0.12)" stroke-width="0.5"/>';
+        s += '<text x="185" y="16" text-anchor="middle" fill="rgba(74,158,255,0.5)" font-size="12" font-weight="600">LOCAL (Atlas · Novato)</text>';
+        s += '<rect x="380" y="0" width="420" height="180" rx="8" fill="rgba(34,211,238,0.04)" stroke="rgba(34,211,238,0.12)" stroke-width="0.5"/>';
+        s += '<text x="590" y="16" text-anchor="middle" fill="rgba(34,211,238,0.5)" font-size="12" font-weight="600">NRP NAUTILUS (remote K8s)</text>';
+        // Hub
+        s += '<circle cx="'+hubX+'" cy="'+hubY+'" r="'+hubR+'" fill="rgba(74,158,255,0.1)" stroke="#4a9eff" stroke-width="2"/>';
+        s += '<text x="'+hubX+'" y="'+(hubY-4)+'" text-anchor="middle" fill="#4a9eff" font-size="14" font-weight="700">NATS</text>';
+        s += '<text x="'+hubX+'" y="'+(hubY+10)+'" text-anchor="middle" fill="#4a9eff" font-size="9">hub :4222</text>';
+        // Local clients fanning LEFT from hub
+        var maxClients = Math.min(nLocal, 7);
+        var cSpacing = Math.min(22, 150 / Math.max(maxClients,1));
+        var cStartY = hubY - (maxClients - 1) * cSpacing / 2;
         for(var ci = 0; ci < maxClients; ci++){
           var cy = cStartY + ci * cSpacing;
           var c = conns[ci];
-          var clbl = c ? (c.name || c.lang) : '';
+          var clbl = c ? (c.name || c.lang + ' ' + c.version) : '';
           var csubs = c ? (c.subs_list || []) : [];
           var mainSub = csubs.filter(function(x){return x.indexOf('_INBOX')!==0;})[0] || '';
-          var cActive = c && c.idle && c.idle.indexOf('s') !== -1 && c.idle.indexOf('m') === -1;
-          var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.4)';
-          s += '<line x1="43" y1="55" x2="14" y2="' + cy + '" stroke="' + cc + '" stroke-width="1" opacity="0.4"/>';
-          s += '<circle cx="10" cy="' + cy + '" r="4" fill="' + cc + '"/>';
-          // Label to the right of the dot — tight against the line
-          var label = clbl.substring(0,12);
-          if(mainSub) label += ' ' + mainSub.substring(0,18);
-          s += '<text x="0" y="' + (cy - 6) + '" fill="var(--text-dim)" font-size="7" text-anchor="start">' + label + '</text>';
+          var cActive = c && c.idle && !(/[mhd]/.test(c.idle));
+          var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)';
+          s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+cy+'" stroke="'+cc+'" stroke-width="1" opacity="0.5"/>';
+          s += '<circle cx="114" cy="'+cy+'" r="5" fill="'+cc+'"/>';
+          s += '<text x="106" y="'+(cy+4)+'" text-anchor="end" fill="var(--text)" font-size="10">'+clbl.substring(0,18)+'</text>';
+          if(mainSub) s += '<text x="106" y="'+(cy+14)+'" text-anchor="end" fill="var(--text-dim)" font-size="8">'+mainSub.substring(0,25)+'</text>';
         }
         // Leaf link
         var leafColor = leafOk ? '#22c55e' : '#f87171';
-        s += '<line x1="87" y1="55" x2="182" y2="55" stroke="' + leafColor + '" stroke-width="2" stroke-dasharray="' + (leafOk?'':'5,4') + '"/>';
-        if(leafOk && leafs[0].rtt) s += '<text x="135" y="48" text-anchor="middle" fill="#22c55e" font-size="10" font-weight="600">' + leafs[0].rtt + '</text>';
-        s += '<text x="135" y="68" text-anchor="middle" fill="var(--text-dim)" font-size="8">TLS :7422</text>';
+        s += '<line x1="'+(hubX+hubR)+'" y1="'+hubY+'" x2="'+(leafX-leafR)+'" y2="'+leafY+'" stroke="'+leafColor+'" stroke-width="2.5" stroke-dasharray="'+(leafOk?'':'6,4')+'"/>';
+        var linkMidX = (hubX+hubR+leafX-leafR)/2;
+        if(leafOk && leafs[0].rtt) s += '<text x="'+linkMidX+'" y="'+(hubY-8)+'" text-anchor="middle" fill="#22c55e" font-size="13" font-weight="700">'+leafs[0].rtt+'</text>';
+        s += '<text x="'+linkMidX+'" y="'+(hubY+14)+'" text-anchor="middle" fill="var(--text-dim)" font-size="10">TLS :7422</text>';
         // Leaf node
-        s += '<circle cx="195" cy="55" r="16" fill="rgba(34,211,238,0.1)" stroke="' + leafColor + '" stroke-width="2"/>';
-        s += '<text x="195" y="59" text-anchor="middle" fill="' + leafColor + '" font-size="10" font-weight="600">leaf</text>';
-        // Active pods fanning from leaf
+        s += '<circle cx="'+leafX+'" cy="'+leafY+'" r="'+leafR+'" fill="rgba(34,211,238,0.1)" stroke="'+leafColor+'" stroke-width="2"/>';
+        s += '<text x="'+leafX+'" y="'+(leafY+4)+'" text-anchor="middle" fill="'+leafColor+'" font-size="13" font-weight="700">leaf</text>';
+        // Pods fanning RIGHT from leaf
         if(nPods > 0){
-          var maxShow = Math.min(nPods, 5);
-          var spacing = Math.min(26, 120 / maxShow);
-          var startY = 55 - (maxShow - 1) * spacing / 2;
+          var maxShow = Math.min(nPods, 6);
+          var pSpacing = Math.min(26, 150 / maxShow);
+          var pStartY = leafY - (maxShow - 1) * pSpacing / 2;
           for(var i = 0; i < maxShow; i++){
-            var py = startY + i * spacing;
+            var py = pStartY + i * pSpacing;
             var pod = activePods[i];
             var pc = pod.phase==='Running' ? '#22c55e' : '#eab308';
             var gpu = (pod.resources||{}).gpu;
             var img = pod.image || '';
-            s += '<line x1="211" y1="55" x2="250" y2="' + py + '" stroke="' + pc + '" stroke-width="1" opacity="0.4"/>';
-            s += '<circle cx="258" cy="' + py + '" r="6" fill="' + pc + '" opacity="0.8"/>';
+            s += '<line x1="'+(leafX+leafR)+'" y1="'+leafY+'" x2="600" y2="'+py+'" stroke="'+pc+'" stroke-width="1" opacity="0.5"/>';
+            s += '<circle cx="608" cy="'+py+'" r="6" fill="'+pc+'" opacity="0.85"/>';
             var pName = pod.name.replace(/-[a-z0-9]{5,}$/,'');
-            s += '<text x="268" y="' + (py+3) + '" fill="var(--text)" font-size="9">' + pName + '</text>';
-            var detail = [gpu ? gpu+' GPU' : '', img.split(':')[0]].filter(Boolean).join(' · ');
-            if(detail) s += '<text x="268" y="' + (py+13) + '" fill="var(--text-dim)" font-size="7">' + detail + '</text>';
+            var pDetail = pName;
+            if(gpu) pDetail += '  ·  ' + gpu + ' GPU';
+            if(img) pDetail += '  ·  ' + img.split(':')[0];
+            s += '<text x="620" y="'+(py+4)+'" fill="var(--text)" font-size="10">'+pDetail+'</text>';
           }
-          if(nPods > maxShow) s += '<text x="268" y="' + (startY + maxShow*spacing+10) + '" fill="var(--text-dim)" font-size="8">+' + (nPods-maxShow) + ' more pods</text>';
+          if(nPods > maxShow) s += '<text x="620" y="'+(pStartY + maxShow*pSpacing+10)+'" fill="var(--text-dim)" font-size="10">+ '+(nPods-maxShow)+' more pods</text>';
         } else {
-          s += '<text x="240" y="58" fill="var(--text-dim)" font-size="9">no active pods</text>';
+          s += '<text x="'+(leafX+leafR+15)+'" y="'+(leafY+4)+'" fill="var(--text-dim)" font-size="11">no active pods</text>';
         }
         svg.innerHTML = s;
       }
