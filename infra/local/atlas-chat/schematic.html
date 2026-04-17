@@ -617,7 +617,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   <div class="metrics-grid">
 
     <!-- GPU Gauges -->
-    <div class="metric-panel full">
+    <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9881;</span> GPU Utilization &amp; Temperature</div>
       <div class="gpu-row">
         <div class="gpu-gauge" id="gpu0-gauge">
@@ -666,7 +666,7 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     </div>
 
     <!-- CPU Temperature (matching GPU gauge layout) -->
-    <div class="metric-panel full">
+    <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9670;</span> CPU Temperature &amp; Memory</div>
       <div class="gpu-row">
         <div class="gpu-gauge" id="cpu0-gauge">
@@ -731,8 +731,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       <div id="nats-live-stream" style="font-family:var(--mono);font-size:10px;max-height:220px;overflow-y:auto;line-height:1.5;scrollbar-width:thin"></div>
     </div>
 
-    <!-- NATS Topology + Active Pods (full width) -->
-    <div class="metric-panel" style="grid-column:span 2">
+    <!-- NATS Topology (left) + NRP Burst Pods (right) -->
+    <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9670;</span> NATS Topology
         <span style="font-size:9px;font-weight:400;color:var(--text-dim)">
           In: <span id="nats-in">0</span> Out: <span id="nats-out">0</span> Conns: <span id="nats-conns">0</span> JS: <span id="nats-js-msgs">0</span>
@@ -740,6 +740,20 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       </div>
       <svg id="nats-topo-svg" viewBox="0 0 800 180" style="width:100%;height:160px;display:block;margin-bottom:4px"></svg>
       <div id="nats-active-pods" style="font-family:var(--mono);font-size:10px;max-height:120px;overflow-y:auto;scrollbar-width:thin"></div>
+    </div>
+    <div class="metric-panel">
+      <div class="panel-title"><span class="icon">&#9992;</span> NRP Burst Jobs</div>
+      <div id="nrp-burst-center" style="font-size:11px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="color:var(--green)" id="nrp-succeeded">0</span><span style="color:var(--text-muted)"> done</span>
+          <span style="color:var(--accent)" id="nrp-running">0</span><span style="color:var(--text-muted)"> run</span>
+          <span style="color:var(--yellow)" id="nrp-pending">0</span><span style="color:var(--text-muted)"> pend</span>
+          <span style="color:var(--red)" id="nrp-failed">0</span><span style="color:var(--text-muted)"> fail</span>
+          <span style="color:var(--text-dim)" id="nrp-total"></span>
+        </div>
+        <div id="nrp-jobs-table" style="font-family:var(--mono);font-size:10px;max-height:200px;overflow-y:auto;margin-bottom:4px"></div>
+        <div id="nrp-batches" style="color:var(--text-dim);font-family:var(--mono);font-size:10px"></div>
+      </div>
     </div>
 
     <!-- Memory Tiers -->
@@ -818,19 +832,6 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       <div class="job-name"><span class="running-dot"></span> atlas-chat</div>
       <div class="job-detail">Web UI + telemetry gateway</div>
     </div>
-  </div>
-
-  <div class="section-header" style="margin-top:16px">NRP Burst · <span style="font-weight:400;font-size:10px;color:var(--text-dim)">ssu-atlas-ai</span></div>
-  <div id="nrp-burst" style="font-size:11px;padding:4px 0">
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-      <span style="color:var(--green)" id="nrp-succeeded">0</span><span style="color:var(--text-muted)"> done</span>
-      <span style="color:var(--accent)" id="nrp-running">0</span><span style="color:var(--text-muted)"> run</span>
-      <span style="color:var(--yellow)" id="nrp-pending">0</span><span style="color:var(--text-muted)"> pend</span>
-      <span style="color:var(--red)" id="nrp-failed">0</span><span style="color:var(--text-muted)"> fail</span>
-      <span style="color:var(--text-dim);margin-left:6px" id="nrp-total"></span>
-    </div>
-    <div id="nrp-jobs-table" style="font-family:var(--mono);font-size:10px;max-height:200px;overflow-y:auto;margin-bottom:4px"></div>
-    <div id="nrp-batches" style="color:var(--text-dim);font-family:var(--mono);font-size:10px"></div>
   </div>
 
   <div class="section-header" style="margin-top:16px">Training</div>
@@ -1925,8 +1926,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
           var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)';
           s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+cy+'" stroke="'+cc+'" stroke-width="1" opacity="0.5"/>';
           s += '<circle cx="114" cy="'+cy+'" r="5" fill="'+cc+'"/>';
-          s += '<text x="106" y="'+(cy+4)+'" text-anchor="end" fill="var(--text)" font-size="10">'+clbl.substring(0,18)+'</text>';
-          if(mainSub) s += '<text x="106" y="'+(cy+14)+'" text-anchor="end" fill="var(--text-dim)" font-size="8">'+mainSub.substring(0,25)+'</text>';
+          s += '<text x="106" y="'+(cy+4)+'" text-anchor="end" fill="var(--text)" font-size="10">'+(mainSub ? mainSub.substring(0,28) : clbl.substring(0,18))+'</text>';
+          s += '<text x="106" y="'+(cy+14)+'" text-anchor="end" fill="var(--text-dim)" font-size="7">'+clbl.substring(0,18)+'</text>';
         }
         // Leaf link
         var leafColor = leafOk ? '#22c55e' : '#f87171';
