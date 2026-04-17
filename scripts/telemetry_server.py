@@ -1224,16 +1224,53 @@ def _start_nats_subscriber():
                 log.info("NATS live subscriber connected")
 
                 async def _on_msg(msg):
-                    data_preview = ""
+                    # Parse the payload into a short human-readable summary
+                    # rather than dumping raw truncated JSON.
+                    summary = ""
                     try:
-                        data_preview = msg.data[:200].decode("utf-8", "replace")
+                        raw = msg.data.decode("utf-8", "replace")
+                        d = json.loads(raw)
+                        parts = []
+                        # burst.submit
+                        if "descriptor" in d:
+                            desc = d["descriptor"]
+                            parts.append(desc.get("name", ""))
+                            img = desc.get("image", "")
+                            if img:
+                                parts.append(img.split("/")[-1])
+                            res = desc.get("resources", {})
+                            if res.get("gpu"):
+                                parts.append(f"gpu={res['gpu']}")
+                        # burst.status / burst.result
+                        if "state" in d:
+                            parts.append(d["state"])
+                            if d.get("k8s_job"):
+                                parts.append(d["k8s_job"])
+                        # job_id (common)
+                        if d.get("job_id"):
+                            parts.append(f"id={d['job_id'][:12]}")
+                        # agi.meta.monitor.*
+                        if "payload" in d:
+                            p = d["payload"]
+                            if isinstance(p, dict):
+                                for k, v in list(p.items())[:4]:
+                                    parts.append(f"{k}={v}")
+                        # agi.memory / agi.safety / generic
+                        if d.get("source"):
+                            parts.append(f"src={d['source']}")
+                        if d.get("type") and not parts:
+                            parts.append(d["type"])
+                        summary = " | ".join(str(x) for x in parts if x)
                     except Exception:
-                        data_preview = f"<{len(msg.data)} bytes>"
+                        try:
+                            summary = msg.data[:120].decode("utf-8", "replace")
+                        except Exception:
+                            summary = f"<{len(msg.data)}B binary>"
                     _NATS_LIVE_BUFFER.appendleft({
                         "ts": time.time(),
                         "subject": msg.subject,
                         "size": len(msg.data),
-                        "preview": data_preview,
+                        "summary": summary,
                         "reply": msg.reply or "",
                     })
 

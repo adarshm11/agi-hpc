@@ -1852,24 +1852,15 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       // Check if user has scrolled up (disable auto-scroll)
       natsLiveAutoScroll = container.scrollTop <= 10;
       var html = '';
-      var shown = msgs.slice(0, 80);
+      var shown = msgs.slice(0, 30);
       shown.forEach(function(m){
         var color = natsSubjectColor(m.subject);
-        var preview = (m.preview || '').replace(/</g,'&lt;').substring(0, 100);
-        // Try to parse JSON preview to show key fields
-        var detail = preview;
-        try {
-          var parsed = JSON.parse(m.preview);
-          if(parsed.job_id) detail = 'job_id=' + parsed.job_id;
-          if(parsed.descriptor && parsed.descriptor.name) detail += ' name=' + parsed.descriptor.name;
-          if(parsed.state) detail = 'state=' + parsed.state + (parsed.k8s_job ? ' k8s=' + parsed.k8s_job : '');
-          if(parsed.descriptor && parsed.descriptor.image) detail += ' img=' + parsed.descriptor.image.split('/').pop();
-        } catch(e){}
+        var detail = (m.summary || '').replace(/</g,'&lt;');
         html += '<div style="display:flex;gap:8px;border-bottom:1px solid rgba(255,255,255,0.04);padding:1px 0">' +
-          '<span style="color:var(--text-dim);min-width:28px;text-align:right">' + natsTimeAgo(m.ts) + '</span>' +
-          '<span style="color:' + color + ';min-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + m.subject + '">' + m.subject + '</span>' +
-          '<span style="color:var(--text-dim);min-width:40px;text-align:right">' + m.size + 'B</span>' +
-          '<span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="' + preview + '">' + detail + '</span>' +
+          '<span style="color:var(--text-dim);min-width:24px;text-align:right;flex-shrink:0">' + natsTimeAgo(m.ts) + '</span>' +
+          '<span style="color:' + color + ';min-width:150px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0" title="' + m.subject + '">' + m.subject + '</span>' +
+          '<span style="color:var(--text-dim);min-width:36px;text-align:right;flex-shrink:0">' + m.size + 'B</span>' +
+          '<span style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">' + detail + '</span>' +
           '</div>';
       });
       container.innerHTML = html;
