@@ -813,6 +813,18 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     </div>
   </div>
 
+  <div class="section-header" style="margin-top:16px">NRP Burst Jobs</div>
+  <div id="nrp-burst" style="font-size:11px;padding:4px 0">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+      <span style="color:var(--text-dim)">Pods:</span>
+      <span style="color:var(--green)" id="nrp-succeeded">0</span><span style="color:var(--text-muted)"> done</span>
+      <span style="color:var(--accent)" id="nrp-running">0</span><span style="color:var(--text-muted)"> run</span>
+      <span style="color:var(--yellow)" id="nrp-pending">0</span><span style="color:var(--text-muted)"> pend</span>
+      <span style="color:var(--red)" id="nrp-failed">0</span><span style="color:var(--text-muted)"> fail</span>
+    </div>
+    <div id="nrp-batches" style="color:var(--text-dim);font-family:var(--mono);font-size:10px"></div>
+  </div>
+
   <div class="section-header" style="margin-top:16px">Training</div>
   <div id="training-status" style="font-size:12px;color:var(--dim);padding:4px 0">No active training</div>
 
@@ -1760,11 +1772,34 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     el('sys-uptime').textContent = label;
   }
 
+  // ─── NRP Burst Jobs polling ───
+  async function pollNRP(){
+    try {
+      var res = await fetch('/api/nrp-burst');
+      if(!res.ok) return;
+      var d = await res.json();
+      el('nrp-succeeded').textContent = d.succeeded || 0;
+      el('nrp-running').textContent = d.running || 0;
+      el('nrp-pending').textContent = d.pending || 0;
+      el('nrp-failed').textContent = d.failed || 0;
+      var bEl = el('nrp-batches');
+      if(d.batches && d.batches.length){
+        bEl.innerHTML = d.batches.map(function(b){
+          return b.label + ': ' + b.total + ' pods';
+        }).join('<br>');
+      } else {
+        bEl.textContent = 'no active batches';
+      }
+    } catch(e){}
+  }
+
   // ─── Init ───
   poll();
   pollEvents();
+  pollNRP();
   setInterval(poll, 5000);
   setInterval(pollEvents, 15000);
+  setInterval(pollNRP, 30000);
   tickUptime();
   setInterval(tickUptime, 1000);
 

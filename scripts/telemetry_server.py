@@ -18,8 +18,9 @@ import json
 import logging
 import os
 import subprocess
+import threading
 import time
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 logging.basicConfig(
@@ -30,6 +31,39 @@ log = logging.getLogger("telemetry")
 STATIC_DIR = os.environ.get("ATLAS_STATIC", "/home/claude/atlas-chat")
 PORT = int(os.environ.get("TELEMETRY_PORT", "8085"))
 DB_DSN = os.environ.get("ATLAS_DB_DSN", "dbname=atlas user=claude")
+SNAPSHOT_INTERVAL = float(os.environ.get("TELEMETRY_SNAPSHOT_S", "2.5"))
+
+
+# Background snapshot cache: build_telemetry() is expensive (shells out to
+# nvidia-smi/sensors/NATS/Postgres). One refresher thread populates this
+# every SNAPSHOT_INTERVAL seconds; per-request handlers read it under a
+# lock — O(1) per request, so the accept queue can't overflow.
+_SNAPSHOT_LOCK = threading.Lock()
+_SNAPSHOT = {"telemetry": {}, "events": [], "ts": 0.0}
+
+
+def _refresher():
+    while True:
+        try:
+            t = build_telemetry()
+            ev = _build_events()
+            with _SNAPSHOT_LOCK:
+                _SNAPSHOT["telemetry"] = t
+                _SNAPSHOT["events"] = ev
+                _SNAPSHOT["ts"] = time.time()
+        except Exception as e:
+            log.warning("snapshot refresh failed: %s", e)
+        time.sleep(SNAPSHOT_INTERVAL)
+
+
+def get_cached_telemetry():
+    with _SNAPSHOT_LOCK:
+        return _SNAPSHOT["telemetry"] or build_telemetry()
+
+
+def get_cached_events():
+    with _SNAPSHOT_LOCK:
+        return _SNAPSHOT["events"] or _build_events()
 
 
 def _run(cmd, timeout=3):
@@ -1044,6 +1078,66 @@ def _build_events():
     return events
 
 
+_nrp_cache = {"data": {}, "ts": 0}
+
+
+def _get_nrp_burst_status():
+    """Query NRP for nats-bursting pod status. Cached for 30s."""
+    now = time.time()
+    if now - _nrp_cache["ts"] < 30:
+        return _nrp_cache["data"]
+    try:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                os.path.expanduser("~/.kube/config"),
+                "-n",
+                "ssu-atlas-ai",
+                "get",
+                "pods",
+                "-l",
+                "app.kubernetes.io/managed-by=nats-bursting",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            return {"error": result.stderr[:200]}
+        import json as _json
+
+        data = _json.loads(result.stdout)
+        phases = {}
+        batches = {}
+        for pod in data.get("items", []):
+            phase = pod.get("status", {}).get("phase", "Unknown")
+            phases[phase] = phases.get(phase, 0) + 1
+            batch = pod.get("metadata", {}).get("labels", {}).get(
+                "neurogolf.io/batch", ""
+            )
+            if batch:
+                batches.setdefault(batch, 0)
+                batches[batch] += 1
+        out = {
+            "succeeded": phases.get("Succeeded", 0),
+            "running": phases.get("Running", 0),
+            "pending": phases.get("Pending", 0) + phases.get("ContainerCreating", 0),
+            "failed": phases.get("Failed", 0),
+            "total": sum(phases.values()),
+            "batches": [
+                {"label": k, "total": v} for k, v in sorted(batches.items())
+            ],
+        }
+        _nrp_cache["data"] = out
+        _nrp_cache["ts"] = now
+        return out
+    except Exception as e:
+        return {"error": str(e)[:200]}
+
+
 class TelemetryHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
@@ -1059,9 +1153,9 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/telemetry" or self.path.startswith("/api/telemetry?"):
-            self._json_response(build_telemetry())
+            self._json_response(get_cached_telemetry())
         elif self.path == "/api/events" or self.path.startswith("/api/events?"):
-            self._json_response(_build_events())
+            self._json_response(get_cached_events())
         elif self.path == "/api/visitors" or self.path.startswith("/api/visitors?"):
             self._json_response(_get_visitors())
         elif self.path.startswith("/api/training/history"):
@@ -1073,6 +1167,8 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
                 qs = parse_qs(urlparse(self.path).query)
                 days = int(qs.get("days", ["30"])[0])
             self._json_response(_get_training_history(min(days, 365)))
+        elif self.path == "/api/nrp-burst" or self.path.startswith("/api/nrp-burst?"):
+            self._json_response(_get_nrp_burst_status())
         elif self.path.startswith("/api/"):
             self._json_response({})
         else:
@@ -1184,5 +1280,17 @@ if __name__ == "__main__":
 
     log.info(f"Atlas Telemetry Server on port {args.port}")
     log.info(f"Static dir: {STATIC_DIR}")
-    server = HTTPServer(("0.0.0.0", args.port), TelemetryHandler)
+
+    # Prime the cache before serving so the first request isn't slow.
+    log.info("Priming telemetry snapshot cache...")
+    try:
+        with _SNAPSHOT_LOCK:
+            _SNAPSHOT["telemetry"] = build_telemetry()
+            _SNAPSHOT["events"] = _build_events()
+            _SNAPSHOT["ts"] = time.time()
+    except Exception as e:
+        log.warning("initial snapshot failed (will retry in background): %s", e)
+    threading.Thread(target=_refresher, daemon=True, name="snapshot").start()
+
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), TelemetryHandler)
     server.serve_forever()
