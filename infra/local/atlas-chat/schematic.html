@@ -1955,12 +1955,23 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
             var clbl = c ? (c.name || c.lang + ' ' + c.version) : '';
             var csubs = c ? (c.subs_list || []) : [];
             var mainSub = csubs.filter(function(x){return x.indexOf('_INBOX')!==0;})[0] || '';
+            var allSubs = csubs.join(' ');
+            var svcName = '', svcHw = '';
+            if(c && c.name === 'nats-bursting') { svcName = 'nats-bursting'; svcHw = 'controller'; }
+            else if(c && c.name === 'telemetry-live') { svcName = 'telemetry'; svcHw = 'live stream'; }
+            else if(allSubs.indexOf('agi.safety')!==-1) { svcName = 'Superego'; svcHw = '\u{1F7E2} GPU 0 · Spock'; }
+            else if(allSubs.indexOf('agi.dreaming')!==-1) { svcName = 'Dreaming'; svcHw = 'CPU'; }
+            else if(allSubs.indexOf('agi.memory')!==-1) { svcName = 'Memory'; svcHw = 'PostgreSQL'; }
+            else if(allSubs.indexOf('agi.integration')!==-1||allSubs.indexOf('agi.meta')!==-1) { svcName = 'Metacognition'; svcHw = 'Divine Council'; }
+            else if(allSubs.indexOf('nrp.')!==-1) { svcName = 'NRP bridge'; svcHw = 'subscriber'; }
+            else if(mainSub) { svcName = mainSub.substring(0,28); }
+            else { svcName = clbl.substring(0,18); }
             var cActive = c && c.idle && !(/[mhd]/.test(c.idle));
             var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)';
             s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+cy+'" stroke="'+cc+'" stroke-width="1" opacity="0.5"/>';
             s += '<circle cx="114" cy="'+cy+'" r="5" fill="'+cc+'"/>';
-            s += '<text x="106" y="'+(cy+4)+'" text-anchor="end" fill="var(--text)" font-size="10">'+(mainSub ? mainSub.substring(0,28) : clbl.substring(0,18))+'</text>';
-            s += '<text x="106" y="'+(cy+14)+'" text-anchor="end" fill="var(--text-dim)" font-size="7">'+clbl.substring(0,18)+'</text>';
+            s += '<text x="106" y="'+(cy+3)+'" text-anchor="end" fill="var(--text)" font-size="10" font-weight="600">'+svcName+'</text>';
+            if(svcHw) s += '<text x="106" y="'+(cy+13)+'" text-anchor="end" fill="var(--text-dim)" font-size="7">'+svcHw+'</text>';
           }
           if(nLocal > maxClients) s += '<text x="106" y="'+(cStartY+maxClients*cSpacing+10)+'" text-anchor="end" fill="var(--text-dim)" font-size="9">+ '+(nLocal-maxClients)+' more</text>';
         } else {
