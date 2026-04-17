@@ -1148,24 +1148,41 @@ def _get_nrp_burst_status():
                 if batch:
                     batches.setdefault(batch, 0)
                     batches[batch] += 1
-                # Resource summary from first container
+                # Resource + image summary from first container
                 res = {}
+                image = ""
                 containers = spec.get("containers", [])
                 if containers:
-                    req = containers[0].get("resources", {}).get("requests", {})
-                    lim = containers[0].get("resources", {}).get("limits", {})
+                    c0 = containers[0]
+                    image = c0.get("image", "")
+                    req = c0.get("resources", {}).get("requests", {})
+                    lim = c0.get("resources", {}).get("limits", {})
                     res["cpu"] = req.get("cpu", "")
                     res["memory"] = req.get("memory", "")
                     gpu = lim.get("nvidia.com/gpu", "")
                     if gpu:
                         res["gpu"] = gpu
+                # Container status reason (Waiting/Running/Terminated)
+                reason = ""
+                cstatuses = status.get("containerStatuses", [])
+                if cstatuses:
+                    cs = cstatuses[0].get("state", {})
+                    if "waiting" in cs:
+                        reason = cs["waiting"].get("reason", "Waiting")
+                    elif "running" in cs:
+                        reason = "Running"
+                    elif "terminated" in cs:
+                        reason = cs["terminated"].get("reason", "Terminated")
                 pods_list.append({
                     "name": meta.get("name", ""),
                     "phase": phase,
+                    "reason": reason,
                     "node": spec.get("nodeName", ""),
+                    "image": image.split("/")[-1] if image else "",
                     "resources": res,
                     "created": meta.get("creationTimestamp", ""),
                     "job": meta.get("labels", {}).get("job-name", ""),
+                    "batch": batch,
                 })
 
         # Sort: running/pending first, then newest
