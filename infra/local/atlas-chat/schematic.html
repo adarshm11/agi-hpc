@@ -1900,32 +1900,50 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       var svg = el('nats-topo-svg');
       if(svg){
         var activePods = (window._nrpPods || []).filter(function(p){ return p.phase==='Running'||p.phase==='Pending'||p.phase==='ContainerCreating'; });
-        // Stable layout: cache slot assignments by connection key so nodes
-        // don't jump when the API returns connections in different order or
-        // connections briefly drop and reappear.
+        // Stable layout with 60s grace period: connections that disappear
+        // stay visible (dimmed) for 60s before being removed.
         if(!window._topoSlots) window._topoSlots = {};
-        if(!window._topoSlotsPod) window._topoSlotsPod = {};
+        if(!window._topoLastSeen) window._topoLastSeen = {}; // key -> {conn, ts}
+        var now = Date.now()/1000;
+        var GRACE_S = 60;
         function connKey(c){
           var subs = (c.subs_list||[]).filter(function(s){return s.indexOf('_INBOX')!==0;});
           return subs[0] || c.name || (c.lang + ' ' + c.version) || String(c.cid||'');
         }
-        // Assign stable slots: existing connections keep their slot, new ones get next free
+        // Update last-seen cache with current connections
+        var currentKeys = {};
+        conns.forEach(function(c){ var k = connKey(c); window._topoLastSeen[k] = {conn:c, ts:now, live:true}; currentKeys[k]=true; });
+        // Mark disappeared connections as not live
+        Object.keys(window._topoLastSeen).forEach(function(k){
+          if(!currentKeys[k]) window._topoLastSeen[k].live = false;
+        });
+        // Build render list: live connections + recently-seen (within grace period)
+        var renderConns = [];
+        Object.keys(window._topoLastSeen).forEach(function(k){
+          var entry = window._topoLastSeen[k];
+          if(entry.live || (now - entry.ts) < GRACE_S){
+            var c = Object.assign({}, entry.conn);
+            c._ghost = !entry.live; // dimmed if not currently connected
+            renderConns.push(c);
+          } else {
+            delete window._topoLastSeen[k];
+            delete window._topoSlots[k];
+          }
+        });
+        // Stable slot assignment
         var slots = window._topoSlots;
         var usedSlots = {};
-        var sortedConns = conns.slice().sort(function(a,b){ return connKey(a).localeCompare(connKey(b)); });
-        // First pass: keep existing slots
-        sortedConns.forEach(function(c){ var k = connKey(c); if(slots[k] !== undefined) usedSlots[slots[k]] = true; });
-        // Second pass: assign new slots
+        renderConns.sort(function(a,b){ return connKey(a).localeCompare(connKey(b)); });
+        renderConns.forEach(function(c){ var k = connKey(c); if(slots[k] !== undefined) usedSlots[slots[k]] = true; });
         var nextSlot = 0;
-        sortedConns.forEach(function(c){
+        renderConns.forEach(function(c){
           var k = connKey(c);
           if(slots[k] === undefined){
             while(usedSlots[nextSlot]) nextSlot++;
             slots[k] = nextSlot; usedSlots[nextSlot] = true;
           }
         });
-        // Sort by slot for rendering
-        conns = sortedConns.sort(function(a,b){ return (slots[connKey(a)]||0) - (slots[connKey(b)]||0); });
+        conns = renderConns.sort(function(a,b){ return (slots[connKey(a)]||0) - (slots[connKey(b)]||0); });
         activePods.sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
         var leafOk = leafs.length > 0;
         var nLocal = conns.length;
@@ -1971,11 +1989,14 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
             else if(mainSub) { svcName = mainSub.substring(0,28); }
             else { svcName = clbl.substring(0,18); }
             var cActive = c && c.idle && !(/[mhd]/.test(c.idle));
-            var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)';
+            var isGhost = c && c._ghost;
+            var cc = isGhost ? 'rgba(74,158,255,0.15)' : (cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)');
             s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+cy+'" stroke="'+cc+'" stroke-width="1" opacity="0.5"/>';
             s += '<circle cx="114" cy="'+cy+'" r="5" fill="'+cc+'"/>';
-            s += '<text x="106" y="'+(cy+3)+'" text-anchor="end" fill="var(--text)" font-size="10" font-weight="600">'+svcName+'</text>';
-            if(svcHw) s += '<text x="106" y="'+(cy+13)+'" text-anchor="end" fill="var(--text-dim)" font-size="7">'+svcHw+'</text>';
+            var txtFill = isGhost ? 'var(--text-muted)' : 'var(--text)';
+            var subFill = isGhost ? 'rgba(74,158,255,0.15)' : 'var(--text-dim)';
+            s += '<text x="106" y="'+(cy+3)+'" text-anchor="end" fill="'+txtFill+'" font-size="10" font-weight="600">'+svcName+'</text>';
+            if(svcHw) s += '<text x="106" y="'+(cy+13)+'" text-anchor="end" fill="'+subFill+'" font-size="7">'+svcHw+'</text>';
           }
           if(nLocal > maxClients) s += '<text x="106" y="'+(cStartY+maxClients*cSpacing+10)+'" text-anchor="end" fill="var(--text-dim)" font-size="9">+ '+(nLocal-maxClients)+' more</text>';
         } else {
