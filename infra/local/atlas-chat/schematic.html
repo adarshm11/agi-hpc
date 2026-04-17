@@ -1930,31 +1930,44 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         var s = '';
         var hubX = 280, hubY = 90, hubR = 30;
         var leafX = 520, leafY = 90, leafR = 24;
+        // Collapsible state
+        if(!window._topoExpand) window._topoExpand = {local:true, remote:true};
+        var ex = window._topoExpand;
         // Zone backgrounds
         s += '<rect x="0" y="0" width="370" height="180" rx="8" fill="rgba(74,158,255,0.04)" stroke="rgba(74,158,255,0.12)" stroke-width="0.5"/>';
-        s += '<text x="185" y="16" text-anchor="middle" fill="rgba(74,158,255,0.5)" font-size="12" font-weight="600">LOCAL (Atlas · Novato)</text>';
+        s += '<text x="185" y="16" text-anchor="middle" fill="rgba(74,158,255,0.5)" font-size="12" font-weight="600" style="cursor:pointer" onclick="window._topoExpand.local=!window._topoExpand.local">'
+           + (ex.local?'▼':'▶') + ' LOCAL (Atlas) · '+nLocal+' clients</text>';
         s += '<rect x="380" y="0" width="420" height="180" rx="8" fill="rgba(34,211,238,0.04)" stroke="rgba(34,211,238,0.12)" stroke-width="0.5"/>';
-        s += '<text x="590" y="16" text-anchor="middle" fill="rgba(34,211,238,0.5)" font-size="12" font-weight="600">NRP NAUTILUS (remote K8s)</text>';
+        s += '<text x="590" y="16" text-anchor="middle" fill="rgba(34,211,238,0.5)" font-size="12" font-weight="600" style="cursor:pointer" onclick="window._topoExpand.remote=!window._topoExpand.remote">'
+           + (ex.remote?'▼':'▶') + ' NRP NAUTILUS · '+nPods+' pods</text>';
         // Hub
         s += '<circle cx="'+hubX+'" cy="'+hubY+'" r="'+hubR+'" fill="rgba(74,158,255,0.1)" stroke="#4a9eff" stroke-width="2"/>';
         s += '<text x="'+hubX+'" y="'+(hubY-4)+'" text-anchor="middle" fill="#4a9eff" font-size="14" font-weight="700">NATS</text>';
         s += '<text x="'+hubX+'" y="'+(hubY+10)+'" text-anchor="middle" fill="#4a9eff" font-size="9">hub :4222</text>';
-        // Local clients fanning LEFT from hub
-        var maxClients = Math.min(nLocal, 7);
-        var cSpacing = Math.min(22, 150 / Math.max(maxClients,1));
-        var cStartY = hubY - (maxClients - 1) * cSpacing / 2;
-        for(var ci = 0; ci < maxClients; ci++){
-          var cy = cStartY + ci * cSpacing;
-          var c = conns[ci];
-          var clbl = c ? (c.name || c.lang + ' ' + c.version) : '';
-          var csubs = c ? (c.subs_list || []) : [];
-          var mainSub = csubs.filter(function(x){return x.indexOf('_INBOX')!==0;})[0] || '';
-          var cActive = c && c.idle && !(/[mhd]/.test(c.idle));
-          var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)';
-          s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+cy+'" stroke="'+cc+'" stroke-width="1" opacity="0.5"/>';
-          s += '<circle cx="114" cy="'+cy+'" r="5" fill="'+cc+'"/>';
-          s += '<text x="106" y="'+(cy+4)+'" text-anchor="end" fill="var(--text)" font-size="10">'+(mainSub ? mainSub.substring(0,28) : clbl.substring(0,18))+'</text>';
-          s += '<text x="106" y="'+(cy+14)+'" text-anchor="end" fill="var(--text-dim)" font-size="7">'+clbl.substring(0,18)+'</text>';
+        // Local clients fanning LEFT from hub (collapsible)
+        if(ex.local){
+          var maxClients = Math.min(nLocal, 7);
+          var cSpacing = Math.min(22, 150 / Math.max(maxClients,1));
+          var cStartY = hubY - (maxClients - 1) * cSpacing / 2;
+          for(var ci = 0; ci < maxClients; ci++){
+            var cy = cStartY + ci * cSpacing;
+            var c = conns[ci];
+            var clbl = c ? (c.name || c.lang + ' ' + c.version) : '';
+            var csubs = c ? (c.subs_list || []) : [];
+            var mainSub = csubs.filter(function(x){return x.indexOf('_INBOX')!==0;})[0] || '';
+            var cActive = c && c.idle && !(/[mhd]/.test(c.idle));
+            var cc = cActive ? '#4a9eff' : 'rgba(74,158,255,0.35)';
+            s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+cy+'" stroke="'+cc+'" stroke-width="1" opacity="0.5"/>';
+            s += '<circle cx="114" cy="'+cy+'" r="5" fill="'+cc+'"/>';
+            s += '<text x="106" y="'+(cy+4)+'" text-anchor="end" fill="var(--text)" font-size="10">'+(mainSub ? mainSub.substring(0,28) : clbl.substring(0,18))+'</text>';
+            s += '<text x="106" y="'+(cy+14)+'" text-anchor="end" fill="var(--text-dim)" font-size="7">'+clbl.substring(0,18)+'</text>';
+          }
+          if(nLocal > maxClients) s += '<text x="106" y="'+(cStartY+maxClients*cSpacing+10)+'" text-anchor="end" fill="var(--text-dim)" font-size="9">+ '+(nLocal-maxClients)+' more</text>';
+        } else {
+          // Collapsed: single summary node
+          s += '<line x1="'+(hubX-hubR)+'" y1="'+hubY+'" x2="120" y2="'+hubY+'" stroke="rgba(74,158,255,0.35)" stroke-width="1" opacity="0.5"/>';
+          s += '<circle cx="114" cy="'+hubY+'" r="5" fill="rgba(74,158,255,0.35)"/>';
+          s += '<text x="106" y="'+(hubY+4)+'" text-anchor="end" fill="var(--text-dim)" font-size="10">'+nLocal+' clients</text>';
         }
         // Leaf link
         var leafColor = leafOk ? '#22c55e' : '#f87171';
@@ -1965,8 +1978,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         // Leaf node
         s += '<circle cx="'+leafX+'" cy="'+leafY+'" r="'+leafR+'" fill="rgba(34,211,238,0.1)" stroke="'+leafColor+'" stroke-width="2"/>';
         s += '<text x="'+leafX+'" y="'+(leafY+4)+'" text-anchor="middle" fill="'+leafColor+'" font-size="13" font-weight="700">leaf</text>';
-        // Pods fanning RIGHT from leaf
-        if(nPods > 0){
+        // Pods fanning RIGHT from leaf (collapsible)
+        if(nPods > 0 && ex.remote){
           var maxShow = Math.min(nPods, 6);
           var pSpacing = Math.min(26, 150 / maxShow);
           var pStartY = leafY - (maxShow - 1) * pSpacing / 2;
@@ -1985,6 +1998,11 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
             s += '<text x="620" y="'+(py+4)+'" fill="var(--text)" font-size="10">'+pDetail+'</text>';
           }
           if(nPods > maxShow) s += '<text x="620" y="'+(pStartY + maxShow*pSpacing+10)+'" fill="var(--text-dim)" font-size="10">+ '+(nPods-maxShow)+' more pods</text>';
+        } else if(nPods > 0) {
+          // Collapsed: summary
+          s += '<line x1="'+(leafX+leafR)+'" y1="'+leafY+'" x2="600" y2="'+leafY+'" stroke="#22c55e" stroke-width="1" opacity="0.5"/>';
+          s += '<circle cx="608" cy="'+leafY+'" r="6" fill="#22c55e" opacity="0.85"/>';
+          s += '<text x="620" y="'+(leafY+4)+'" fill="var(--text-dim)" font-size="10">'+nPods+' pods</text>';
         } else {
           s += '<text x="'+(leafX+leafR+15)+'" y="'+(leafY+4)+'" fill="var(--text-dim)" font-size="11">no active pods</text>';
         }
