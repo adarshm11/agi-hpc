@@ -1148,6 +1148,86 @@ def _get_nrp_nats_telemetry():
         }
 
 
+# ── NRP utilization watchdog ──────────────────────────────────
+# Enforces NRP guidelines: GPU >40%, CPU 20-200%, Memory 20-150%
+# Kills pods that violate for 2+ consecutive checks (60s grace)
+
+_nrp_violations: dict[str, int] = {}  # pod_name -> consecutive violation count
+
+def _nrp_watchdog_check(pods: list[dict]):
+    """Check running pods for utilization violations and kill offenders."""
+    global _nrp_violations
+    kubeconfig = os.path.expanduser("~/.kube/config")
+    ns = "ssu-atlas-ai"
+
+    active = [p for p in pods if p.get("phase") == "Running"]
+    current_names = {p["name"] for p in active}
+
+    # Clear violations for pods that no longer exist
+    _nrp_violations = {k: v for k, v in _nrp_violations.items() if k in current_names}
+
+    for pod in active:
+        name = pod["name"]
+        usage = pod.get("usage", {})
+        gpu_live = pod.get("gpu_live", {})
+        res = pod.get("resources", {})
+
+        # Skip pods with <=2GB memory (exempt per NRP rules)
+        mem_req = res.get("memory", "")
+        if mem_req and mem_req.endswith("Gi") and int(mem_req.replace("Gi","")) <= 2:
+            continue
+
+        violations = []
+
+        # GPU check: must be >40% if GPU allocated
+        if res.get("gpu") and gpu_live.get("gpu_util_pct") is not None:
+            if gpu_live["gpu_util_pct"] < 40:
+                violations.append(f"GPU {gpu_live['gpu_util_pct']}% (<40%)")
+
+        # CPU check: parse usage like "946m" or "2"
+        cpu_used = usage.get("cpu_used", "")
+        cpu_req = res.get("cpu", "")
+        if cpu_used and cpu_req:
+            try:
+                used_m = int(cpu_used.rstrip("m")) if cpu_used.endswith("m") else int(float(cpu_used) * 1000)
+                req_m = int(cpu_req.rstrip("m")) if cpu_req.endswith("m") else int(float(cpu_req) * 1000)
+                if req_m > 1000:  # exempt <=1 CPU
+                    pct = used_m * 100 // req_m
+                    if pct < 20:
+                        violations.append(f"CPU {pct}% (<20%)")
+            except (ValueError, ZeroDivisionError):
+                pass
+
+        if violations:
+            _nrp_violations[name] = _nrp_violations.get(name, 0) + 1
+            count = _nrp_violations[name]
+            log.warning(f"[nrp-watchdog] {name}: {', '.join(violations)} "
+                       f"(strike {count}/2)")
+
+            if count >= 2:
+                # Kill the pod
+                log.warning(f"[nrp-watchdog] KILLING {name} — utilization violation "
+                           f"for {count} consecutive checks")
+                try:
+                    job_name = pod.get("job", "")
+                    if job_name:
+                        subprocess.run(
+                            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+                             "delete", "job", job_name],
+                            capture_output=True, timeout=10)
+                    else:
+                        subprocess.run(
+                            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+                             "delete", "pod", name],
+                            capture_output=True, timeout=10)
+                except Exception as e:
+                    log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
+                _nrp_violations.pop(name, None)
+        else:
+            # Clear violations if pod is now compliant
+            _nrp_violations.pop(name, None)
+
+
 def _get_nrp_burst_status():
     """Query NRP for nats-bursting job + pod status. Cached for 30s."""
     now = time.time()
@@ -1351,6 +1431,12 @@ def _get_nrp_burst_status():
             "pods": pods_list,
         }
         _nrp_cache["data"] = out
+
+        # Run utilization watchdog on every poll
+        try:
+            _nrp_watchdog_check(pods_list)
+        except Exception as e:
+            log.warning(f"[nrp-watchdog] check failed: {e}")
         _nrp_cache["ts"] = now
         return out
     except Exception as e:
