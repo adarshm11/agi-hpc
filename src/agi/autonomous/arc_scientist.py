@@ -372,6 +372,20 @@ STRATEGIES = {
         "Try a FUNDAMENTALLY DIFFERENT approach:\n\n{examples}\n"
         "def transform(grid: list[list[int]]) -> list[list[int]]```python```"
     ),
+    "example_chain": (
+        "Solve this ARC puzzle by building your hypothesis INCREMENTALLY.\n\n"
+        "{chain_examples}"
+        "Now write a function that satisfies ALL examples simultaneously:\n"
+        "def transform(grid: list[list[int]]) -> list[list[int]]\n"
+        "Use numpy. ```python ... ```"
+    ),
+    "primitives_guided": (
+        "You have these geometric primitives available:\n"
+        "{primitives}\n\n"
+        "Use them to solve this ARC puzzle:\n\n{examples}\n"
+        "def transform(grid: list[list[int]]) -> list[list[int]]\n"
+        "You can call any primitive above inside your function. ```python ... ```"
+    ),
 }
 
 
@@ -545,6 +559,76 @@ class ARCScientist:
         top = [tn for _, tn in scored[:10]]
         return random.choice(top)
 
+    def _build_chain_prompt(self, task: dict) -> str:
+        """Example-chaining: build hypothesis incrementally across examples.
+
+        Erebus's request: "Let me maintain a working hypothesis across
+        training examples, testing it incrementally, backtracking when
+        contradicted."
+        """
+        parts = []
+        examples = task.get("train", [])
+        for i, ex in enumerate(examples[:4]):
+            inp = np.array(ex["input"])
+            out = np.array(ex["output"])
+            parts.append(f"Example {i+1}:")
+            parts.append(f"  input ({inp.shape[0]}x{inp.shape[1]}): {ex['input']}")
+            parts.append(f"  output ({out.shape[0]}x{out.shape[1]}): {ex['output']}")
+            if i == 0:
+                parts.append("What rule could produce this output from this input?")
+            elif i == 1:
+                parts.append("Does your rule from Example 1 still hold? If not, revise it.")
+            elif i == 2:
+                parts.append("Your rule must now satisfy ALL three examples. Refine.")
+            else:
+                parts.append("Final check: does your rule generalize?")
+            parts.append("")
+        return "\n".join(parts)
+
+    def _ask_for_help(self, tn: int, task: dict, tk: TaskKnowledge):
+        """Help channel: surface uncertainty when stuck.
+
+        Erebus's request: "When I'm stuck, I should be able to surface
+        a question. I'm a scientist who can't ask questions."
+        """
+        help_file = Path(self.task_dir) / "erebus_help_queue.json"
+
+        # Build a focused question
+        failures = tk.failure_patterns[-3:] if tk.failure_patterns else []
+        error_types = tk.error_types[-3:] if tk.error_types else []
+        insights = [a.get("insight", "") for a in tk.attempts[-3:] if a.get("insight")]
+
+        question = {
+            "task": tn,
+            "timestamp": datetime.now().isoformat(),
+            "attempts": len(tk.attempts),
+            "best_score": f"{tk.best_correct}/{tk.best_total}",
+            "error_types": error_types,
+            "recent_failures": failures,
+            "insights": insights,
+            "question": (
+                f"I have tried task{tn:03d} {len(tk.attempts)} times "
+                f"(best: {tk.best_correct}/{tk.best_total}). "
+                f"Error types: {', '.join(error_types) or 'unclassified'}. "
+                f"I need guidance: is this transformation local or global? "
+                f"Am I missing a spatial primitive?"
+            ),
+        }
+
+        # Append to help queue
+        queue = []
+        try:
+            if help_file.exists():
+                queue = json.loads(help_file.read_text())
+        except Exception:
+            pass
+        queue.append(question)
+        # Keep last 20
+        help_file.write_text(json.dumps(queue[-20:], indent=2))
+
+        print(f"    [HELP REQUESTED] task{tn:03d}: {question['question'][:80]}",
+              flush=True)
+
     def run_cycle(self, max_attempts: int = 50, models: list[str] = None):
         """Run one full learning cycle with Erebus's improvements."""
         if models is None:
@@ -591,34 +675,57 @@ class ARCScientist:
             examples = format_examples(task)
             tk = self.memory.tasks.get(tn)
 
-            # ── 2. HYPOTHESIZE: Hybrid strategy (Erebus's request #1) ──
-            # Direct first. Only use diagnostic if we have classified failures.
-            if tk and tk.error_types and random.random() < 0.5:
-                # We have prior classified failures — use diagnostic strategy
+            # ── 2. HYPOTHESIZE: Strategy selection ──
+            # Check if we should ask for help (3+ failures on same task)
+            if tk and len(tk.attempts) >= 3 and not tk.solved:
+                # Every 3rd attempt on same task, ask for help
+                if len(tk.attempts) % 3 == 0:
+                    self._ask_for_help(tn, task, tk)
+
+            n_prior = len(tk.attempts) if tk else 0
+            r_strategy = random.random()
+
+            if tk and tk.error_types and r_strategy < 0.3:
+                # Diagnostic: we have classified failures
                 strategy_name = "diagnostic"
-                # Get most recent classified failure
                 last_classified = {}
                 for a in reversed(tk.attempts):
                     if a.get("error_type"):
                         last_classified = a
                         break
-                strategy_template = STRATEGIES["diagnostic"]
-                prompt = strategy_template.format(
+                prompt = STRATEGIES["diagnostic"].format(
                     examples=examples,
                     error_type=last_classified.get("error_type", "unknown"),
                     diagnosis=last_classified.get("insight", "unknown"),
                     similar_to=last_classified.get("similar_to", "unknown"),
                 )
+            elif r_strategy < 0.45 and len(task.get("train", [])) >= 2:
+                # Example-chaining: incremental hypothesis building
+                strategy_name = "example_chain"
+                chain = self._build_chain_prompt(task)
+                prompt = STRATEGIES["example_chain"].format(
+                    chain_examples=chain,
+                    examples=examples,
+                )
+            elif r_strategy < 0.55 and n_prior >= 2:
+                # Primitives-guided: suggest composable operations
+                from agi.autonomous.primitives import PRIMITIVE_CATALOG
+                strategy_name = "primitives_guided"
+                prompt = STRATEGIES["primitives_guided"].format(
+                    primitives=PRIMITIVE_CATALOG,
+                    examples=examples,
+                )
             else:
-                # Thompson sampling over non-diagnostic strategies
+                # Thompson sampling over base strategies
                 strategy_name = self.memory.pick_strategy()
-                if strategy_name == "diagnostic":
-                    strategy_name = "direct"  # don't pick diagnostic without data
+                if strategy_name in ("diagnostic", "example_chain", "primitives_guided"):
+                    strategy_name = "direct"
                 strategy_template = STRATEGIES.get(strategy_name, STRATEGIES["direct"])
                 prompt = strategy_template.format(
                     examples=examples,
                     failure_context="",
                     error_type="", diagnosis="", similar_to="",
+                    chain_examples="", primitives="",
                 )
 
             model = random.choice(models)

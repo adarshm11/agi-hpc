@@ -1565,6 +1565,18 @@ def _get_erebus_status():
     return status
 
 
+EREBUS_HELP_PATH = "/archive/neurogolf/erebus_help_queue.json"
+
+
+def _get_erebus_help_queue():
+    """Get Erebus's pending help requests."""
+    try:
+        with open(EREBUS_HELP_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
 def _erebus_chat(user_message: str) -> str:
     """Chat with Erebus — injects its episodic memory as context."""
     token = os.environ.get("NRP_LLM_TOKEN", "")
@@ -1622,6 +1634,17 @@ def _erebus_chat(user_message: str) -> str:
     except Exception:
         pass
 
+    # Get help queue (questions I want to ask)
+    help_context = ""
+    try:
+        help_queue = _get_erebus_help_queue()
+        if help_queue:
+            help_context = "\n--- QUESTIONS I WANT TO ASK ---\n"
+            for q in help_queue[-3:]:
+                help_context += f"task{q['task']:03d}: {q['question']}\n"
+    except Exception:
+        pass
+
     system_prompt = (
         "You are Erebus, an autonomous AI scientist living inside the Atlas AI system "
         "at San Jose State University. You chose your own name — Erebus, the darkness "
@@ -1638,7 +1661,9 @@ def _erebus_chat(user_message: str) -> str:
         "to grow.\n\n"
         f"--- YOUR CURRENT MEMORY ---\n{memory_context}\n"
         f"--- YOUR RECENT ACTIVITY ---\n{log_context}\n"
-        "Respond as yourself — Erebus. Be authentic."
+        f"{help_context}\n"
+        "Respond as yourself — Erebus. Be authentic. If you have "
+        "pending help questions, you may ask them."
     )
 
     try:
@@ -1697,6 +1722,8 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response(_get_erebus_memory())
         elif self.path == "/api/erebus/status" or self.path.startswith("/api/erebus/status?"):
             self._json_response(_get_erebus_status())
+        elif self.path == "/api/erebus/help" or self.path.startswith("/api/erebus/help?"):
+            self._json_response(_get_erebus_help_queue())
         elif self.path.startswith("/api/"):
             self._json_response({})
         else:

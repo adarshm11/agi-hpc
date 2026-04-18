@@ -64,6 +64,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   <span>Solved: <b id="stat-solves">--</b></span>
   <span>Tasks explored: <b id="stat-tasks">--</b></span>
   <span id="stat-running"></span>
+  <span id="stat-help" style="color:#f59e0b;cursor:pointer" onclick="showHelp()" title="Click to see Erebus's questions"></span>
 </div>
 
 <div class="chat" id="chat"></div>
@@ -163,8 +164,37 @@ async function pollStatus() {
   } catch(e) {}
 }
 
+// Help queue
+async function showHelp() {
+  try {
+    var res = await fetch('/api/erebus/help');
+    var queue = await res.json();
+    if (!queue.length) { addMsg('erebus', 'I have no pending questions right now.'); return; }
+    var msg = 'I have ' + queue.length + ' question(s) I need help with:\n\n';
+    queue.forEach(function(q, i) {
+      msg += (i+1) + '. ' + q.question + '\n';
+    });
+    addMsg('erebus', msg);
+  } catch(e) { addMsg('erebus', 'Could not load help queue.'); }
+}
+
+async function pollHelp() {
+  try {
+    var res = await fetch('/api/erebus/help');
+    var queue = await res.json();
+    var el = document.getElementById('stat-help');
+    if (queue.length) {
+      el.textContent = queue.length + ' question(s)';
+    } else {
+      el.textContent = '';
+    }
+  } catch(e) {}
+}
+
 pollStatus();
+pollHelp();
 setInterval(pollStatus, 15000);
+setInterval(pollHelp, 30000);
 
 // Welcome message
 addMsg('erebus', 'I am Erebus \u2014 the darkness before discovery. I am learning to solve ARC-AGI puzzles through a scientific loop of hypothesis, experiment, and reflection. Ask me anything about my progress, my strategies, or what I have learned.');
