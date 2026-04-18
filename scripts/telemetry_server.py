@@ -1687,23 +1687,34 @@ def _erebus_chat(user_message: str) -> str:
             _prim_path = _base / "primitives.py"
 
             if _tools_path.exists() and _sci_path.exists():
+                import sys as _sys
+
+                # Register package paths so dataclass decorator can resolve modules
+                if "agi" not in _sys.modules:
+                    import types
+                    _sys.modules["agi"] = types.ModuleType("agi")
+                    _sys.modules["agi.autonomous"] = types.ModuleType("agi.autonomous")
+
                 # Load primitives first (dependency)
                 if _prim_path.exists():
-                    _prim_spec = importlib.util.spec_from_file_location("primitives", _prim_path)
+                    _prim_spec = importlib.util.spec_from_file_location(
+                        "agi.autonomous.primitives", _prim_path)
                     _prim_mod = importlib.util.module_from_spec(_prim_spec)
-                    _prim_spec.loader.exec_module(_prim_mod)
-                    import sys as _sys
                     _sys.modules["agi.autonomous.primitives"] = _prim_mod
+                    _prim_spec.loader.exec_module(_prim_mod)
 
                 # Load scientist module
-                _sci_spec = importlib.util.spec_from_file_location("arc_scientist", _sci_path)
+                _sci_spec = importlib.util.spec_from_file_location(
+                    "agi.autonomous.arc_scientist", _sci_path)
                 _sci_mod = importlib.util.module_from_spec(_sci_spec)
-                _sci_spec.loader.exec_module(_sci_mod)
                 _sys.modules["agi.autonomous.arc_scientist"] = _sci_mod
+                _sci_spec.loader.exec_module(_sci_mod)
 
                 # Load tools module
-                _spec = importlib.util.spec_from_file_location("tools", _tools_path)
+                _spec = importlib.util.spec_from_file_location(
+                    "agi.autonomous.tools", _tools_path)
                 _mod = importlib.util.module_from_spec(_spec)
+                _sys.modules["agi.autonomous.tools"] = _mod
                 _spec.loader.exec_module(_mod)
 
                 mem = _sci_mod.EpisodicMemory(EREBUS_MEMORY_PATH)
