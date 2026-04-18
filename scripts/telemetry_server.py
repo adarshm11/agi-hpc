@@ -1827,8 +1827,9 @@ def _erebus_chat(user_message: str) -> str:
         ]
         extra = {"chat_template_kwargs": {"thinking": False}}
 
-        # Agentic mode with tools (fingerprints pre-cached at module level)
-        try:
+        # Agentic mode disabled — causes server hangs. Use simple chat.
+        # Tools available via direct API calls instead.
+        if False:
             from pathlib import Path as _P
             import importlib.util
 
