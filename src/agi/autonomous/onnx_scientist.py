@@ -196,12 +196,19 @@ def main():
                 print(f"-> no build_onnx function", flush=True)
                 continue
             model = build_fn()
+            if model is None:
+                print(f"-> build_onnx returned None", flush=True)
+                continue
         except Exception as e:
             print(f"-> build error: {str(e)[:60]}", flush=True)
             continue
 
         # Verify
-        correct, total = verify_onnx(model, task)
+        try:
+            correct, total = verify_onnx(model, task)
+        except Exception as e:
+            print(f"-> verify error: {str(e)[:60]}", flush=True)
+            continue
         if correct == total and total > 0:
             # Save
             onnx.save(model, str(output_dir / f"task{tn:03d}.onnx"))
