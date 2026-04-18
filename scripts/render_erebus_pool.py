@@ -16,7 +16,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="erebus-workers")
     ap.add_argument("--namespace", default="ssu-atlas-ai")
-    ap.add_argument("--replicas", type=int, default=8)
+    ap.add_argument("--replicas", type=int, default=8,
+                    help="Default: 8 CPU replicas. >4 is fine per NRP policy "
+                         "as long as each pod is lightweight (cpu=1 mem=2Gi is).")
     ap.add_argument("--gpu", type=int, default=0,
                     help="Request N GPUs per pod (0 = CPU only, stay in swarm mode)")
     ap.add_argument("--bundle-repo", default="ahb-sjsu/neurogolf-bundle")
