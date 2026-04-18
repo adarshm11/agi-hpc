@@ -1149,133 +1149,116 @@ def _get_nrp_nats_telemetry():
 
 
 # ── NRP utilization watchdog ──────────────────────────────────
-# NRP Cluster Policy (exact):
-#   - A single user can't submit more than 4 pods violating:
-#     GPU >40%, CPU 20-200%, RAM 20-150% of requested
-#   - Jobs with sleep command = ban
+# NRP Cluster Policy:
+#   - First 4 pods: can use up to 100% GPU, 200% CPU, 150% RAM
+#   - Pods 5+: must stay UNDER GPU 40%, CPU 20%, RAM 20%
+#     (i.e., must be lightweight / not resource-intensive)
 #   - Ignored: Memory <=2GB, CPU <=1
+#   - Jobs ending with sleep = ban
 #
-# Strategy: kill violating pods aggressively to stay under 4.
-# One strike = warning. Two consecutive strikes = kill.
-# If 3+ pods are violating simultaneously, kill the worst immediately.
+# In practice: we get 4 "full power" slots. Any pods beyond 4
+# must be minimal (CPU-only lightweight work).
 
 _nrp_violations: dict[str, int] = {}  # pod_name -> consecutive violation count
 
 def _nrp_watchdog_check(pods: list[dict]):
-    """Check running pods for utilization violations. Kill to stay under 4."""
+    """Enforce NRP tiered pod policy: 4 heavy pods max, rest must be light."""
     global _nrp_violations
     kubeconfig = os.path.expanduser("~/.kube/config")
     ns = "ssu-atlas-ai"
 
     active = [p for p in pods if p.get("phase") == "Running"]
     current_names = {p["name"] for p in active}
-
-    # Clear violations for pods that no longer exist
     _nrp_violations = {k: v for k, v in _nrp_violations.items() if k in current_names}
 
     def _parse_cpu_m(val):
-        """Parse CPU value to millicores: '946m' -> 946, '4' -> 4000."""
-        if not val:
-            return 0
+        if not val: return 0
         val = str(val).strip()
-        if val.endswith("m"):
-            return int(val[:-1])
-        return int(float(val) * 1000)
+        return int(val[:-1]) if val.endswith("m") else int(float(val) * 1000)
 
     def _parse_mem_mi(val):
-        """Parse memory to MiB: '710Mi' -> 710, '16Gi' -> 16384, '4 GB' -> 4096."""
-        if not val:
-            return 0
+        if not val: return 0
         val = str(val).strip().replace(" ", "")
-        if val.endswith("Mi"):
-            return int(val[:-2])
-        if val.endswith("Gi"):
-            return int(float(val[:-2]) * 1024)
-        if val.endswith("GB"):
-            return int(float(val[:-2]) * 1024)
-        if val.endswith("Ki"):
-            return int(val[:-2]) // 1024
+        if val.endswith("Mi"): return int(val[:-2])
+        if val.endswith("Gi"): return int(float(val[:-2]) * 1024)
+        if val.endswith("GB"): return int(float(val[:-2]) * 1024)
         return 0
 
-    violating_pods = []  # (name, violations, pod)
+    # Classify each pod as "heavy" or "light" based on utilization
+    heavy_pods = []   # pods exceeding the thresholds (GPU>40%, CPU 20-200%, RAM 20-150%)
+    light_pods = []   # pods under the thresholds
 
     for pod in active:
         name = pod["name"]
         usage = pod.get("usage", {})
         gpu_live = pod.get("gpu_live", {})
         res = pod.get("resources", {})
-        violations = []
 
-        # ── GPU: must be >40% if allocated ──
+        is_heavy = False
+
+        # GPU > 40% = heavy
         if res.get("gpu") and gpu_live.get("gpu_util_pct") is not None:
-            if gpu_live["gpu_util_pct"] < 40:
-                violations.append(f"GPU {gpu_live['gpu_util_pct']}% (<40%)")
+            if gpu_live["gpu_util_pct"] > 40:
+                is_heavy = True
 
-        # ── CPU: must be 20%-200% of requested. Ignored if <=1 CPU ──
+        # CPU 20-200% of requested = heavy (ignored if <=1 CPU)
         cpu_req_m = _parse_cpu_m(res.get("cpu", ""))
         cpu_used_m = _parse_cpu_m(usage.get("cpu_used", ""))
-        if cpu_req_m > 1000 and cpu_used_m > 0:  # exempt <=1 CPU
+        if cpu_req_m > 1000 and cpu_used_m > 0:
             cpu_pct = cpu_used_m * 100 // cpu_req_m
-            if cpu_pct < 20:
-                violations.append(f"CPU {cpu_pct}% (<20%)")
-            elif cpu_pct > 200:
-                violations.append(f"CPU {cpu_pct}% (>200%)")
+            if 20 <= cpu_pct <= 200:
+                is_heavy = True
 
-        # ── Memory: must be 20%-150% of requested. Ignored if <=2GB ──
+        # RAM 20-150% of requested = heavy (ignored if <=2GB)
         mem_req_mi = _parse_mem_mi(res.get("memory", ""))
         mem_used_mi = _parse_mem_mi(usage.get("mem_used", ""))
-        if mem_req_mi > 2048 and mem_used_mi > 0:  # exempt <=2GB
+        if mem_req_mi > 2048 and mem_used_mi > 0:
             mem_pct = mem_used_mi * 100 // mem_req_mi
-            if mem_pct < 20:
-                violations.append(f"MEM {mem_pct}% (<20%)")
-            elif mem_pct > 150:
-                violations.append(f"MEM {mem_pct}% (>150%)")
+            if 20 <= mem_pct <= 150:
+                is_heavy = True
 
-        if violations:
+        if is_heavy:
+            heavy_pods.append(pod)
+        else:
+            light_pods.append(pod)
+
+    n_heavy = len(heavy_pods)
+
+    # ── Enforcement ──
+    # First 4 heavy pods are fine. Kill the rest (newest first).
+    if n_heavy > 4:
+        # Sort by creation time, kill newest heavy pods first
+        heavy_pods.sort(key=lambda p: p.get("created", ""), reverse=True)
+        to_kill = heavy_pods[:n_heavy - 4]  # keep oldest 4
+
+        for pod in to_kill:
+            name = pod["name"]
             _nrp_violations[name] = _nrp_violations.get(name, 0) + 1
-            violating_pods.append((name, violations, pod))
-        else:
-            _nrp_violations.pop(name, None)
+            count = _nrp_violations[name]
 
-    # ── Enforcement: stay under 4 violating pods ──
-    # NRP bans at 4+ violating pods. We kill at 3 to have margin.
-    n_violating = len(violating_pods)
-
-    for name, violations, pod in violating_pods:
-        count = _nrp_violations.get(name, 0)
-        kill = False
-
-        if n_violating >= 3:
-            # DANGER ZONE: kill immediately, no grace period
-            kill = True
-            log.warning(f"[nrp-watchdog] EMERGENCY KILL {name}: "
-                       f"{', '.join(violations)} — {n_violating} pods violating "
-                       f"(ban threshold is 4)")
-        elif count >= 2:
-            # Two consecutive strikes
-            kill = True
-            log.warning(f"[nrp-watchdog] KILLING {name}: "
-                       f"{', '.join(violations)} — strike {count}")
-        else:
-            log.warning(f"[nrp-watchdog] {name}: {', '.join(violations)} "
-                       f"(strike {count}/2)")
-
-        if kill:
-            try:
-                job_name = pod.get("job", "")
-                if job_name:
+            if count >= 2:
+                log.warning(f"[nrp-watchdog] KILLING {name}: heavy pod #{n_heavy} "
+                           f"(max 4 allowed) — strike {count}")
+                try:
+                    job_name = pod.get("job", "")
+                    target = ("job", job_name) if job_name else ("pod", name)
                     subprocess.run(
                         ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
-                         "delete", "job", job_name],
+                         "delete", target[0], target[1]],
                         capture_output=True, timeout=10)
-                else:
-                    subprocess.run(
-                        ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
-                         "delete", "pod", name],
-                        capture_output=True, timeout=10)
-            except Exception as e:
-                log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
-            _nrp_violations.pop(name, None)
+                except Exception as e:
+                    log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
+                _nrp_violations.pop(name, None)
+            else:
+                log.warning(f"[nrp-watchdog] {name}: heavy pod #{n_heavy} "
+                           f"(max 4 allowed) — strike {count}/2, will kill next check")
+    else:
+        # Under limit — clear all violations
+        _nrp_violations.clear()
+
+    if n_heavy > 0:
+        log.info(f"[nrp-watchdog] {n_heavy} heavy pods / {len(active)} total "
+                f"(limit: 4 heavy)")
 
 
 def _get_nrp_burst_status():
