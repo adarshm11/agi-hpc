@@ -748,13 +748,14 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9992;</span> NRP Burst Jobs</div>
       <div id="nrp-burst-center" style="font-size:11px">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">
           <span style="color:var(--green)" id="nrp-succeeded">0</span><span style="color:var(--text-muted)"> done</span>
           <span style="color:var(--accent)" id="nrp-running">0</span><span style="color:var(--text-muted)"> run</span>
           <span style="color:var(--yellow)" id="nrp-pending">0</span><span style="color:var(--text-muted)"> pend</span>
           <span style="color:var(--red)" id="nrp-failed">0</span><span style="color:var(--text-muted)"> fail</span>
           <span style="color:var(--text-dim)" id="nrp-total"></span>
         </div>
+        <div id="nrp-resources" style="font-family:var(--mono);font-size:10px;margin-bottom:6px"></div>
         <div id="nrp-jobs-table" style="font-family:var(--mono);font-size:10px;max-height:200px;overflow-y:auto;margin-bottom:4px"></div>
         <div id="nrp-batches" style="color:var(--text-dim);font-family:var(--mono);font-size:10px"></div>
       </div>
@@ -1817,6 +1818,34 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       el('nrp-failed').textContent = d.failed || 0;
       var totalEl = el('nrp-total');
       if(totalEl) totalEl.textContent = '(' + (d.total || 0) + ' total)';
+      // Aggregate resource summary for active pods
+      var sumEl = el('nrp-resources');
+      if(sumEl && d.pods){
+        var active = d.pods.filter(function(p){return p.phase==='Running'||p.phase==='Pending';});
+        var totalGpu = 0, totalCpuM = 0, totalMemMi = 0, gpuModels = {};
+        active.forEach(function(p){
+          var r = p.resources || {};
+          var u = p.usage || {};
+          if(r.gpu) totalGpu += parseInt(r.gpu) || 0;
+          if(r.gpu_model) gpuModels[r.gpu_model] = (gpuModels[r.gpu_model]||0) + (parseInt(r.gpu)||1);
+          var cpu = u.cpu_used || '';
+          if(cpu.endsWith('m')) totalCpuM += parseInt(cpu);
+          var mem = u.mem_used || '';
+          if(mem.endsWith('Mi')) totalMemMi += parseInt(mem);
+          else if(mem.endsWith('Gi')) totalMemMi += parseInt(mem) * 1024;
+        });
+        var parts = [];
+        for(var gm in gpuModels) parts.push(gpuModels[gm] + 'x ' + gm);
+        if(!parts.length && totalGpu) parts.push(totalGpu + ' GPU');
+        var cpuStr = totalCpuM >= 1000 ? (totalCpuM/1000).toFixed(1) + ' cores' : totalCpuM + 'm';
+        var memStr = totalMemMi >= 1024 ? (totalMemMi/1024).toFixed(1) + ' GiB' : totalMemMi + ' MiB';
+        var html = '';
+        if(parts.length) html += '<span style="color:var(--accent)">' + parts.join(' + ') + '</span> &nbsp; ';
+        if(totalCpuM) html += '<span style="color:var(--green)">' + cpuStr + '</span> &nbsp; ';
+        if(totalMemMi) html += '<span style="color:var(--text-dim)">' + memStr + ' RAM</span>';
+        if(!html) html = '<span style="color:var(--text-dim)">no active pods</span>';
+        sumEl.innerHTML = html;
+      }
       // Job detail table
       var tbl = el('nrp-jobs-table');
       if(tbl && d.jobs && d.jobs.length){
