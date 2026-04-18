@@ -17,6 +17,8 @@ them and feed results back. This is the agentic loop.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import traceback
 from pathlib import Path
 
@@ -182,6 +184,22 @@ TOOL_DEFINITIONS = [
                     },
                 },
                 "required": ["task_num", "question"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_available_gpus",
+            "description": (
+                "Query what GPU types are available on NRP right now. "
+                "Returns GPU models, counts, VRAM, and which nodes have them. "
+                "Use this to decide between heavy mode (few A100s) or "
+                "swarm mode (many old GPUs)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     },
@@ -467,6 +485,92 @@ class ToolExecutor:
         help_file.write_text(json.dumps(queue[-20:], indent=2))
 
         return {"status": "posted", "queue_length": len(queue)}
+
+    def _tool_query_available_gpus(self) -> dict:
+        """Query NRP cluster for available GPU types — live kubectl data."""
+        import subprocess
+        kubeconfig = os.path.expanduser("~/.kube/config") if os.name != "nt" else ""
+        try:
+            cmd = ["kubectl"]
+            if kubeconfig:
+                cmd += ["--kubeconfig", kubeconfig]
+            cmd += ["get", "nodes", "-l", "nvidia.com/gpu.product",
+                    "-o", "custom-columns=NAME:.metadata.name,"
+                    "GPU:.metadata.labels.nvidia\\.com/gpu\\.product",
+                    "--no-headers"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode != 0:
+                return {"error": f"kubectl failed: {result.stderr[:200]}"}
+
+            # Parse node GPU types
+            gpu_counts = {}  # model -> count of nodes
+            gpu_nodes = {}   # model -> list of node names
+            for line in result.stdout.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    node = parts[0]
+                    gpu = parts[1]
+                    gpu_counts[gpu] = gpu_counts.get(gpu, 0) + 1
+                    gpu_nodes.setdefault(gpu, []).append(node)
+
+            # Known VRAM sizes
+            vram = {
+                "NVIDIA-A100-80GB-PCIe": 80, "NVIDIA-A100-SXM4-80GB": 80,
+                "NVIDIA-A100-PCIE-40GB": 40, "NVIDIA-A100-SXM4-40GB": 40,
+                "NVIDIA-H100-80GB-HBM3": 80, "NVIDIA-H100-SXM5-80GB": 80,
+                "NVIDIA-H200-SXM-141GB": 141,
+                "NVIDIA-L40": 48, "NVIDIA-L40S": 48,
+                "NVIDIA-L4": 24, "NVIDIA-A10": 24,
+                "NVIDIA-GeForce-RTX-3090": 24,
+                "NVIDIA-GeForce-RTX-2080-Ti": 11,
+                "NVIDIA-GeForce-GTX-1080-Ti": 11,
+                "Tesla-T4": 16, "Tesla-V100-SXM2-32GB": 32,
+            }
+
+            # Build summary
+            models = []
+            total_datacenter = 0
+            total_consumer = 0
+            for gpu, count in sorted(gpu_counts.items(), key=lambda x: -x[1]):
+                v = vram.get(gpu, 0)
+                is_datacenter = v >= 24 and "GeForce" not in gpu and "GTX" not in gpu
+                if is_datacenter:
+                    total_datacenter += count
+                else:
+                    total_consumer += count
+                models.append({
+                    "model": gpu,
+                    "nodes": count,
+                    "vram_gb": v,
+                    "datacenter": is_datacenter,
+                    "example_nodes": gpu_nodes.get(gpu, [])[:3],
+                })
+
+            recommendation = ""
+            if total_datacenter >= 4:
+                recommendation = (
+                    f"HEAVY mode recommended: {total_datacenter} datacenter GPU nodes "
+                    f"available. Use 4 pods on A100/H100/L40 at full power."
+                )
+            elif total_consumer >= 10:
+                recommendation = (
+                    f"SWARM mode recommended: {total_consumer} consumer GPU nodes. "
+                    f"Run many pods at <40% each."
+                )
+            else:
+                recommendation = f"AUTO mode: {total_datacenter} datacenter + {total_consumer} consumer nodes."
+
+            return {
+                "total_gpu_nodes": sum(gpu_counts.values()),
+                "datacenter_nodes": total_datacenter,
+                "consumer_nodes": total_consumer,
+                "models": models,
+                "recommendation": recommendation,
+            }
+        except Exception as e:
+            return {"error": str(e)[:200]}
 
     def _tool_set_nrp_mode(self, mode: str) -> dict:
         """Set NRP compute mode and return available GPU info."""
