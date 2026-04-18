@@ -2127,9 +2127,50 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
                 self._json_response({"error": "mode must be auto|heavy|swarm"}, 400)
         elif self.path == "/api/erebus/chat":
             self._handle_erebus_chat()
+        elif self.path == "/api/erebus/result":
+            self._handle_erebus_result()
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _handle_erebus_result(self):
+        """HTTP bridge for Erebus worker results.
+
+        NRP workers can't send NATS messages back through the leaf to
+        Atlas (hub→spoke subscription propagation is broken on our
+        setup). So workers POST results here instead; we re-publish
+        them on Atlas-local NATS so the dispatcher's existing
+        `erebus.results.>` subscribe picks them up transparently.
+        """
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length else b"{}"
+        try:
+            data = json.loads(body)
+        except Exception:
+            self._json_response({"error": "bad json"}, 400)
+            return
+        task_id = data.get("task_id") or data.get("id")
+        if not task_id:
+            self._json_response({"error": "missing task_id"}, 400)
+            return
+        try:
+            # Sync publish via nats-py in a tiny event loop.
+            import asyncio
+            import nats as _nats
+
+            async def _publish():
+                nc = await _nats.connect("nats://localhost:4222")
+                await nc.publish(
+                    f"erebus.results.{task_id}",
+                    json.dumps(data, default=str).encode(),
+                )
+                await nc.drain()
+
+            asyncio.run(_publish())
+            self._json_response({"ok": True, "task_id": task_id})
+        except Exception as e:
+            log.warning(f"erebus result publish failed: {e}")
+            self._json_response({"error": str(e)[:200]}, 500)
 
     def _handle_erebus_chat(self):
         """Handle chat with Erebus."""

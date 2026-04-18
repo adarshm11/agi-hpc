@@ -45,6 +45,10 @@ def main():
             # Atlas's JS, so using core pub/sub (load-balanced via queue
             # group) to cross the leaf transparently.
             "NATS_DURABLE": "0",
+            # HTTP fallback for results: hub→spoke subscription propagation
+            # is broken on this NATS leaf, so workers POST results to Atlas's
+            # telemetry server which re-publishes them on Atlas-local NATS.
+            "RESULT_WEBHOOK_URL": "https://atlas-sjsu.duckdns.org/api/erebus/result",
         },
         env_from_secrets={
             "NRP_LLM_TOKEN": ("erebus-worker-secrets", "nrp-llm-token"),
