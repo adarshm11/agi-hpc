@@ -1729,7 +1729,8 @@ def _erebus_chat(user_message: str) -> str:
                     client, "kimi", messages, executor,
                     max_tool_rounds=3, extra_body=extra)
         except Exception as tool_err:
-            log.warning(f"Agentic mode failed, falling back: {tool_err}")
+            import traceback
+            log.warning(f"Agentic mode failed, falling back: {tool_err}\n{traceback.format_exc()}")
 
         # Fallback: simple chat without tools
         r = client.chat.completions.create(
