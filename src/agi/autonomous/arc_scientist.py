@@ -756,7 +756,15 @@ class ARCScientist:
                 )
             elif r_strategy < 0.55 and n_prior >= 2:
                 # Primitives-guided: suggest composable operations
-                from agi.autonomous.primitives import PRIMITIVE_CATALOG
+                try:
+                    from agi.autonomous.primitives import PRIMITIVE_CATALOG
+                except ImportError:
+                    import importlib.util
+                    _spec = importlib.util.spec_from_file_location(
+                        "primitives", Path(__file__).parent / "primitives.py")
+                    _mod = importlib.util.module_from_spec(_spec)
+                    _spec.loader.exec_module(_mod)
+                    PRIMITIVE_CATALOG = _mod.PRIMITIVE_CATALOG
                 strategy_name = "primitives_guided"
                 prompt = STRATEGIES["primitives_guided"].format(
                     primitives=PRIMITIVE_CATALOG,
