@@ -14,6 +14,7 @@ Usage:
   python dreaming_schedule.py  (runs forever, triggers at 2AM PST)
   python dreaming_schedule.py --now  (run dreaming cycle immediately)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,21 +27,22 @@ import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 log = logging.getLogger("dreaming")
 
 PST = timezone(timedelta(hours=-7))  # PDT in April
-DREAM_START_HOUR = 2   # legacy fallback window
+DREAM_START_HOUR = 2  # legacy fallback window
 DREAM_END_HOUR = 4
 TASK_DIR = Path("/archive/neurogolf")
 MEMORY_PATH = TASK_DIR / "arc_scientist_memory.json"
 CURRICULUM_PATH = TASK_DIR / "src/compiler/CURRICULUM.md"
 
 # Activity-based dream tiers — idle seconds since last solve
-IDLE_MICRO = 30        # >30s idle → microsleep
-IDLE_MEDIUM = 120      # >2min idle → mediumsleep
-IDLE_DEEP = 900        # >15min idle → deepsleep (QLoRA)
+IDLE_MICRO = 30  # >30s idle → microsleep
+IDLE_MEDIUM = 120  # >2min idle → mediumsleep
+IDLE_DEEP = 900  # >15min idle → deepsleep (QLoRA)
 
 
 def is_dream_time() -> bool:
@@ -76,13 +78,16 @@ def classify_idle(idle_s: float) -> str:
 def run_microsleep():
     """Cheap, <1-min reflection work: cluster failures, log top patterns."""
     from agi.autonomous.erebus_compiler_tools import cluster_failures
+
     today = datetime.now().strftime("%Y-%m-%d")
     clusters = cluster_failures(day=today)
     classified = [c for c in clusters if c["pattern"] != "unclassified"]
     log.info(f"[microsleep] {len(classified)} classified clusters today")
     for c in classified[:5]:
-        log.info(f"  cluster {c['error_type']}/{c['pattern'][:40]} "
-                 f"— {c['n_unique_tasks']} tasks")
+        log.info(
+            f"  cluster {c['error_type']}/{c['pattern'][:40]} "
+            f"— {c['n_unique_tasks']} tasks"
+        )
 
 
 def run_mediumsleep():
@@ -96,7 +101,10 @@ def run_mediumsleep():
     new_module = dream_synthesize_compiler(successes, analysis)
     if new_module:
         from agi.autonomous.erebus_compiler_tools import (
-            cluster_failures, write_compiler_module)
+            cluster_failures,
+            write_compiler_module,
+        )
+
         code = _extract_python_block(new_module)
         if code:
             today = datetime.now().strftime("%Y-%m-%d")
@@ -104,7 +112,8 @@ def run_mediumsleep():
             clusters = cluster_failures(day=today)
             test_task_nums = clusters[0]["tasks"][:5] if clusters else []
             result = write_compiler_module(
-                code, test_task_nums, tag, min_solved_ratio=0.4)
+                code, test_task_nums, tag, min_solved_ratio=0.4
+            )
             if result.get("promoted"):
                 log.info(f"mediumsleep promoted: {result['path']}")
     dream_update_wiki(analysis or "", new_module or "")
@@ -128,15 +137,19 @@ def get_days_successes() -> list[dict]:
     successes = []
     for tn_str, tk in mem.get("tasks", {}).items():
         for attempt in tk.get("attempts", []):
-            if (attempt.get("verified") and
-                attempt.get("code") and
-                attempt.get("timestamp", "").startswith(today)):
-                successes.append({
-                    "task": int(tn_str),
-                    "code": attempt["code"],
-                    "strategy": attempt.get("strategy", ""),
-                    "model": attempt.get("model", ""),
-                })
+            if (
+                attempt.get("verified")
+                and attempt.get("code")
+                and attempt.get("timestamp", "").startswith(today)
+            ):
+                successes.append(
+                    {
+                        "task": int(tn_str),
+                        "code": attempt["code"],
+                        "strategy": attempt.get("strategy", ""),
+                        "model": attempt.get("model", ""),
+                    }
+                )
     return successes
 
 
@@ -151,17 +164,21 @@ def get_days_failures() -> list[dict]:
     failures = []
     for tn_str, tk in mem.get("tasks", {}).items():
         for attempt in tk.get("attempts", []):
-            if (not attempt.get("verified") and
-                attempt.get("error_type") and
-                attempt.get("timestamp", "").startswith(today)):
-                failures.append({
-                    "task": int(tn_str),
-                    "error_type": attempt.get("error_type", ""),
-                    "insight": attempt.get("insight", ""),
-                    "similar_to": attempt.get("similar_to", ""),
-                    "correct": attempt.get("correct", 0),
-                    "total": attempt.get("total", 0),
-                })
+            if (
+                not attempt.get("verified")
+                and attempt.get("error_type")
+                and attempt.get("timestamp", "").startswith(today)
+            ):
+                failures.append(
+                    {
+                        "task": int(tn_str),
+                        "error_type": attempt.get("error_type", ""),
+                        "insight": attempt.get("insight", ""),
+                        "similar_to": attempt.get("similar_to", ""),
+                        "correct": attempt.get("correct", 0),
+                        "total": attempt.get("total", 0),
+                    }
+                )
     return failures
 
 
@@ -172,8 +189,10 @@ def dream_analyze_failures(failures: list[dict]) -> str:
         return ""
 
     from openai import OpenAI
-    client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1",
-                     timeout=60)
+
+    client = OpenAI(
+        api_key=token, base_url="https://ellm.nrp-nautilus.io/v1", timeout=60
+    )
 
     # Group failures by error type
     by_type = {}
@@ -201,7 +220,8 @@ def dream_analyze_failures(failures: list[dict]) -> str:
 
     try:
         r = client.chat.completions.create(
-            model="qwen3", max_tokens=2000,
+            model="qwen3",
+            max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
@@ -225,8 +245,9 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
     from openai import OpenAI
     from agi.autonomous.erebus_compiler_tools import get_few_shot_modules
 
-    client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1",
-                     timeout=180)
+    client = OpenAI(
+        api_key=token, base_url="https://ellm.nrp-nautilus.io/v1", timeout=180
+    )
 
     # Real source of the shortest well-formed compiler modules — this is
     # the pattern Erebus must imitate, not the high-level curriculum text.
@@ -234,8 +255,7 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
 
     # Pick the most common transform pattern from successes
     codes = "\n\n".join(
-        f"# task{s['task']:03d}\n{s['code'][:500]}"
-        for s in successes[:5]
+        f"# task{s['task']:03d}\n{s['code'][:500]}" for s in successes[:5]
     )
 
     prompt = (
@@ -258,7 +278,8 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
 
     try:
         r = client.chat.completions.create(
-            model="qwen3", max_tokens=8000,
+            model="qwen3",
+            max_tokens=8000,
             messages=[{"role": "user", "content": prompt}],
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
@@ -276,8 +297,10 @@ def _extract_python_block(response: str) -> str | None:
         stripped = part.lstrip()
         if stripped.startswith("python"):
             stripped = stripped[6:]
-        if any(marker in stripped for marker in (
-                "def compile_", "def detect_", "def make_model")):
+        if any(
+            marker in stripped
+            for marker in ("def compile_", "def detect_", "def make_model")
+        ):
             return stripped.strip()
     return None
 
@@ -307,8 +330,12 @@ def _svc(action: str, services=KIRK_SERVICES) -> None:
     """sudo systemctl <action> <services> — claude has NOPASSWD ALL on Atlas."""
     for svc in services:
         try:
-            subprocess.run(["sudo", "-n", "systemctl", action, svc],
-                           check=False, capture_output=True, timeout=20)
+            subprocess.run(
+                ["sudo", "-n", "systemctl", action, svc],
+                check=False,
+                capture_output=True,
+                timeout=20,
+            )
         except Exception as e:
             log.warning(f"systemctl {action} {svc} failed: {e}")
 
@@ -346,11 +373,26 @@ def run_qlora_training(min_pairs: int = 10) -> None:
         # Atlas GV100 is SM 7.0 (Volta) → bnb 4-bit not supported, use bf16.
         # Qwen2.5-14B in bf16 is ~28GB, fits on 32GB GV100 with LoRA adapters.
         result = subprocess.run(
-            [sys.executable, "-u", str(script),
-             "--base", "Qwen/Qwen2.5-14B-Instruct",
-             "--quant", "none",
-             "--rank", "16", "--epochs", "3", "--min-pairs", str(min_pairs)],
-            env=env, timeout=5400, capture_output=True, text=True)
+            [
+                sys.executable,
+                "-u",
+                str(script),
+                "--base",
+                "Qwen/Qwen2.5-14B-Instruct",
+                "--quant",
+                "none",
+                "--rank",
+                "16",
+                "--epochs",
+                "3",
+                "--min-pairs",
+                str(min_pairs),
+            ],
+            env=env,
+            timeout=5400,
+            capture_output=True,
+            text=True,
+        )
         log.info(f"QLoRA exit={result.returncode}")
         if result.stdout:
             log.info(f"QLoRA stdout tail:\n{result.stdout[-2000:]}")
@@ -393,7 +435,9 @@ def run_dream_cycle():
     new_module = dream_synthesize_compiler(successes, analysis)
     if new_module:
         from agi.autonomous.erebus_compiler_tools import (
-            cluster_failures, write_compiler_module)
+            cluster_failures,
+            write_compiler_module,
+        )
 
         code = _extract_python_block(new_module)
         if not code:
@@ -404,13 +448,15 @@ def run_dream_cycle():
             # Pick the biggest failure cluster as the test set.
             clusters = cluster_failures(day=today)
             test_task_nums = clusters[0]["tasks"][:5] if clusters else []
-            log.info(f"Testing synthesized module against tasks: "
-                     f"{test_task_nums}")
-            result = write_compiler_module(code, test_task_nums, tag,
-                                           min_solved_ratio=0.4)
+            log.info(f"Testing synthesized module against tasks: " f"{test_task_nums}")
+            result = write_compiler_module(
+                code, test_task_nums, tag, min_solved_ratio=0.4
+            )
             for stage in result.get("stages", []):
-                log.info(f"  [{stage['stage']}] ok={stage.get('ok')} "
-                         f"{stage.get('error', '')[:200]}")
+                log.info(
+                    f"  [{stage['stage']}] ok={stage.get('ok')} "
+                    f"{stage.get('error', '')[:200]}"
+                )
             if result.get("promoted"):
                 log.info(f"Promoted: {result['path']}")
             else:
@@ -428,10 +474,15 @@ def run_dream_cycle():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--now", action="store_true",
-                    help="Run full dream cycle immediately")
-    ap.add_argument("--mode", choices=("activity", "window"), default="activity",
-                    help="activity: trigger on idle gaps. window: 2-4AM PST.")
+    ap.add_argument(
+        "--now", action="store_true", help="Run full dream cycle immediately"
+    )
+    ap.add_argument(
+        "--mode",
+        choices=("activity", "window"),
+        default="activity",
+        help="activity: trigger on idle gaps. window: 2-4AM PST.",
+    )
     args = ap.parse_args()
 
     if args.now:

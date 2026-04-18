@@ -14,6 +14,7 @@ Pipeline:
 
 This produces ONNX files that can go directly into submission.zip.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,9 +35,11 @@ def grid_to_onehot(grid):
     """Convert grid to one-hot tensor [1,10,30,30]."""
     t = np.zeros((1, 10, 30, 30), dtype=np.float32)
     for r, row in enumerate(grid):
-        if r >= 30: break
+        if r >= 30:
+            break
         for c, color in enumerate(row):
-            if c >= 30: break
+            if c >= 30:
+                break
             if 0 <= color < 10:
                 t[0, color, r, c] = 1.0
     return t
@@ -46,11 +49,13 @@ def verify_onnx(model, task):
     """Verify ONNX model on ALL examples."""
     import onnxruntime
     import onnx
+
     buf = io.BytesIO()
     onnx.save(model, buf)
     try:
         sess = onnxruntime.InferenceSession(
-            buf.getvalue(), providers=["CPUExecutionProvider"])
+            buf.getvalue(), providers=["CPUExecutionProvider"]
+        )
     except Exception:
         return 0, 0
     correct = total = 0
@@ -104,7 +109,11 @@ def extract_build_onnx(response):
 
 def main():
     from onnx_strategies import (
-        ONNX_DIRECT, ONNX_WITH_ANALYSIS, ONNX_FROM_PYTHON, ONNX_DIAGNOSTIC)
+        ONNX_DIRECT,
+        ONNX_WITH_ANALYSIS,
+        ONNX_FROM_PYTHON,
+        ONNX_DIAGNOSTIC,
+    )
 
     ap = argparse.ArgumentParser(description="Erebus ONNX-direct scientist")
     ap.add_argument("--task-dir", default="/archive/neurogolf")
@@ -116,6 +125,7 @@ def main():
 
     token = os.environ.get("NRP_LLM_TOKEN", "")
     from openai import OpenAI
+
     client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1")
 
     task_dir = Path(args.task_dir)
@@ -129,18 +139,26 @@ def main():
     # Skip already-solved ONNX
     solved = set()
     if args.skip_solved:
-        for d in ["solutions_final", "solutions_merged_latest", "solutions_safe",
-                   "solutions_conv_v2", "solutions_onnx_direct"]:
+        for d in [
+            "solutions_final",
+            "solutions_merged_latest",
+            "solutions_safe",
+            "solutions_conv_v2",
+            "solutions_onnx_direct",
+        ]:
             p = task_dir / d
             if p.exists():
                 solved.update(int(f.stem[4:]) for f in p.glob("task*.onnx"))
 
     unsolved = [t for t in all_tasks if t not in solved]
-    print(f"ONNX-direct scientist starting")
-    print(f"  Tasks: {len(all_tasks)} total, {len(solved)} solved, {len(unsolved)} to try")
+    print("ONNX-direct scientist starting")
+    print(
+        f"  Tasks: {len(all_tasks)} total, {len(solved)} solved, {len(unsolved)} to try"
+    )
     print()
 
     import onnx
+
     n_solved = 0
     n_attempted = 0
 
@@ -165,39 +183,43 @@ def main():
         elif "qwen" in model_name:
             extra = {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
 
-        print(f"[{attempt+1}/{args.attempts}] task{tn:03d} model={model_name}",
-              end=" ", flush=True)
+        print(
+            f"[{attempt+1}/{args.attempts}] task{tn:03d} model={model_name}",
+            end=" ",
+            flush=True,
+        )
         n_attempted += 1
 
         try:
             r = client.chat.completions.create(
-                model=model_name, max_tokens=3000,
+                model=model_name,
+                max_tokens=3000,
                 messages=[{"role": "user", "content": prompt}],
                 **extra,
             )
             response = r.choices[0].message.content or ""
-        except Exception as e:
-            print(f"-> LLM error", flush=True)
+        except Exception:
+            print("-> LLM error", flush=True)
             continue
 
         code = extract_build_onnx(response)
         if not code:
-            print(f"-> no build_onnx code", flush=True)
+            print("-> no build_onnx code", flush=True)
             continue
 
         # Execute build_onnx
         try:
             from onnx import helper, TensorProto
-            ns = {"np": np, "onnx": onnx, "helper": helper,
-                  "TensorProto": TensorProto}
+
+            ns = {"np": np, "onnx": onnx, "helper": helper, "TensorProto": TensorProto}
             exec(code.strip(), ns)
             build_fn = ns.get("build_onnx")
             if not build_fn:
-                print(f"-> no build_onnx function", flush=True)
+                print("-> no build_onnx function", flush=True)
                 continue
             model = build_fn()
             if model is None:
-                print(f"-> build_onnx returned None", flush=True)
+                print("-> build_onnx returned None", flush=True)
                 continue
         except Exception as e:
             print(f"-> build error: {str(e)[:60]}", flush=True)
@@ -217,6 +239,7 @@ def main():
             try:
                 sys.path.insert(0, str(task_dir / "src"))
                 from grammar.primitives import score_model
+
                 s = score_model(model)
                 cost = s["cost"] if s else "?"
             except Exception:
@@ -226,7 +249,9 @@ def main():
             print(f"-> {correct}/{total}", flush=True)
 
         if (attempt + 1) % 20 == 0:
-            print(f"\n--- Progress: {n_solved} ONNX solves in {n_attempted} attempts ---\n")
+            print(
+                f"\n--- Progress: {n_solved} ONNX solves in {n_attempted} attempts ---\n"
+            )
 
     print(f"\nDone: {n_solved} ONNX models saved to {output_dir}")
     print(f"Attempted: {n_attempted}")

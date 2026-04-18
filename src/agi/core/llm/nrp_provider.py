@@ -13,6 +13,7 @@ Usage:
     provider = NRPProvider.from_config("configs/nrp_llm_config.yaml")
     response = await provider.chat("id", messages=[...])
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -37,10 +38,14 @@ class AgentConfig:
 class NRPProvider:
     """OpenAI-compatible client for NRP managed LLM service."""
 
-    def __init__(self, base_url: str, api_key: str,
-                 agents: dict[str, AgentConfig] | None = None,
-                 max_concurrent: int = 5,
-                 delay_between_calls: float = 0.5):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        agents: dict[str, AgentConfig] | None = None,
+        max_concurrent: int = 5,
+        delay_between_calls: float = 0.5,
+    ):
         self.base_url = base_url
         self.api_key = api_key
         self.agents = agents or {}
@@ -52,6 +57,7 @@ class NRPProvider:
     def _get_client(self):
         if self._client is None:
             from openai import OpenAI
+
             self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         return self._client
 
@@ -85,13 +91,16 @@ class NRPProvider:
             delay_between_calls=rate.get("delay_between_calls_s", 0.5),
         )
 
-    def chat(self, agent_name: str, messages: list[dict],
-             system: str | None = None, **kwargs) -> str:
+    def chat(
+        self, agent_name: str, messages: list[dict], system: str | None = None, **kwargs
+    ) -> str:
         """Synchronous chat with a named agent."""
         acfg = self.agents.get(agent_name)
         if not acfg:
-            raise ValueError(f"Unknown agent: {agent_name}. "
-                           f"Available: {list(self.agents.keys())}")
+            raise ValueError(
+                f"Unknown agent: {agent_name}. "
+                f"Available: {list(self.agents.keys())}"
+            )
 
         # Rate limiting
         elapsed = time.time() - self._last_call
@@ -125,8 +134,9 @@ class NRPProvider:
         except Exception as e:
             return f"[NRP LLM Error: {e}]"
 
-    async def achat(self, agent_name: str, messages: list[dict],
-                    system: str | None = None, **kwargs) -> str:
+    async def achat(
+        self, agent_name: str, messages: list[dict], system: str | None = None, **kwargs
+    ) -> str:
         """Async chat with rate limiting."""
         async with self._semaphore:
             loop = asyncio.get_event_loop()
@@ -136,15 +146,18 @@ class NRPProvider:
 
     def list_agents(self) -> dict[str, str]:
         """Return agent name -> model mapping."""
-        return {name: f"{acfg.model} ({acfg.role})"
-                for name, acfg in self.agents.items()}
+        return {
+            name: f"{acfg.model} ({acfg.role})" for name, acfg in self.agents.items()
+        }
 
     def test_connection(self) -> dict[str, str]:
         """Test each agent with a simple prompt."""
         results = {}
         for name in self.agents:
             try:
-                response = self.chat(name, [{"role": "user", "content": "Say hello in one word."}])
+                response = self.chat(
+                    name, [{"role": "user", "content": "Say hello in one word."}]
+                )
                 results[name] = f"OK: {response.strip()[:50]}"
             except Exception as e:
                 results[name] = f"FAIL: {e}"
@@ -153,6 +166,7 @@ class NRPProvider:
 
 if __name__ == "__main__":
     import sys
+
     os.environ.setdefault("NRP_LLM_TOKEN", "qXG2BOVwEJFeQ0zua6Hbqk91atcmUUKN")
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "configs/nrp_llm_config.yaml"

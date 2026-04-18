@@ -16,6 +16,7 @@ Erebus's three self-requested improvements (2026-04-18):
   3. Task clustering: group unsolved by similarity to solved tasks,
      exploit structural priors (shape, color, symmetry)
 """
+
 from __future__ import annotations
 
 import json
@@ -29,7 +30,6 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-
 
 # ═══════════════════════════════════════════════════════════════
 # Error taxonomy — Erebus's request #1
@@ -56,6 +56,7 @@ CLASSIFY_PROMPT = (
 # Task fingerprinting — Erebus's request #3
 # ═══════════════════════════════════════════════════════════════
 
+
 @dataclass
 class TaskFingerprint:
     """Structural signature for clustering tasks.
@@ -64,6 +65,7 @@ class TaskFingerprint:
     features (same_colors, shape_change, content_overlap) not just
     surface features (grid size, color count).
     """
+
     task_num: int
     input_h: int
     input_w: int
@@ -77,11 +79,11 @@ class TaskFingerprint:
     has_symmetry: bool
     dominant_color: int
     # Enriched features (Erebus's request)
-    same_colors: bool = True         # do input/output use same color set?
-    shape_change: str = "same"       # same|crop|scale|other
-    content_overlap: float = 0.0     # fraction of output pixels present in input
-    inferred_class: str = ""         # populated after first attempt (from similar_to)
-    task_summary: str = ""           # compact text summary for memory
+    same_colors: bool = True  # do input/output use same color set?
+    shape_change: str = "same"  # same|crop|scale|other
+    content_overlap: float = 0.0  # fraction of output pixels present in input
+    inferred_class: str = ""  # populated after first attempt (from similar_to)
+    task_summary: str = ""  # compact text summary for memory
 
 
 def fingerprint_task(task: dict, tn: int) -> TaskFingerprint:
@@ -116,21 +118,29 @@ def fingerprint_task(task: dict, tn: int) -> TaskFingerprint:
     # Symmetry check
     has_sym = False
     if inp.size and inp.ndim == 2:
-        has_sym = (np.array_equal(inp, inp[::-1]) or
-                   np.array_equal(inp, inp[:, ::-1]) or
-                   (ih == iw and np.array_equal(inp, inp.T)))
+        has_sym = (
+            np.array_equal(inp, inp[::-1])
+            or np.array_equal(inp, inp[:, ::-1])
+            or (ih == iw and np.array_equal(inp, inp.T))
+        )
 
-    dominant = int(Counter(inp.flatten().tolist()).most_common(1)[0][0]) if inp.size else 0
+    dominant = (
+        int(Counter(inp.flatten().tolist()).most_common(1)[0][0]) if inp.size else 0
+    )
 
     # Compact task summary for episodic memory
-    summary = (f"{ih}x{iw}->{oh}x{ow} "
-               f"colors:{len(colors_in)}->{len(colors_out)} "
-               f"{shape_change} overlap:{overlap:.0%}")
+    summary = (
+        f"{ih}x{iw}->{oh}x{ow} "
+        f"colors:{len(colors_in)}->{len(colors_out)} "
+        f"{shape_change} overlap:{overlap:.0%}"
+    )
 
     return TaskFingerprint(
         task_num=tn,
-        input_h=ih, input_w=iw,
-        output_h=oh, output_w=ow,
+        input_h=ih,
+        input_w=iw,
+        output_h=oh,
+        output_w=ow,
         same_shape=(ih == oh and iw == ow),
         n_colors_in=len(colors_in),
         n_colors_out=len(colors_out),
@@ -168,6 +178,7 @@ def task_distance(a: TaskFingerprint, b: TaskFingerprint) -> float:
 # Episodic memory
 # ═══════════════════════════════════════════════════════════════
 
+
 @dataclass
 class Attempt:
     task_num: int
@@ -178,11 +189,11 @@ class Attempt:
     correct: int
     total: int
     error: str = ""
-    error_type: str = ""       # perception|reasoning|execution|specification
+    error_type: str = ""  # perception|reasoning|execution|specification
     code: str = ""
     insight: str = ""
-    similar_to: str = ""       # which ARC pattern this resembles
-    task_summary: str = ""     # compact description so memory is self-contained
+    similar_to: str = ""  # which ARC pattern this resembles
+    task_summary: str = ""  # compact description so memory is self-contained
 
 
 @dataclass
@@ -194,7 +205,7 @@ class TaskKnowledge:
     best_total: int = 0
     strategies_tried: list = field(default_factory=list)
     failure_patterns: list = field(default_factory=list)
-    error_types: list = field(default_factory=list)   # classified errors
+    error_types: list = field(default_factory=list)  # classified errors
     hypotheses: list = field(default_factory=list)
 
 
@@ -234,15 +245,21 @@ class EpisodicMemory:
             try:
                 data = json.loads(self.path.read_text())
                 for tn, tk in data.get("tasks", {}).items():
-                    self.tasks[int(tn)] = TaskKnowledge(**{
-                        k: v for k, v in tk.items()
-                        if k in TaskKnowledge.__dataclass_fields__
-                    })
+                    self.tasks[int(tn)] = TaskKnowledge(
+                        **{
+                            k: v
+                            for k, v in tk.items()
+                            if k in TaskKnowledge.__dataclass_fields__
+                        }
+                    )
                 for name, ss in data.get("strategies", {}).items():
-                    self.strategies[name] = StrategyStats(**{
-                        k: v for k, v in ss.items()
-                        if k in StrategyStats.__dataclass_fields__
-                    })
+                    self.strategies[name] = StrategyStats(
+                        **{
+                            k: v
+                            for k, v in ss.items()
+                            if k in StrategyStats.__dataclass_fields__
+                        }
+                    )
                 self.meta_patterns = data.get("meta_patterns", [])
                 self.global_insights = data.get("global_insights", [])
                 self.total_attempts = data.get("total_attempts", 0)
@@ -314,9 +331,7 @@ class EpisodicMemory:
             if count >= 3:
                 tasks = type_tasks[et][:5]
                 task_str = ", ".join(f"task{t:03d}" for t in tasks)
-                patterns.append(
-                    f"{et} errors ({count}x): {task_str}"
-                )
+                patterns.append(f"{et} errors ({count}x): {task_str}")
 
         # Check for similar_to clusters
         sim_counts = Counter()
@@ -334,10 +349,12 @@ class EpisodicMemory:
         return patterns
 
     def get_unsolved_tasks(self, all_tasks: list[int]) -> list[int]:
-        unsolved = [t for t in all_tasks if t not in self.tasks or not self.tasks[t].solved]
+        unsolved = [
+            t for t in all_tasks if t not in self.tasks or not self.tasks[t].solved
+        ]
         unsolved.sort(
             key=lambda t: self.tasks[t].best_correct if t in self.tasks else 0,
-            reverse=True
+            reverse=True,
         )
         return unsolved
 
@@ -354,8 +371,7 @@ class EpisodicMemory:
 
     def get_strategy_report(self) -> str:
         lines = ["Strategy Performance:"]
-        ranked = sorted(self.strategies.values(),
-                       key=lambda s: s.weight, reverse=True)
+        ranked = sorted(self.strategies.values(), key=lambda s: s.weight, reverse=True)
         for s in ranked:
             lines.append(
                 f"  {s.name:20s} w={s.weight:.2f} "
@@ -439,6 +455,7 @@ STRATEGIES = {
 # Core functions
 # ═══════════════════════════════════════════════════════════════
 
+
 def format_examples(task: dict, max_examples: int = 4) -> str:
     parts = []
     for i, ex in enumerate(task.get("train", [])[:max_examples]):
@@ -469,8 +486,9 @@ def extract_code(response: str) -> str | None:
     return None
 
 
-def _write_training_pair(task_dir: Path, task_num: int, task: dict,
-                         code: str, strategy: str, model: str) -> None:
+def _write_training_pair(
+    task_dir: Path, task_num: int, task: dict, code: str, strategy: str, model: str
+) -> None:
     """Append a verified (task_examples, python_transform) pair to today's JSONL
     for QLoRA fine-tuning. Stored under /archive/neurogolf/training_data/."""
     try:
@@ -516,11 +534,17 @@ def verify_transform(transform_fn, task: dict) -> tuple[int, int]:
 # The Scientist — Erebus
 # ═══════════════════════════════════════════════════════════════
 
+
 class ARCScientist:
     """Erebus — autonomous agent that learns to solve ARC tasks."""
 
-    def __init__(self, task_dir: str, memory_path: str = "arc_scientist_memory.json",
-                 llm_token: str = "", llm_base_url: str = "https://ellm.nrp-nautilus.io/v1"):
+    def __init__(
+        self,
+        task_dir: str,
+        memory_path: str = "arc_scientist_memory.json",
+        llm_token: str = "",
+        llm_base_url: str = "https://ellm.nrp-nautilus.io/v1",
+    ):
         self.task_dir = Path(task_dir)
         self.memory = EpisodicMemory(memory_path)
         self.llm_token = llm_token or os.environ.get("NRP_LLM_TOKEN", "")
@@ -528,9 +552,9 @@ class ARCScientist:
         self.client = None
         self._init_client()
 
-        self.all_tasks = sorted([
-            int(f.stem[4:]) for f in self.task_dir.glob("task*.json")
-        ])
+        self.all_tasks = sorted(
+            [int(f.stem[4:]) for f in self.task_dir.glob("task*.json")]
+        )
 
         # Build fingerprint index for task clustering
         self.fingerprints: dict[int, TaskFingerprint] = {}
@@ -544,6 +568,7 @@ class ARCScientist:
     def _init_client(self):
         if self.llm_token:
             from openai import OpenAI
+
             self.client = OpenAI(api_key=self.llm_token, base_url=self.llm_base_url)
 
     def _load_task(self, tn: int) -> dict:
@@ -560,7 +585,8 @@ class ARCScientist:
             extra = {"extra_body": {"chat_template_kwargs": {"enable_thinking": False}}}
         try:
             r = self.client.chat.completions.create(
-                model=model, max_tokens=2000,
+                model=model,
+                max_tokens=2000,
                 messages=[{"role": "user", "content": prompt}],
                 **extra,
             )
@@ -568,16 +594,16 @@ class ARCScientist:
         except Exception:
             return None
 
-    def _structured_reflection(self, task: dict, tn: int, code: str,
-                                correct: int, total: int) -> dict:
+    def _structured_reflection(
+        self, task: dict, tn: int, code: str, correct: int, total: int
+    ) -> dict:
         """Structured failure classification — Erebus's request #1.
 
         Returns {error_type, diagnosis, similar_to} or empty dict.
         """
         examples = format_examples(task, max_examples=2)
         prompt = CLASSIFY_PROMPT.format(
-            correct=correct, total=total,
-            examples=examples, code=code
+            correct=correct, total=total, examples=examples, code=code
         )
         response = self._call_llm(prompt, model="kimi")
         if not response:
@@ -648,7 +674,9 @@ class ARCScientist:
             if i == 0:
                 parts.append("What rule could produce this output from this input?")
             elif i == 1:
-                parts.append("Does your rule from Example 1 still hold? If not, revise it.")
+                parts.append(
+                    "Does your rule from Example 1 still hold? If not, revise it."
+                )
             elif i == 2:
                 parts.append("Your rule must now satisfy ALL three examples. Refine.")
             else:
@@ -697,8 +725,10 @@ class ARCScientist:
         # Keep last 20
         help_file.write_text(json.dumps(queue[-20:], indent=2))
 
-        print(f"    [HELP REQUESTED] task{tn:03d}: {question['question'][:80]}",
-              flush=True)
+        print(
+            f"    [HELP REQUESTED] task{tn:03d}: {question['question'][:80]}",
+            flush=True,
+        )
 
     def run_cycle(self, max_attempts: int = 50, models: list[str] = None):
         """Run one full learning cycle with Erebus's improvements."""
@@ -706,10 +736,12 @@ class ARCScientist:
             models = ["kimi", "qwen3"]
 
         unsolved = self.memory.get_unsolved_tasks(self.all_tasks)
-        print(f"Erebus starting learning cycle")
+        print("Erebus starting learning cycle")
         print(f"  Tasks: {len(self.all_tasks)} total, {len(unsolved)} unsolved")
-        print(f"  Memory: {self.memory.total_attempts} prior attempts, "
-              f"{self.memory.total_solves} solves")
+        print(
+            f"  Memory: {self.memory.total_attempts} prior attempts, "
+            f"{self.memory.total_solves} solves"
+        )
         print(f"  Fingerprints: {len(self.fingerprints)} tasks indexed")
         if self.memory.strategies:
             print(self.memory.get_strategy_report())
@@ -734,9 +766,11 @@ class ARCScientist:
                 for t in unsolved
             ):
                 # Near-miss exploitation
-                near_misses = [t for t in unsolved
-                               if t in self.memory.tasks
-                               and self.memory.tasks[t].best_correct > 0]
+                near_misses = [
+                    t
+                    for t in unsolved
+                    if t in self.memory.tasks and self.memory.tasks[t].best_correct > 0
+                ]
                 tn = random.choice(near_misses[:10])
             else:
                 # Pure exploration
@@ -785,8 +819,10 @@ class ARCScientist:
                     from agi.autonomous.primitives import PRIMITIVE_CATALOG
                 except ImportError:
                     import importlib.util
+
                     _spec = importlib.util.spec_from_file_location(
-                        "primitives", Path(__file__).parent / "primitives.py")
+                        "primitives", Path(__file__).parent / "primitives.py"
+                    )
                     _mod = importlib.util.module_from_spec(_spec)
                     _spec.loader.exec_module(_mod)
                     PRIMITIVE_CATALOG = _mod.PRIMITIVE_CATALOG
@@ -798,33 +834,49 @@ class ARCScientist:
             else:
                 # Thompson sampling over base strategies
                 strategy_name = self.memory.pick_strategy()
-                if strategy_name in ("diagnostic", "example_chain", "primitives_guided"):
+                if strategy_name in (
+                    "diagnostic",
+                    "example_chain",
+                    "primitives_guided",
+                ):
                     strategy_name = "direct"
                 strategy_template = STRATEGIES.get(strategy_name, STRATEGIES["direct"])
                 prompt = strategy_template.format(
                     examples=examples,
                     failure_context="",
-                    error_type="", diagnosis="", similar_to="",
-                    chain_examples="", primitives="",
+                    error_type="",
+                    diagnosis="",
+                    similar_to="",
+                    chain_examples="",
+                    primitives="",
                 )
 
             model = random.choice(models)
 
             # ── 3. EXPERIMENT ──
-            print(f"[{attempt_num+1}/{max_attempts}] task{tn:03d} "
-                  f"strategy={strategy_name} model={model}",
-                  end=" ", flush=True)
+            print(
+                f"[{attempt_num+1}/{max_attempts}] task{tn:03d} "
+                f"strategy={strategy_name} model={model}",
+                end=" ",
+                flush=True,
+            )
 
             response = self._call_llm(prompt, model=model)
             code = extract_code(response) if response else None
 
             if not code:
-                self.memory.record_attempt(Attempt(
-                    task_num=tn, timestamp=datetime.now().isoformat(),
-                    strategy=strategy_name, model=model,
-                    verified=False, correct=0, total=0,
-                    error="no_code_extracted"
-                ))
+                self.memory.record_attempt(
+                    Attempt(
+                        task_num=tn,
+                        timestamp=datetime.now().isoformat(),
+                        strategy=strategy_name,
+                        model=model,
+                        verified=False,
+                        correct=0,
+                        total=0,
+                        error="no_code_extracted",
+                    )
+                )
                 print("-> no code", flush=True)
                 continue
 
@@ -837,13 +889,20 @@ class ARCScientist:
                     raise ValueError("no transform function")
                 correct, total = verify_transform(transform_fn, task)
             except Exception as e:
-                self.memory.record_attempt(Attempt(
-                    task_num=tn, timestamp=datetime.now().isoformat(),
-                    strategy=strategy_name, model=model,
-                    verified=False, correct=0, total=0,
-                    error_type="execution",
-                    error=f"exec: {str(e)[:80]}", code=code
-                ))
+                self.memory.record_attempt(
+                    Attempt(
+                        task_num=tn,
+                        timestamp=datetime.now().isoformat(),
+                        strategy=strategy_name,
+                        model=model,
+                        verified=False,
+                        correct=0,
+                        total=0,
+                        error_type="execution",
+                        error=f"exec: {str(e)[:80]}",
+                        code=code,
+                    )
+                )
                 print("-> exec error", flush=True)
                 continue
 
@@ -857,15 +916,23 @@ class ARCScientist:
             if verified:
                 solved_this_cycle += 1
                 attempts_this_cycle += 1
-                self.memory.record_attempt(Attempt(
-                    task_num=tn, timestamp=datetime.now().isoformat(),
-                    strategy=strategy_name, model=model,
-                    verified=True, correct=correct, total=total,
-                    code=code, task_summary=tsummary,
-                ))
+                self.memory.record_attempt(
+                    Attempt(
+                        task_num=tn,
+                        timestamp=datetime.now().isoformat(),
+                        strategy=strategy_name,
+                        model=model,
+                        verified=True,
+                        correct=correct,
+                        total=total,
+                        code=code,
+                        task_summary=tsummary,
+                    )
+                )
                 unsolved.remove(tn)
-                _write_training_pair(self.task_dir, tn, task, code,
-                                     strategy_name, model)
+                _write_training_pair(
+                    self.task_dir, tn, task, code, strategy_name, model
+                )
                 print(f"-> SOLVED {correct}/{total}", flush=True)
             else:
                 attempts_this_cycle += 1
@@ -874,7 +941,8 @@ class ARCScientist:
                 reflection = {}
                 if code:
                     reflection = self._structured_reflection(
-                        task, tn, code, correct, total)
+                        task, tn, code, correct, total
+                    )
 
                 error_type = reflection.get("error_type", "")
                 diagnosis = reflection.get("diagnosis", "")
@@ -888,37 +956,54 @@ class ARCScientist:
                 if correct == 0:
                     error_desc = "zero_correct"
 
-                self.memory.record_attempt(Attempt(
-                    task_num=tn, timestamp=datetime.now().isoformat(),
-                    strategy=strategy_name, model=model,
-                    verified=False, correct=correct, total=total,
-                    error=error_desc, error_type=error_type,
-                    code=code, insight=diagnosis, similar_to=similar_to,
-                    task_summary=tsummary,
-                ))
+                self.memory.record_attempt(
+                    Attempt(
+                        task_num=tn,
+                        timestamp=datetime.now().isoformat(),
+                        strategy=strategy_name,
+                        model=model,
+                        verified=False,
+                        correct=correct,
+                        total=total,
+                        error=error_desc,
+                        error_type=error_type,
+                        code=code,
+                        insight=diagnosis,
+                        similar_to=similar_to,
+                        task_summary=tsummary,
+                    )
+                )
 
                 if diagnosis:
-                    print(f"-> {correct}/{total} [{error_type}] {diagnosis[:60]}",
-                          flush=True)
+                    print(
+                        f"-> {correct}/{total} [{error_type}] {diagnosis[:60]}",
+                        flush=True,
+                    )
                 else:
                     print(f"-> {correct}/{total}", flush=True)
 
             # ── 6. ADAPT: periodic meta-pattern detection ──
             if (attempt_num + 1) % 10 == 0:
-                patterns = self.memory.detect_meta_patterns()
-                print(f"\n--- Progress: {solved_this_cycle} solved "
-                      f"in {attempts_this_cycle} attempts "
-                      f"({solved_this_cycle/max(attempts_this_cycle,1):.0%}) ---")
+                self.memory.detect_meta_patterns()
+                print(
+                    f"\n--- Progress: {solved_this_cycle} solved "
+                    f"in {attempts_this_cycle} attempts "
+                    f"({solved_this_cycle/max(attempts_this_cycle,1):.0%}) ---"
+                )
                 print(self.memory.get_strategy_report())
                 print()
 
         # Final report
         self.memory.detect_meta_patterns()
         print(f"\n{'='*60}")
-        print(f"Cycle complete: {solved_this_cycle} new solves "
-              f"in {attempts_this_cycle} attempts")
-        print(f"Cumulative: {self.memory.total_solves} total solves "
-              f"/ {self.memory.total_attempts} total attempts")
+        print(
+            f"Cycle complete: {solved_this_cycle} new solves "
+            f"in {attempts_this_cycle} attempts"
+        )
+        print(
+            f"Cumulative: {self.memory.total_solves} total solves "
+            f"/ {self.memory.total_attempts} total attempts"
+        )
         print(self.memory.get_strategy_report())
 
         return solved_this_cycle
@@ -926,6 +1011,7 @@ class ARCScientist:
 
 def main():
     import argparse
+
     ap = argparse.ArgumentParser(description="Erebus — Autonomous ARC Scientist")
     ap.add_argument("--task-dir", default=".", help="Directory with task JSON files")
     ap.add_argument("--memory", default="arc_scientist_memory.json")
@@ -946,16 +1032,18 @@ def main():
         print(f"EREBUS LEARNING CYCLE {cycle + 1}/{args.cycles}")
         print(f"{'='*60}\n")
 
-        solved = scientist.run_cycle(max_attempts=args.attempts, models=models)
+        scientist.run_cycle(max_attempts=args.attempts, models=models)
 
         if cycle < args.cycles - 1:
-            print(f"\nConsolidating before next cycle...")
+            print("\nConsolidating before next cycle...")
             time.sleep(5)
 
     scientist.memory.save()
     print(f"\nMemory saved to {args.memory}")
-    print(f"Total: {scientist.memory.total_solves} tasks solved "
-          f"across {scientist.memory.total_attempts} attempts")
+    print(
+        f"Total: {scientist.memory.total_solves} tasks solved "
+        f"across {scientist.memory.total_attempts} attempts"
+    )
 
 
 if __name__ == "__main__":

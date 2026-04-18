@@ -33,8 +33,10 @@ LLM_BASE_URL = os.environ.get("NRP_LLM_URL", "https://ellm.nrp-nautilus.io/v1")
 
 def _llm():
     from openai import OpenAI
-    return OpenAI(api_key=os.environ.get("NRP_LLM_TOKEN", ""),
-                  base_url=LLM_BASE_URL, timeout=180)
+
+    return OpenAI(
+        api_key=os.environ.get("NRP_LLM_TOKEN", ""), base_url=LLM_BASE_URL, timeout=180
+    )
 
 
 def _extract_python(content: str, must_contain: tuple[str, ...]) -> str | None:
@@ -50,6 +52,7 @@ def _extract_python(content: str, must_contain: tuple[str, ...]) -> str | None:
 
 
 # ─── solve_task ──────────────────────────────────────────────────────
+
 
 def handle_solve_task(task: dict) -> dict:
     """Ask an LLM to write a Python `transform` for an ARC task, verify it."""
@@ -73,12 +76,12 @@ def handle_solve_task(task: dict) -> dict:
         f"{examples_text}"
     )
     r = _llm().chat.completions.create(
-        model=model, max_tokens=2000,
+        model=model,
+        max_tokens=2000,
         messages=[{"role": "user", "content": prompt}],
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
-    code = _extract_python(r.choices[0].message.content or "",
-                           ("def transform",))
+    code = _extract_python(r.choices[0].message.content or "", ("def transform",))
     if not code:
         return {"status": "no_code", "task_num": task_num, "model": model}
 
@@ -100,29 +103,40 @@ def handle_solve_task(task: dict) -> dict:
                     pass
         return {
             "status": "solved" if correct == total and total > 0 else "partial",
-            "task_num": task_num, "correct": correct, "total": total,
-            "code": code, "model": model,
+            "task_num": task_num,
+            "correct": correct,
+            "total": total,
+            "code": code,
+            "model": model,
         }
     except Exception as e:
-        return {"status": "exec_error", "error": str(e)[:200],
-                "task_num": task_num, "model": model}
+        return {
+            "status": "exec_error",
+            "error": str(e)[:200],
+            "task_num": task_num,
+            "model": model,
+        }
 
 
 # ─── compile_attempt ─────────────────────────────────────────────────
+
 
 def handle_compile_attempt(task: dict) -> dict:
     """Author + verify an ONNX compiler module for a failure cluster."""
     # Lazy import — erebus_compiler_tools is in /work/src (bundle), not in
     # the installed package.
     import sys
+
     sys.path.insert(0, "/work/src")
     from erebus_compiler_tools import (
-        get_few_shot_modules, write_compiler_module,
+        get_few_shot_modules,
+        write_compiler_module,
     )
 
     cluster = task["cluster"]
-    few_shot = get_few_shot_modules(compiler_dir=COMPILER_DIR,
-                                    max_modules=2, max_chars_each=2500)
+    few_shot = get_few_shot_modules(
+        compiler_dir=COMPILER_DIR, max_modules=2, max_chars_each=2500
+    )
     sample_codes = "\n\n".join(
         f"# task{s['task']:03d}\n{s.get('code','')[:500]}"
         for s in cluster.get("sample_codes", [])[:3]
@@ -136,21 +150,31 @@ def handle_compile_attempt(task: dict) -> dict:
         f"Must define detect_X and compile_X (or make_model). Opset 10 only."
     )
     r = _llm().chat.completions.create(
-        model="qwen3", max_tokens=8000,
+        model="qwen3",
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
-    code = _extract_python(r.choices[0].message.content or "",
-                           ("def compile_", "def detect_", "def make_model"))
+    code = _extract_python(
+        r.choices[0].message.content or "",
+        ("def compile_", "def detect_", "def make_model"),
+    )
     if not code:
         return {"promoted": False, "reason": "no_code"}
 
     test_tasks = cluster.get("tasks", [])[:5]
-    tag = (cluster.get("pattern", "cluster").replace(" ", "_").lower()[:30]
-           + "_" + datetime.now().strftime("%Y%m%d_%H%M"))
+    tag = (
+        cluster.get("pattern", "cluster").replace(" ", "_").lower()[:30]
+        + "_"
+        + datetime.now().strftime("%Y%m%d_%H%M")
+    )
     result = write_compiler_module(
-        code, test_tasks, tag, min_solved_ratio=0.4,
-        compiler_dir=COMPILER_DIR, task_dir=TASK_DIR,
+        code,
+        test_tasks,
+        tag,
+        min_solved_ratio=0.4,
+        compiler_dir=COMPILER_DIR,
+        task_dir=TASK_DIR,
     )
     if result.get("promoted"):
         result["module_source"] = code
@@ -158,6 +182,7 @@ def handle_compile_attempt(task: dict) -> dict:
 
 
 # ─── classify_error ──────────────────────────────────────────────────
+
 
 def handle_classify_error(task: dict) -> dict:
     """Structured reflection for one failed attempt."""
@@ -173,14 +198,16 @@ def handle_classify_error(task: dict) -> dict:
         f'"diagnosis": "...", "similar_to": "..."}}'
     )
     r = _llm().chat.completions.create(
-        model="qwen3", max_tokens=300,
+        model="qwen3",
+        max_tokens=300,
         messages=[{"role": "user", "content": prompt}],
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
     content = r.choices[0].message.content or ""
     try:
-        s = content.find("{"); e = content.rfind("}")
-        return {"classification": json.loads(content[s:e+1])}
+        s = content.find("{")
+        e = content.rfind("}")
+        return {"classification": json.loads(content[s : e + 1])}
     except Exception:
         return {"classification": {"raw": content[:500]}}
 

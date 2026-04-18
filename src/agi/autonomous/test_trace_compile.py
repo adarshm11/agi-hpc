@@ -1,4 +1,5 @@
 """Test trace compiler on all Erebus Python solves."""
+
 import sys
 import json
 import numpy as np
@@ -6,7 +7,10 @@ from pathlib import Path
 
 sys.path.insert(0, "src")
 from compiler.trace_compile import (
-    trace_transform, try_constant_output, try_pixel_remap, try_spatial_remap,
+    trace_transform,
+    try_constant_output,
+    try_pixel_remap,
+    try_spatial_remap,
 )
 from grammar.primitives import score_model, verify_model
 import onnx
@@ -26,7 +30,12 @@ for tn_str, tk in mem.get("tasks", {}).items():
 
 # Existing ONNX
 existing = set()
-for d in ["solutions_final", "solutions_merged_latest", "solutions_safe", "solutions_conv_v2"]:
+for d in [
+    "solutions_final",
+    "solutions_merged_latest",
+    "solutions_safe",
+    "solutions_conv_v2",
+]:
     p = task_dir / d
     if p.exists():
         existing.update(int(f.stem[4:]) for f in p.glob("task*.onnx"))

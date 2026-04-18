@@ -14,6 +14,7 @@ explicitly call functions via OpenAI-compatible tool calling:
 The LLM decides which tools to call and in what order. We execute
 them and feed results back. This is the agentic loop.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,6 @@ import traceback
 from pathlib import Path
 
 import numpy as np
-
 
 # ═══════════════════════════════════════════════════════════════
 # Tool definitions (OpenAI function calling format)
@@ -228,8 +228,10 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string",
-                             "description": "Module stem, e.g. 'flip' or 'crop_bbox'"},
+                    "name": {
+                        "type": "string",
+                        "description": "Module stem, e.g. 'flip' or 'crop_bbox'",
+                    },
                 },
                 "required": ["name"],
             },
@@ -247,8 +249,10 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "day": {"type": "string",
-                            "description": "Filter to one day (YYYY-MM-DD). Default: all days."},
+                    "day": {
+                        "type": "string",
+                        "description": "Filter to one day (YYYY-MM-DD). Default: all days.",
+                    },
                 },
             },
         },
@@ -266,12 +270,19 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string",
-                             "description": "Complete Python source for the module. Must define compile_X() or make_model() that returns an onnx.ModelProto."},
-                    "test_task_nums": {"type": "array", "items": {"type": "integer"},
-                                       "description": "Task numbers to test the module against. Should be tasks you think the module handles."},
-                    "tag": {"type": "string",
-                            "description": "Short tag for the module file, e.g. 'enclosure_fill' → saved as dream_enclosure_fill.py"},
+                    "code": {
+                        "type": "string",
+                        "description": "Complete Python source for the module. Must define compile_X() or make_model() that returns an onnx.ModelProto.",
+                    },
+                    "test_task_nums": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Task numbers to test the module against. Should be tasks you think the module handles.",
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Short tag for the module file, e.g. 'enclosure_fill' → saved as dream_enclosure_fill.py",
+                    },
                 },
                 "required": ["code", "test_task_nums", "tag"],
             },
@@ -306,6 +317,7 @@ TOOL_DEFINITIONS = [
 # ═══════════════════════════════════════════════════════════════
 # Tool executor
 # ═══════════════════════════════════════════════════════════════
+
 
 class ToolExecutor:
     """Executes tool calls from the LLM against live data."""
@@ -352,13 +364,22 @@ class ToolExecutor:
                             correct += 1
                         elif first_failure is None:
                             first_failure = {
-                                "split": split, "index": i,
+                                "split": split,
+                                "index": i,
                                 "expected_shape": f"{len(ex['output'])}x{len(ex['output'][0])}",
-                                "got_shape": f"{len(result)}x{len(result[0])}" if result and result[0] else "empty",
+                                "got_shape": (
+                                    f"{len(result)}x{len(result[0])}"
+                                    if result and result[0]
+                                    else "empty"
+                                ),
                             }
                     except Exception as e:
                         if first_failure is None:
-                            first_failure = {"split": split, "index": i, "error": str(e)[:100]}
+                            first_failure = {
+                                "split": split,
+                                "index": i,
+                                "error": str(e)[:100],
+                            }
 
             verified = correct == total and total > 0
             result = {
@@ -386,13 +407,15 @@ class ToolExecutor:
         for i, ex in enumerate(task.get("train", [])[:max_examples]):
             inp = np.array(ex["input"])
             out = np.array(ex["output"])
-            examples.append({
-                "index": i,
-                "input": ex["input"],
-                "input_shape": f"{inp.shape[0]}x{inp.shape[1]}",
-                "output": ex["output"],
-                "output_shape": f"{out.shape[0]}x{out.shape[1]}",
-            })
+            examples.append(
+                {
+                    "index": i,
+                    "input": ex["input"],
+                    "input_shape": f"{inp.shape[0]}x{inp.shape[1]}",
+                    "output": ex["output"],
+                    "output_shape": f"{out.shape[0]}x{out.shape[1]}",
+                }
+            )
 
         fp = self.fingerprints.get(task_num)
         summary = {}
@@ -425,17 +448,19 @@ class ToolExecutor:
         # Summarize attempts (don't dump full code)
         attempt_summaries = []
         for a in tk.attempts[-5:]:  # last 5
-            attempt_summaries.append({
-                "strategy": a.get("strategy", ""),
-                "model": a.get("model", ""),
-                "verified": a.get("verified", False),
-                "correct": a.get("correct", 0),
-                "total": a.get("total", 0),
-                "error_type": a.get("error_type", ""),
-                "insight": a.get("insight", ""),
-                "similar_to": a.get("similar_to", ""),
-                "task_summary": a.get("task_summary", ""),
-            })
+            attempt_summaries.append(
+                {
+                    "strategy": a.get("strategy", ""),
+                    "model": a.get("model", ""),
+                    "verified": a.get("verified", False),
+                    "correct": a.get("correct", 0),
+                    "total": a.get("total", 0),
+                    "error_type": a.get("error_type", ""),
+                    "insight": a.get("insight", ""),
+                    "similar_to": a.get("similar_to", ""),
+                    "task_summary": a.get("task_summary", ""),
+                }
+            )
 
         return {
             "task_num": task_num,
@@ -461,17 +486,26 @@ class ToolExecutor:
             if tn == task_num:
                 continue
             d = task_distance(target, fp)
-            solved = (self.memory and tn in self.memory.tasks
-                      and self.memory.tasks[tn].solved) if self.memory else False
-            scored.append({
-                "task_num": tn,
-                "distance": round(d, 2),
-                "solved": solved,
-                "shape_change": fp.shape_change,
-                "same_colors": fp.same_colors,
-                "inferred_class": fp.inferred_class or "",
-                "summary": fp.task_summary,
-            })
+            solved = (
+                (
+                    self.memory
+                    and tn in self.memory.tasks
+                    and self.memory.tasks[tn].solved
+                )
+                if self.memory
+                else False
+            )
+            scored.append(
+                {
+                    "task_num": tn,
+                    "distance": round(d, 2),
+                    "solved": solved,
+                    "shape_change": fp.shape_change,
+                    "same_colors": fp.same_colors,
+                    "inferred_class": fp.inferred_class or "",
+                    "summary": fp.task_summary,
+                }
+            )
 
         scored.sort(key=lambda x: x["distance"])
         return {
@@ -486,8 +520,10 @@ class ToolExecutor:
             from agi.autonomous.primitives import PRIMITIVE_CATALOG
         except ImportError:
             import importlib.util
+
             spec = importlib.util.spec_from_file_location(
-                "primitives", Path(__file__).parent / "primitives.py")
+                "primitives", Path(__file__).parent / "primitives.py"
+            )
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             PRIMITIVE_CATALOG = mod.PRIMITIVE_CATALOG
@@ -501,13 +537,19 @@ class ToolExecutor:
 
         try:
             from agi.autonomous.primitives import (
-                detect_symmetry, color_histogram, color_map_between,
-                connected_components, find_repeating_pattern, crop_to_content,
+                detect_symmetry,
+                color_histogram,
+                color_map_between,
+                connected_components,
+                find_repeating_pattern,
+                crop_to_content,
             )
         except ImportError:
             import importlib.util
+
             spec = importlib.util.spec_from_file_location(
-                "primitives", Path(__file__).parent / "primitives.py")
+                "primitives", Path(__file__).parent / "primitives.py"
+            )
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             detect_symmetry = mod.detect_symmetry
@@ -515,7 +557,6 @@ class ToolExecutor:
             color_map_between = mod.color_map_between
             connected_components = mod.connected_components
             find_repeating_pattern = mod.find_repeating_pattern
-            crop_to_content = mod.crop_to_content
 
         results = {"task_num": task_num, "examples": []}
 
@@ -549,6 +590,7 @@ class ToolExecutor:
             pass
 
         from datetime import datetime
+
         entry = {
             "task": task_num,
             "question": question,
@@ -562,23 +604,28 @@ class ToolExecutor:
 
     def _tool_query_available_gpus(self) -> dict:
         """Query NRP cluster for available GPU types — live kubectl data."""
-        import subprocess
         kubeconfig = os.path.expanduser("~/.kube/config") if os.name != "nt" else ""
         try:
             cmd = ["kubectl"]
             if kubeconfig:
                 cmd += ["--kubeconfig", kubeconfig]
-            cmd += ["get", "nodes", "-l", "nvidia.com/gpu.product",
-                    "-o", "custom-columns=NAME:.metadata.name,"
-                    "GPU:.metadata.labels.nvidia\\.com/gpu\\.product",
-                    "--no-headers"]
+            cmd += [
+                "get",
+                "nodes",
+                "-l",
+                "nvidia.com/gpu.product",
+                "-o",
+                "custom-columns=NAME:.metadata.name,"
+                "GPU:.metadata.labels.nvidia\\.com/gpu\\.product",
+                "--no-headers",
+            ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if result.returncode != 0:
                 return {"error": f"kubectl failed: {result.stderr[:200]}"}
 
             # Parse node GPU types
             gpu_counts = {}  # model -> count of nodes
-            gpu_nodes = {}   # model -> list of node names
+            gpu_nodes = {}  # model -> list of node names
             for line in result.stdout.strip().split("\n"):
                 if not line.strip():
                     continue
@@ -591,16 +638,22 @@ class ToolExecutor:
 
             # Known VRAM sizes
             vram = {
-                "NVIDIA-A100-80GB-PCIe": 80, "NVIDIA-A100-SXM4-80GB": 80,
-                "NVIDIA-A100-PCIE-40GB": 40, "NVIDIA-A100-SXM4-40GB": 40,
-                "NVIDIA-H100-80GB-HBM3": 80, "NVIDIA-H100-SXM5-80GB": 80,
+                "NVIDIA-A100-80GB-PCIe": 80,
+                "NVIDIA-A100-SXM4-80GB": 80,
+                "NVIDIA-A100-PCIE-40GB": 40,
+                "NVIDIA-A100-SXM4-40GB": 40,
+                "NVIDIA-H100-80GB-HBM3": 80,
+                "NVIDIA-H100-SXM5-80GB": 80,
                 "NVIDIA-H200-SXM-141GB": 141,
-                "NVIDIA-L40": 48, "NVIDIA-L40S": 48,
-                "NVIDIA-L4": 24, "NVIDIA-A10": 24,
+                "NVIDIA-L40": 48,
+                "NVIDIA-L40S": 48,
+                "NVIDIA-L4": 24,
+                "NVIDIA-A10": 24,
                 "NVIDIA-GeForce-RTX-3090": 24,
                 "NVIDIA-GeForce-RTX-2080-Ti": 11,
                 "NVIDIA-GeForce-GTX-1080-Ti": 11,
-                "Tesla-T4": 16, "Tesla-V100-SXM2-32GB": 32,
+                "Tesla-T4": 16,
+                "Tesla-V100-SXM2-32GB": 32,
             }
 
             # Build summary
@@ -614,13 +667,15 @@ class ToolExecutor:
                     total_datacenter += count
                 else:
                     total_consumer += count
-                models.append({
-                    "model": gpu,
-                    "nodes": count,
-                    "vram_gb": v,
-                    "datacenter": is_datacenter,
-                    "example_nodes": gpu_nodes.get(gpu, [])[:3],
-                })
+                models.append(
+                    {
+                        "model": gpu,
+                        "nodes": count,
+                        "vram_gb": v,
+                        "datacenter": is_datacenter,
+                        "example_nodes": gpu_nodes.get(gpu, [])[:3],
+                    }
+                )
 
             recommendation = ""
             if total_datacenter >= 4:
@@ -649,9 +704,11 @@ class ToolExecutor:
     def _tool_set_nrp_mode(self, mode: str) -> dict:
         """Set NRP compute mode and return available GPU info."""
         import requests as _req
+
         try:
-            r = _req.post("http://localhost:8085/api/nrp/mode",
-                          json={"mode": mode}, timeout=5)
+            r = _req.post(
+                "http://localhost:8085/api/nrp/mode", json={"mode": mode}, timeout=5
+            )
             result = r.json()
         except Exception as e:
             result = {"error": str(e)[:100]}
@@ -664,8 +721,9 @@ class ToolExecutor:
             for pod in burst.get("pods", []):
                 if pod.get("phase") != "Running":
                     continue
-                gm = (pod.get("resources", {}).get("gpu_model") or
-                      pod.get("gpu_live", {}).get("vram_total_mib", ""))
+                gm = pod.get("resources", {}).get("gpu_model") or pod.get(
+                    "gpu_live", {}
+                ).get("vram_total_mib", "")
                 if gm:
                     gpu_summary[str(gm)] = gpu_summary.get(str(gm), 0) + 1
         except Exception:
@@ -682,21 +740,26 @@ class ToolExecutor:
     def _tool_list_compiler_modules(self) -> dict:
         """List all existing compiler modules."""
         from agi.autonomous.erebus_compiler_tools import list_compiler_modules
+
         infos = list_compiler_modules()
         return {
             "n_modules": len(infos),
-            "modules": [{
-                "name": m.name,
-                "docstring": m.docstring,
-                "detect_fns": m.detect_fns,
-                "compile_fns": m.compile_fns,
-                "lines": m.line_count,
-            } for m in infos],
+            "modules": [
+                {
+                    "name": m.name,
+                    "docstring": m.docstring,
+                    "detect_fns": m.detect_fns,
+                    "compile_fns": m.compile_fns,
+                    "lines": m.line_count,
+                }
+                for m in infos
+            ],
         }
 
     def _tool_read_compiler_module(self, name: str) -> dict:
         """Read the full source of an existing compiler module."""
         from agi.autonomous.erebus_compiler_tools import read_compiler_module
+
         src = read_compiler_module(name)
         if src is None:
             return {"error": f"module '{name}' not found"}
@@ -705,14 +768,16 @@ class ToolExecutor:
     def _tool_list_failure_clusters(self, day: str = "") -> dict:
         """Cluster unsolved tasks by error_type + similar_to pattern."""
         from agi.autonomous.erebus_compiler_tools import cluster_failures
+
         clusters = cluster_failures(day=day or None)
         return {"n_clusters": len(clusters), "clusters": clusters[:10]}
 
-    def _tool_write_compiler_module(self, code: str,
-                                    test_task_nums: list[int],
-                                    tag: str) -> dict:
+    def _tool_write_compiler_module(
+        self, code: str, test_task_nums: list[int], tag: str
+    ) -> dict:
         """Syntax + import + runtime test the candidate; save on success."""
         from agi.autonomous.erebus_compiler_tools import write_compiler_module
+
         return write_compiler_module(code, test_task_nums, tag)
 
     def _load_task(self, task_num: int) -> dict | None:
@@ -727,9 +792,15 @@ class ToolExecutor:
 # Agentic loop — multi-turn tool calling
 # ═══════════════════════════════════════════════════════════════
 
-def run_agentic_turn(client, model: str, messages: list[dict],
-                     executor: ToolExecutor, max_tool_rounds: int = 5,
-                     extra_body: dict = None) -> str:
+
+def run_agentic_turn(
+    client,
+    model: str,
+    messages: list[dict],
+    executor: ToolExecutor,
+    max_tool_rounds: int = 5,
+    extra_body: dict = None,
+) -> str:
     """Run a multi-turn agentic conversation with tool calling.
 
     The LLM can call tools, get results, reason, call more tools,
@@ -760,7 +831,11 @@ def run_agentic_turn(client, model: str, messages: list[dict],
                 "type": "function",
                 "function": {
                     "name": tc.function.name,
-                    "arguments": tc.function.arguments if isinstance(tc.function.arguments, str) else json.dumps(tc.function.arguments),
+                    "arguments": (
+                        tc.function.arguments
+                        if isinstance(tc.function.arguments, str)
+                        else json.dumps(tc.function.arguments)
+                    ),
                 },
             }
             tool_calls_list.append(tc_dict)
@@ -773,19 +848,25 @@ def run_agentic_turn(client, model: str, messages: list[dict],
             except json.JSONDecodeError:
                 args = {}
             result = executor.execute(tc.function.name, args)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": result,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                }
+            )
 
     # Exhausted tool rounds — ask for final answer
-    messages.append({
-        "role": "user",
-        "content": "Please provide your final answer based on the tool results.",
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": "Please provide your final answer based on the tool results.",
+        }
+    )
     response = client.chat.completions.create(
-        model=model, messages=messages, max_tokens=2000,
+        model=model,
+        messages=messages,
+        max_tokens=2000,
         **({"extra_body": extra_body} if extra_body else {}),
     )
     return response.choices[0].message.content or ""

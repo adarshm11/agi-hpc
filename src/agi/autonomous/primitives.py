@@ -16,14 +16,15 @@ Categories:
   - Color: histogram, dominant color, color mapping
   - Geometry: crop, pad, tile, scale, rotate, flip, transpose
 """
+
 from __future__ import annotations
 from collections import deque
 import numpy as np
 
-
 # ═══════════════════════════════════════════════════════════════
 # Object detection
 # ═══════════════════════════════════════════════════════════════
+
 
 def connected_components(grid, background=0, diagonal=False):
     """Find connected components of non-background cells.
@@ -34,9 +35,9 @@ def connected_components(grid, background=0, diagonal=False):
     h, w = g.shape
     visited = np.zeros_like(g, dtype=bool)
     components = []
-    dirs = [(-1,0),(1,0),(0,-1),(0,1)]
+    dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     if diagonal:
-        dirs += [(-1,-1),(-1,1),(1,-1),(1,1)]
+        dirs += [(-1, -1), (-1, 1), (1, -1), (1, 1)]
 
     for r in range(h):
         for c in range(w):
@@ -89,6 +90,7 @@ def objects_with_color(grid, color):
 # Spatial operations
 # ═══════════════════════════════════════════════════════════════
 
+
 def flood_fill(grid, start_r, start_c, new_color, boundary=None):
     """Flood fill from (start_r, start_c) with new_color.
 
@@ -104,7 +106,7 @@ def flood_fill(grid, start_r, start_c, new_color, boundary=None):
     g[start_r, start_c] = new_color
     while queue:
         r, c = queue.popleft()
-        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
             if 0 <= nr < h and 0 <= nc < w:
                 if boundary is not None and g[nr, nc] == boundary:
@@ -134,11 +136,14 @@ def shortest_path(grid, start, end, passable=None):
         r, c, path = queue.popleft()
         if (r, c) == (er, ec):
             return path
-        for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
-            if (0 <= nr < h and 0 <= nc < w and
-                (nr, nc) not in visited and
-                (int(g[nr, nc]) in passable or (nr, nc) == (er, ec))):
+            if (
+                0 <= nr < h
+                and 0 <= nc < w
+                and (nr, nc) not in visited
+                and (int(g[nr, nc]) in passable or (nr, nc) == (er, ec))
+            ):
                 visited.add((nr, nc))
                 queue.append((nr, nc, path + [(nr, nc)]))
     return []
@@ -160,20 +165,21 @@ def convex_hull_mask(cells, h, w):
         if len(row_points) > 0:
             c_min = row_points[:, 1].min()
             c_max = row_points[:, 1].max()
-            mask[r, c_min:c_max+1] = 1
+            mask[r, c_min : c_max + 1] = 1
     # Vertical fill: for each col, fill between min/max row
     for c in range(w):
         col_points = points[points[:, 1] == c]
         if len(col_points) > 0:
             r_min = col_points[:, 0].min()
             r_max = col_points[:, 0].max()
-            mask[r_min:r_max+1, c] = 1
+            mask[r_min : r_max + 1, c] = 1
     return mask.tolist()
 
 
 # ═══════════════════════════════════════════════════════════════
 # Symmetry detection
 # ═══════════════════════════════════════════════════════════════
+
 
 def detect_symmetry(grid):
     """Detect symmetry type in a grid.
@@ -214,7 +220,7 @@ def find_repeating_pattern(grid):
             match = True
             for r in range(0, h, th):
                 for c in range(0, w, tw):
-                    if not np.array_equal(g[r:r+th, c:c+tw], tile):
+                    if not np.array_equal(g[r : r + th, c : c + tw], tile):
                         match = False
                         break
                 if not match:
@@ -257,6 +263,7 @@ def find_translation(grid1, grid2):
 # ═══════════════════════════════════════════════════════════════
 # Color operations
 # ═══════════════════════════════════════════════════════════════
+
 
 def color_histogram(grid):
     """Count occurrences of each color. Returns {color: count}."""
@@ -306,6 +313,7 @@ def unique_colors(grid, exclude_background=True):
 # Geometry operations
 # ═══════════════════════════════════════════════════════════════
 
+
 def crop_to_content(grid, background=0):
     """Crop grid to bounding box of non-background content."""
     g = np.array(grid)
@@ -315,21 +323,19 @@ def crop_to_content(grid, background=0):
         return [[]]
     r0, r1 = np.where(rows)[0][[0, -1]]
     c0, c1 = np.where(cols)[0][[0, -1]]
-    return g[r0:r1+1, c0:c1+1].tolist()
+    return g[r0 : r1 + 1, c0 : c1 + 1].tolist()
 
 
 def pad_grid(grid, top=0, bottom=0, left=0, right=0, fill=0):
     """Pad grid with fill color."""
     g = np.array(grid)
-    return np.pad(g, ((top, bottom), (left, right)),
-                  constant_values=fill).tolist()
+    return np.pad(g, ((top, bottom), (left, right)), constant_values=fill).tolist()
 
 
 def scale_grid(grid, factor_h, factor_w):
     """Scale grid by repeating each pixel."""
     g = np.array(grid)
-    return np.repeat(np.repeat(g, factor_h, axis=0),
-                     factor_w, axis=1).tolist()
+    return np.repeat(np.repeat(g, factor_h, axis=0), factor_w, axis=1).tolist()
 
 
 def overlay(base, top, offset_r=0, offset_c=0, transparent=0):

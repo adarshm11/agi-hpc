@@ -13,6 +13,7 @@ Usage:
   python dream_qlora_train.py --day 2026-04-18      # only one day's JSONL
   python dream_qlora_train.py --base Qwen/Qwen2.5-14B-Instruct --rank 8 --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,8 +24,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 log = logging.getLogger("qlora")
 
 DEFAULT_BASE = "Qwen/Qwen2.5-32B-Instruct"
@@ -61,7 +63,7 @@ def format_example(pair: dict) -> dict:
     """
     # Render the training examples compactly
     grids = []
-    for ex in pair["task_examples"][:3]:   # cap to avoid runaway length
+    for ex in pair["task_examples"][:3]:  # cap to avoid runaway length
         inp = ex["input"]
         out = ex["output"]
         grids.append(f"Input:\n{inp}\nOutput:\n{out}")
@@ -74,10 +76,12 @@ def format_example(pair: dict) -> dict:
         f"{examples_str}"
     )
     assistant = f"```python\n{pair['python_transform'].strip()}\n```"
-    return {"messages": [
-        {"role": "user", "content": user},
-        {"role": "assistant", "content": assistant},
-    ]}
+    return {
+        "messages": [
+            {"role": "user", "content": user},
+            {"role": "assistant", "content": assistant},
+        ]
+    }
 
 
 def build_dataset(pairs: list[dict], tokenizer, max_len: int = 1024):
@@ -97,15 +101,19 @@ def build_dataset(pairs: list[dict], tokenizer, max_len: int = 1024):
             msgs = self.examples[idx]["messages"]
             # Render the full prompt
             full = tokenizer.apply_chat_template(
-                msgs, tokenize=False, add_generation_prompt=False)
+                msgs, tokenize=False, add_generation_prompt=False
+            )
             # Render just the user portion to know where to start masking
             user_only = tokenizer.apply_chat_template(
-                msgs[:-1], tokenize=False, add_generation_prompt=True)
+                msgs[:-1], tokenize=False, add_generation_prompt=True
+            )
 
-            full_ids = tokenizer(full, truncation=True, max_length=max_len,
-                                 return_tensors=None)["input_ids"]
-            user_ids = tokenizer(user_only, truncation=True, max_length=max_len,
-                                 return_tensors=None)["input_ids"]
+            full_ids = tokenizer(
+                full, truncation=True, max_length=max_len, return_tensors=None
+            )["input_ids"]
+            user_ids = tokenizer(
+                user_only, truncation=True, max_length=max_len, return_tensors=None
+            )["input_ids"]
 
             labels = list(full_ids)
             # Mask the user portion: only learn to generate the assistant response
@@ -123,16 +131,20 @@ def build_dataset(pairs: list[dict], tokenizer, max_len: int = 1024):
 
 def collate(batch, pad_id: int):
     import torch
+
     max_len = max(x["input_ids"].size(0) for x in batch)
     input_ids, labels, attn = [], [], []
     for x in batch:
         pad = max_len - x["input_ids"].size(0)
-        input_ids.append(torch.cat([x["input_ids"],
-                                    torch.full((pad,), pad_id, dtype=torch.long)]))
-        labels.append(torch.cat([x["labels"],
-                                 torch.full((pad,), -100, dtype=torch.long)]))
-        attn.append(torch.cat([x["attention_mask"],
-                               torch.zeros(pad, dtype=torch.long)]))
+        input_ids.append(
+            torch.cat([x["input_ids"], torch.full((pad,), pad_id, dtype=torch.long)])
+        )
+        labels.append(
+            torch.cat([x["labels"], torch.full((pad,), -100, dtype=torch.long)])
+        )
+        attn.append(
+            torch.cat([x["attention_mask"], torch.zeros(pad, dtype=torch.long)])
+        )
     return {
         "input_ids": torch.stack(input_ids),
         "labels": torch.stack(labels),
@@ -140,11 +152,23 @@ def collate(batch, pad_id: int):
     }
 
 
-def train(base: str, pairs: list[dict], rank: int, epochs: int,
-          out_path: Path, dry_run: bool = False, quant: str = "nf4"):
+def train(
+    base: str,
+    pairs: list[dict],
+    rank: int,
+    epochs: int,
+    out_path: Path,
+    dry_run: bool = False,
+    quant: str = "nf4",
+):
     import torch
-    from transformers import (AutoTokenizer, AutoModelForCausalLM,
-                              BitsAndBytesConfig, TrainingArguments, Trainer)
+    from transformers import (
+        AutoTokenizer,
+        AutoModelForCausalLM,
+        BitsAndBytesConfig,
+        TrainingArguments,
+        Trainer,
+    )
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
     log.info(f"Loading tokenizer: {base}")
@@ -156,16 +180,20 @@ def train(base: str, pairs: list[dict], rank: int, epochs: int,
     ds = build_dataset(pairs, tok)
     if dry_run:
         sample = ds[0]
-        log.info(f"Sample input_ids shape: {sample['input_ids'].shape}, "
-                 f"first 20: {sample['input_ids'][:20].tolist()}")
+        log.info(
+            f"Sample input_ids shape: {sample['input_ids'].shape}, "
+            f"first 20: {sample['input_ids'][:20].tolist()}"
+        )
         log.info("Dry run — not loading model.")
         return
 
     if quant == "none":
         log.info(f"Loading base model: {base} (bf16, no quantization)")
         model = AutoModelForCausalLM.from_pretrained(
-            base, device_map="auto",
-            trust_remote_code=True, torch_dtype=torch.bfloat16,
+            base,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=torch.bfloat16,
         )
     else:
         log.info(f"Loading base model: {base} (4-bit {quant})")
@@ -176,16 +204,29 @@ def train(base: str, pairs: list[dict], rank: int, epochs: int,
             bnb_4bit_use_double_quant=True,
         )
         model = AutoModelForCausalLM.from_pretrained(
-            base, quantization_config=bnb, device_map="auto",
-            trust_remote_code=True, torch_dtype=torch.bfloat16,
+            base,
+            quantization_config=bnb,
+            device_map="auto",
+            trust_remote_code=True,
+            torch_dtype=torch.bfloat16,
         )
         model = prepare_model_for_kbit_training(model)
 
     lora = LoraConfig(
-        r=rank, lora_alpha=rank * 2, lora_dropout=0.05, bias="none",
+        r=rank,
+        lora_alpha=rank * 2,
+        lora_dropout=0.05,
+        bias="none",
         task_type="CAUSAL_LM",
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+        ],
     )
     model = get_peft_model(model, lora)
     # Gradient checkpointing trades compute for VRAM — essential on 32GB
@@ -215,7 +256,9 @@ def train(base: str, pairs: list[dict], rank: int, epochs: int,
     )
 
     trainer = Trainer(
-        model=model, args=args, train_dataset=ds,
+        model=model,
+        args=args,
+        train_dataset=ds,
         data_collator=lambda b: collate(b, tok.pad_token_id),
     )
     log.info("Starting training")
@@ -225,13 +268,18 @@ def train(base: str, pairs: list[dict], rank: int, epochs: int,
     model.save_pretrained(str(out_path))
     tok.save_pretrained(str(out_path))
     # Write a metadata JSON so the loader can reconstruct things
-    (out_path / "erebus_meta.json").write_text(json.dumps({
-        "base_model": base,
-        "rank": rank,
-        "epochs": epochs,
-        "n_pairs": len(pairs),
-        "trained_at": datetime.now().isoformat(),
-    }, indent=2))
+    (out_path / "erebus_meta.json").write_text(
+        json.dumps(
+            {
+                "base_model": base,
+                "rank": rank,
+                "epochs": epochs,
+                "n_pairs": len(pairs),
+                "trained_at": datetime.now().isoformat(),
+            },
+            indent=2,
+        )
+    )
     log.info("Training complete.")
 
 
@@ -241,11 +289,19 @@ def main():
     ap.add_argument("--day", help="YYYY-MM-DD; default: all days")
     ap.add_argument("--rank", type=int, default=16)
     ap.add_argument("--epochs", type=int, default=3)
-    ap.add_argument("--min-pairs", type=int, default=5,
-                    help="Skip training if fewer pairs than this")
+    ap.add_argument(
+        "--min-pairs",
+        type=int,
+        default=5,
+        help="Skip training if fewer pairs than this",
+    )
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--quant", default="nf4", choices=["nf4", "fp4", "none"],
-                    help="Quantization: nf4/fp4 (4-bit, needs Ampere+) or none (bf16, works on Volta)")
+    ap.add_argument(
+        "--quant",
+        default="nf4",
+        choices=["nf4", "fp4", "none"],
+        help="Quantization: nf4/fp4 (4-bit, needs Ampere+) or none (bf16, works on Volta)",
+    )
     ap.add_argument("--out")
     args = ap.parse_args()
 
@@ -257,8 +313,15 @@ def main():
 
     tag = datetime.now().strftime("%Y%m%d")
     out_path = Path(args.out) if args.out else OUT_DIR / f"lora_{tag}"
-    train(args.base, pairs, args.rank, args.epochs, out_path,
-          dry_run=args.dry_run, quant=args.quant)
+    train(
+        args.base,
+        pairs,
+        args.rank,
+        args.epochs,
+        out_path,
+        dry_run=args.dry_run,
+        quant=args.quant,
+    )
 
 
 if __name__ == "__main__":

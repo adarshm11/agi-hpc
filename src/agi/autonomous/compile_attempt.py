@@ -13,6 +13,7 @@ Output:
 
 Pod resources: cpu=1, memory=2Gi (swarm-mode compliant). No GPU required.
 """
+
 from __future__ import annotations
 
 import json
@@ -51,16 +52,19 @@ def main():
     # erebus_compiler_tools.py (flat), so no package prefix.
     sys.path.insert(0, "/work/src")
     from erebus_compiler_tools import (
-        get_few_shot_modules, write_compiler_module,
+        get_few_shot_modules,
+        write_compiler_module,
     )
 
     from openai import OpenAI
-    client = OpenAI(api_key=token,
-                    base_url="https://ellm.nrp-nautilus.io/v1",
-                    timeout=180)
 
-    few_shot = get_few_shot_modules(compiler_dir=compiler_dir,
-                                    max_modules=2, max_chars_each=2500)
+    client = OpenAI(
+        api_key=token, base_url="https://ellm.nrp-nautilus.io/v1", timeout=180
+    )
+
+    few_shot = get_few_shot_modules(
+        compiler_dir=compiler_dir, max_modules=2, max_chars_each=2500
+    )
 
     sample_codes = "\n\n".join(
         f"# task{s['task']:03d}\n{s.get('code', '')[:500]}"
@@ -85,7 +89,8 @@ def main():
 
     log("synthesizing module via Qwen 397B")
     resp = client.chat.completions.create(
-        model="qwen3", max_tokens=8000,
+        model="qwen3",
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
@@ -98,26 +103,40 @@ def main():
             stripped = part.lstrip()
             if stripped.startswith("python"):
                 stripped = stripped[6:]
-            if any(m in stripped for m in ("def compile_", "def detect_",
-                                            "def make_model")):
+            if any(
+                m in stripped for m in ("def compile_", "def detect_", "def make_model")
+            ):
                 code = stripped.strip()
                 break
 
     if not code:
         log("no python block extracted")
-        print(json.dumps({"cluster": cluster.get("pattern"),
-                          "promoted": False, "reason": "no_code"}))
+        print(
+            json.dumps(
+                {
+                    "cluster": cluster.get("pattern"),
+                    "promoted": False,
+                    "reason": "no_code",
+                }
+            )
+        )
         sys.exit(0)
 
     test_task_nums = cluster.get("tasks", [])[:5]
-    tag = (cluster.get("pattern", "cluster").replace(" ", "_").lower()
-           + "_" + datetime.now().strftime("%Y%m%d_%H%M"))
+    tag = (
+        cluster.get("pattern", "cluster").replace(" ", "_").lower()
+        + "_"
+        + datetime.now().strftime("%Y%m%d_%H%M")
+    )
 
     log(f"testing against tasks {test_task_nums}")
     result = write_compiler_module(
-        code, test_task_nums, tag,
+        code,
+        test_task_nums,
+        tag,
         min_solved_ratio=0.4,
-        compiler_dir=compiler_dir, task_dir=task_dir,
+        compiler_dir=compiler_dir,
+        task_dir=task_dir,
     )
 
     if result.get("promoted"):
@@ -127,14 +146,18 @@ def main():
         print("<MODULE_END>", flush=True)
 
     # Final JSON line for result collection
-    print(json.dumps({
-        "cluster": cluster.get("pattern"),
-        "tag": tag,
-        "promoted": result.get("promoted", False),
-        "solved_ratio": result.get("solved_ratio"),
-        "reason": result.get("reason", ""),
-        "test_tasks": test_task_nums,
-    }))
+    print(
+        json.dumps(
+            {
+                "cluster": cluster.get("pattern"),
+                "tag": tag,
+                "promoted": result.get("promoted", False),
+                "solved_ratio": result.get("solved_ratio"),
+                "reason": result.get("reason", ""),
+                "test_tasks": test_task_nums,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":

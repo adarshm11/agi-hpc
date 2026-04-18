@@ -16,6 +16,7 @@ These helpers let Erebus:
 Designed to be callable from dream_synthesize_compiler AND from the
 ToolExecutor agentic harness in tools.py.
 """
+
 from __future__ import annotations
 
 import ast
@@ -55,24 +56,34 @@ def list_compiler_modules(compiler_dir: Path = COMPILER_DIR) -> list[ModuleInfo]
             src = fp.read_text()
             tree = ast.parse(src)
             doc = (ast.get_docstring(tree) or "").strip().split("\n")[0]
-            detects = [n.name for n in ast.walk(tree)
-                       if isinstance(n, ast.FunctionDef) and n.name.startswith("detect_")]
-            compiles = [n.name for n in ast.walk(tree)
-                        if isinstance(n, ast.FunctionDef) and
-                        (n.name.startswith("compile_") or n.name == "make_model")]
-            infos.append(ModuleInfo(
-                name=fp.stem, path=fp, docstring=doc,
-                detect_fns=detects, compile_fns=compiles,
-                line_count=src.count("\n"),
-            ))
+            detects = [
+                n.name
+                for n in ast.walk(tree)
+                if isinstance(n, ast.FunctionDef) and n.name.startswith("detect_")
+            ]
+            compiles = [
+                n.name
+                for n in ast.walk(tree)
+                if isinstance(n, ast.FunctionDef)
+                and (n.name.startswith("compile_") or n.name == "make_model")
+            ]
+            infos.append(
+                ModuleInfo(
+                    name=fp.stem,
+                    path=fp,
+                    docstring=doc,
+                    detect_fns=detects,
+                    compile_fns=compiles,
+                    line_count=src.count("\n"),
+                )
+            )
         except SyntaxError:
             # Skip broken modules (e.g. truncated dream outputs)
             continue
     return infos
 
 
-def read_compiler_module(name: str,
-                         compiler_dir: Path = COMPILER_DIR) -> str | None:
+def read_compiler_module(name: str, compiler_dir: Path = COMPILER_DIR) -> str | None:
     """Return the full source of a compiler module."""
     fp = compiler_dir / f"{name}.py"
     if not fp.exists():
@@ -80,16 +91,17 @@ def read_compiler_module(name: str,
     return fp.read_text()
 
 
-def get_few_shot_modules(compiler_dir: Path = COMPILER_DIR,
-                         max_modules: int = 3,
-                         max_chars_each: int = 3000) -> str:
+def get_few_shot_modules(
+    compiler_dir: Path = COMPILER_DIR, max_modules: int = 3, max_chars_each: int = 3000
+) -> str:
     """Render 2-3 real compiler modules as few-shot examples for the LLM.
 
     Picks the shortest well-formed modules so they fit in context —
     these are the clearest patterns to imitate.
     """
-    infos = [m for m in list_compiler_modules(compiler_dir)
-             if m.detect_fns or m.compile_fns]
+    infos = [
+        m for m in list_compiler_modules(compiler_dir) if m.detect_fns or m.compile_fns
+    ]
     # Prefer shorter, simpler modules as references
     infos.sort(key=lambda m: m.line_count)
     picks = infos[:max_modules]
@@ -100,8 +112,9 @@ def get_few_shot_modules(compiler_dir: Path = COMPILER_DIR,
     return "\n\n".join(blocks)
 
 
-def cluster_failures(memory_path: Path = MEMORY_PATH,
-                     day: str | None = None) -> list[dict]:
+def cluster_failures(
+    memory_path: Path = MEMORY_PATH, day: str | None = None
+) -> list[dict]:
     """Group the day's failures by (error_type, similar_to).
 
     Returns clusters sorted by size — the biggest cluster is where a new
@@ -117,19 +130,23 @@ def cluster_failures(memory_path: Path = MEMORY_PATH,
                 continue
             if day and not a.get("timestamp", "").startswith(day):
                 continue
-            key = (a.get("error_type", "unknown"),
-                   a.get("similar_to", "") or "unclassified")
+            key = (
+                a.get("error_type", "unknown"),
+                a.get("similar_to", "") or "unclassified",
+            )
             buckets[key].append(int(tn_str))
     clusters = []
     for (et, pattern), tasks in buckets.items():
         uniq = sorted(set(tasks))
-        clusters.append({
-            "error_type": et,
-            "pattern": pattern,
-            "n_failures": len(tasks),
-            "n_unique_tasks": len(uniq),
-            "tasks": uniq[:20],
-        })
+        clusters.append(
+            {
+                "error_type": et,
+                "pattern": pattern,
+                "n_failures": len(tasks),
+                "n_unique_tasks": len(uniq),
+                "tasks": uniq[:20],
+            }
+        )
     clusters.sort(key=lambda c: -c["n_unique_tasks"])
     return clusters
 
@@ -153,13 +170,17 @@ def import_check_module(code: str) -> tuple[bool, str, list[str]]:
         exec(code, ns)
     except Exception as e:
         return False, f"{type(e).__name__}: {e}", []
-    fns = [k for k, v in ns.items()
-           if callable(v) and (k.startswith(("detect_", "compile_", "make_")))]
+    fns = [
+        k
+        for k, v in ns.items()
+        if callable(v) and (k.startswith(("detect_", "compile_", "make_")))
+    ]
     return True, "", fns
 
 
-def test_compile_against_tasks(code: str, task_nums: list[int],
-                               task_dir: Path = TASK_DIR) -> dict:
+def test_compile_against_tasks(
+    code: str, task_nums: list[int], task_dir: Path = TASK_DIR
+) -> dict:
     """Build the ONNX model with the candidate module and run it on each task.
 
     Runs in an isolated subprocess so a crash doesn't kill the caller.
@@ -170,13 +191,17 @@ def test_compile_against_tasks(code: str, task_nums: list[int],
         f.write(script)
         tmp = f.name
     try:
-        r = subprocess.run([sys.executable, "-u", tmp],
-                           capture_output=True, text=True, timeout=120)
+        r = subprocess.run(
+            [sys.executable, "-u", tmp], capture_output=True, text=True, timeout=120
+        )
         # Last line is the JSON result
         lines = [ln for ln in r.stdout.strip().split("\n") if ln.startswith("{")]
         if not lines:
-            return {"ok": False, "error": r.stderr[-500:] or "no output",
-                    "per_task": {}}
+            return {
+                "ok": False,
+                "error": r.stderr[-500:] or "no output",
+                "per_task": {},
+            }
         return json.loads(lines[-1])
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "timeout", "per_task": {}}
@@ -184,8 +209,7 @@ def test_compile_against_tasks(code: str, task_nums: list[int],
         Path(tmp).unlink(missing_ok=True)
 
 
-def _make_test_harness(code: str, task_nums: list[int],
-                       task_dir: Path) -> str:
+def _make_test_harness(code: str, task_nums: list[int], task_dir: Path) -> str:
     """Build a self-contained test script that exec's the candidate, finds
     compile_X/make_model, builds the ONNX graph, runs it, compares."""
     return f"""
@@ -264,9 +288,9 @@ print(json.dumps({{"ok": True, "n_tasks": len(task_nums),
 """
 
 
-def promote_candidate(code: str, tag: str,
-                      compiler_dir: Path = COMPILER_DIR,
-                      overwrite: bool = False) -> Path:
+def promote_candidate(
+    code: str, tag: str, compiler_dir: Path = COMPILER_DIR, overwrite: bool = False
+) -> Path:
     """Write candidate source to compiler_dir/dream_TAG.py.
 
     Raises if file exists and overwrite=False.
@@ -279,10 +303,14 @@ def promote_candidate(code: str, tag: str,
     return path
 
 
-def write_compiler_module(code: str, test_task_nums: list[int],
-                          tag: str, min_solved_ratio: float = 0.5,
-                          compiler_dir: Path = COMPILER_DIR,
-                          task_dir: Path = TASK_DIR) -> dict:
+def write_compiler_module(
+    code: str,
+    test_task_nums: list[int],
+    tag: str,
+    min_solved_ratio: float = 0.5,
+    compiler_dir: Path = COMPILER_DIR,
+    task_dir: Path = TASK_DIR,
+) -> dict:
     """Full pipeline: syntax-check → import-check → runtime-test → promote.
 
     Only saves the module if at least min_solved_ratio of the test tasks
@@ -296,8 +324,9 @@ def write_compiler_module(code: str, test_task_nums: list[int],
         return result
 
     ok, err, fns = import_check_module(code)
-    result["stages"].append({"stage": "import", "ok": ok, "error": err,
-                             "functions": fns})
+    result["stages"].append(
+        {"stage": "import", "ok": ok, "error": err, "functions": fns}
+    )
     if not ok:
         return result
 
@@ -310,7 +339,9 @@ def write_compiler_module(code: str, test_task_nums: list[int],
         result["solved_ratio"] = ratio
         if ratio < min_solved_ratio:
             result["promoted"] = False
-            result["reason"] = f"solved_ratio {ratio:.0%} < threshold {min_solved_ratio:.0%}"
+            result["reason"] = (
+                f"solved_ratio {ratio:.0%} < threshold {min_solved_ratio:.0%}"
+            )
             return result
 
     path = promote_candidate(code, tag, compiler_dir, overwrite=True)

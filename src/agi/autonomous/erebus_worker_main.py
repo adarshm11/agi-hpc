@@ -11,6 +11,5 @@ from nats_bursting import run_worker
 
 from agi.autonomous.erebus_handlers import HANDLERS
 
-
 if __name__ == "__main__":
     run_worker(handlers=HANDLERS)

@@ -1,4 +1,5 @@
 """Quick merge — combine all ONNX sources, pick cheapest, build submission."""
+
 import sys
 import shutil
 from pathlib import Path
@@ -55,6 +56,7 @@ print(f"Estimated actual (x0.72): {total_score * 0.72:.0f}")
 
 # Build submission.zip
 import zipfile
+
 zip_path = Path(task_dir) / "submission.zip"
 with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
     for f in sorted(out.glob("task*.onnx")):

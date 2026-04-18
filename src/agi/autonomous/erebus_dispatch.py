@@ -25,27 +25,26 @@ RESULT_PREFIX = "erebus.results."
 
 
 def build_solve_tasks(task_nums: list[int], model: str) -> list[dict]:
-    return [{"type": "solve_task", "task_num": tn, "model": model}
-            for tn in task_nums]
+    return [{"type": "solve_task", "task_num": tn, "model": model} for tn in task_nums]
 
 
 def build_compile_tasks(day: str, top: int) -> list[dict]:
     sys.path.insert(0, str(Path(__file__).parent))
     from erebus_compiler_tools import cluster_failures
+
     clusters = cluster_failures(day=day)
     classified = [c for c in clusters if c["pattern"] != "unclassified"]
     picked = (classified or clusters)[:top]
     return [{"type": "compile_attempt", "cluster": c} for c in picked]
 
 
-async def run(tasks: list[dict], subject_suffix: str, wait: bool,
-              timeout: int):
+async def run(tasks: list[dict], subject_suffix: str, wait: bool, timeout: int):
     # durable=False: use core NATS queue groups. Atlas's NATS and the
     # in-cluster leaf don't share JS federation, so JetStream streams
     # on each end are isolated. Core NATS crosses the leaf transparently.
-    async with TaskDispatcher(NATS_URL, stream=STREAM,
-                              result_prefix=RESULT_PREFIX,
-                              durable=False) as td:
+    async with TaskDispatcher(
+        NATS_URL, stream=STREAM, result_prefix=RESULT_PREFIX, durable=False
+    ) as td:
         ids = await td.submit_many(f"{TASK_SUBJECT}.{subject_suffix}", tasks)
         print(f"dispatched {len(ids)} tasks: {ids}")
         if wait:
@@ -64,8 +63,7 @@ def main():
     sp_solve.add_argument("--timeout", type=int, default=300)
 
     sp_compile = sub.add_parser("compile_attempt")
-    sp_compile.add_argument("--day",
-                            default=datetime.now().strftime("%Y-%m-%d"))
+    sp_compile.add_argument("--day", default=datetime.now().strftime("%Y-%m-%d"))
     sp_compile.add_argument("--top", type=int, default=3)
     sp_compile.add_argument("--wait", action="store_true")
     sp_compile.add_argument("--timeout", type=int, default=600)

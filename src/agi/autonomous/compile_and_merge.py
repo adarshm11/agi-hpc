@@ -11,6 +11,7 @@ Usage:
     --memory /archive/neurogolf/arc_scientist_memory.json \
     --device cuda --output-dir solutions_final
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,9 +47,14 @@ def extract_transforms(memory_path: str, output_dir: str):
     return saved
 
 
-def compile_all_tasks(task_dir: str, output_dir: str, device: str = "cuda",
-                       num_seeds: int = 8, max_time: int = 180,
-                       skip_existing: bool = True):
+def compile_all_tasks(
+    task_dir: str,
+    output_dir: str,
+    device: str = "cuda",
+    num_seeds: int = 8,
+    max_time: int = 180,
+    skip_existing: bool = True,
+):
     """Run conv training on all tasks, save verified ONNX."""
     sys.path.insert(0, str(Path(task_dir) / "src"))
     from gpu_conv_trainer import solve_task_gpu
@@ -71,8 +77,9 @@ def compile_all_tasks(task_dir: str, output_dir: str, device: str = "cuda",
             task = json.load(f)
 
         try:
-            r = solve_task_gpu(task, tn, device, num_seeds=num_seeds,
-                               max_time_s=max_time)
+            r = solve_task_gpu(
+                task, tn, device, num_seeds=num_seeds, max_time_s=max_time
+            )
             if r.get("status") == "solved":
                 model = r["model"]
                 c, t = verify_model(model, task)
@@ -80,8 +87,11 @@ def compile_all_tasks(task_dir: str, output_dir: str, device: str = "cuda",
                     s = score_model(model)
                     onnx.save(model, str(out / f"task{tn:03d}.onnx"))
                     solved += 1
-                    print(f"task{tn:03d}: SOLVED cost={s['cost']} "
-                          f"arch={r.get('arch', '?')}", flush=True)
+                    print(
+                        f"task{tn:03d}: SOLVED cost={s['cost']} "
+                        f"arch={r.get('arch', '?')}",
+                        flush=True,
+                    )
                 else:
                     print(f"task{tn:03d}: verify_fail {c}/{t}", flush=True)
             else:
@@ -93,8 +103,7 @@ def compile_all_tasks(task_dir: str, output_dir: str, device: str = "cuda",
     return solved
 
 
-def merge_solutions(task_dir: str, output_dir: str,
-                     source_dirs: list[str]):
+def merge_solutions(task_dir: str, output_dir: str, source_dirs: list[str]):
     """Merge ONNX from multiple sources, pick cheapest per task."""
     sys.path.insert(0, str(Path(task_dir) / "src"))
     from grammar.primitives import score_model, verify_model
@@ -153,6 +162,7 @@ def merge_solutions(task_dir: str, output_dir: str,
 def build_submission(solution_dir: str, output_zip: str):
     """Build submission.zip from ONNX files."""
     import zipfile
+
     p = Path(solution_dir)
     with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(p.glob("task*.onnx")):
@@ -171,8 +181,12 @@ def main():
     ap.add_argument("--seeds", type=int, default=8)
     ap.add_argument("--max-time", type=int, default=180)
     ap.add_argument("--skip-compile", action="store_true")
-    ap.add_argument("--submit-threshold", type=int, default=100,
-                     help="Only build submission if >= this many tasks")
+    ap.add_argument(
+        "--submit-threshold",
+        type=int,
+        default=100,
+        help="Only build submission if >= this many tasks",
+    )
     args = ap.parse_args()
 
     task_dir = args.task_dir
@@ -188,8 +202,13 @@ def main():
         print("\n" + "=" * 60)
         print("STEP 2: Compile all tasks to ONNX (GPU conv training)")
         print("=" * 60)
-        compile_all_tasks(task_dir, f"{task_dir}/solutions_erebus_onnx",
-                          args.device, args.seeds, args.max_time)
+        compile_all_tasks(
+            task_dir,
+            f"{task_dir}/solutions_erebus_onnx",
+            args.device,
+            args.seeds,
+            args.max_time,
+        )
 
     # Step 3: Merge all sources
     print("\n" + "=" * 60)
@@ -204,16 +223,14 @@ def main():
         f"{task_dir}/solutions_dagastar",
         f"{task_dir}/solutions_gpu_atlas",
     ]
-    merged, score = merge_solutions(task_dir, f"{task_dir}/{args.output_dir}",
-                                     sources)
+    merged, score = merge_solutions(task_dir, f"{task_dir}/{args.output_dir}", sources)
 
     # Step 4: Build submission if threshold met
     if merged >= args.submit_threshold:
         print("\n" + "=" * 60)
         print(f"STEP 4: Building submission ({merged} >= {args.submit_threshold})")
         print("=" * 60)
-        build_submission(f"{task_dir}/{args.output_dir}",
-                          f"{task_dir}/submission.zip")
+        build_submission(f"{task_dir}/{args.output_dir}", f"{task_dir}/submission.zip")
         print(f"\nReady to submit: {task_dir}/submission.zip")
         print(f"Tasks: {merged}, Projected score: {score:.0f}")
     else:
