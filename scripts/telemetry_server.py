@@ -1680,29 +1680,50 @@ def _erebus_chat(user_message: str) -> str:
         try:
             from pathlib import Path as _P
             import importlib.util
-            _tools_path = _P(__file__).parent.parent / "src" / "agi" / "autonomous" / "tools.py"
-            if _tools_path.exists():
+
+            _base = _P(__file__).parent.parent / "src" / "agi" / "autonomous"
+            _tools_path = _base / "tools.py"
+            _sci_path = _base / "arc_scientist.py"
+            _prim_path = _base / "primitives.py"
+
+            if _tools_path.exists() and _sci_path.exists():
+                # Load primitives first (dependency)
+                if _prim_path.exists():
+                    _prim_spec = importlib.util.spec_from_file_location("primitives", _prim_path)
+                    _prim_mod = importlib.util.module_from_spec(_prim_spec)
+                    _prim_spec.loader.exec_module(_prim_mod)
+                    import sys as _sys
+                    _sys.modules["agi.autonomous.primitives"] = _prim_mod
+
+                # Load scientist module
+                _sci_spec = importlib.util.spec_from_file_location("arc_scientist", _sci_path)
+                _sci_mod = importlib.util.module_from_spec(_sci_spec)
+                _sci_spec.loader.exec_module(_sci_mod)
+                _sys.modules["agi.autonomous.arc_scientist"] = _sci_mod
+
+                # Load tools module
                 _spec = importlib.util.spec_from_file_location("tools", _tools_path)
                 _mod = importlib.util.module_from_spec(_spec)
                 _spec.loader.exec_module(_mod)
 
-                _sci_path = _P(__file__).parent.parent / "src" / "agi" / "autonomous" / "arc_scientist.py"
-                _sci_spec = importlib.util.spec_from_file_location("arc_scientist", _sci_path)
-                _sci_mod = importlib.util.module_from_spec(_sci_spec)
-                _sci_spec.loader.exec_module(_sci_mod)
-
                 mem = _sci_mod.EpisodicMemory(EREBUS_MEMORY_PATH)
                 task_dir = "/archive/neurogolf"
+
                 # Build fingerprints (cached after first call)
                 if not hasattr(_erebus_chat, "_fingerprints"):
                     fps = {}
                     for tn in range(1, 401):
                         tf = _P(task_dir) / f"task{tn:03d}.json"
                         if tf.exists():
-                            with open(tf) as f:
-                                task = json.load(f)
-                            fps[tn] = _sci_mod.fingerprint_task(task, tn)
+                            try:
+                                with open(tf) as f:
+                                    task = json.load(f)
+                                fps[tn] = _sci_mod.fingerprint_task(task, tn)
+                            except Exception:
+                                pass
                     _erebus_chat._fingerprints = fps
+                    log.info(f"Erebus: indexed {len(fps)} task fingerprints")
+
                 executor = _mod.ToolExecutor(task_dir, mem, _erebus_chat._fingerprints)
                 return _mod.run_agentic_turn(
                     client, "kimi", messages, executor,
