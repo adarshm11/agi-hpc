@@ -1716,6 +1716,7 @@ def _get_erebus_status():
 
 
 EREBUS_HELP_PATH = "/archive/neurogolf/erebus_help_queue.json"
+_erebus_fingerprints: dict = {}  # pre-cached at first chat, persists for server lifetime
 
 
 def _get_erebus_help_queue():
@@ -1826,9 +1827,8 @@ def _erebus_chat(user_message: str) -> str:
         ]
         extra = {"chat_template_kwargs": {"thinking": False}}
 
-        # Agentic mode disabled for now — fingerprint loading too slow for chat
-        # TODO: pre-cache fingerprints at startup, not per-request
-        if False and False:  # disabled
+        # Agentic mode with tools (fingerprints pre-cached at module level)
+        try:
             from pathlib import Path as _P
             import importlib.util
 
@@ -1871,25 +1871,33 @@ def _erebus_chat(user_message: str) -> str:
                 mem = _sci_mod.EpisodicMemory(EREBUS_MEMORY_PATH)
                 task_dir = "/archive/neurogolf"
 
-                # Build fingerprints (cached after first call)
-                if not hasattr(_erebus_chat, "_fingerprints"):
+                # Use pre-cached fingerprints (loaded at startup via _erebus_fingerprints)
+                fps = _erebus_fingerprints.get("fps")
+                if fps is None:
+                    # Lazy load once, then cache forever
                     fps = {}
                     for tn in range(1, 401):
                         tf = _P(task_dir) / f"task{tn:03d}.json"
                         if tf.exists():
                             try:
-                                with open(tf) as f:
-                                    task = json.load(f)
-                                fps[tn] = _sci_mod.fingerprint_task(task, tn)
+                                with open(tf) as f2:
+                                    tk = json.load(f2)
+                                fps[tn] = _sci_mod.fingerprint_task(tk, tn)
                             except Exception:
                                 pass
-                    _erebus_chat._fingerprints = fps
-                    log.info(f"Erebus: indexed {len(fps)} task fingerprints")
+                    _erebus_fingerprints["fps"] = fps
+                    log.info(f"Erebus: indexed {len(fps)} task fingerprints (cached)")
 
-                executor = _mod.ToolExecutor(task_dir, mem, _erebus_chat._fingerprints)
-                return _mod.run_agentic_turn(
-                    client, "kimi", messages, executor,
-                    max_tool_rounds=3, extra_body=extra)
+                executor = _mod.ToolExecutor(task_dir, mem, fps)
+
+                # Timeout wrapper — don't let agentic mode hang the chat
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(1) as pool:
+                    future = pool.submit(
+                        _mod.run_agentic_turn,
+                        client, "kimi", messages, executor,
+                        2, extra)  # max 2 tool rounds
+                    return future.result(timeout=45)
         except Exception as tool_err:
             import traceback
             log.warning(f"Agentic mode failed, falling back: {tool_err}\n{traceback.format_exc()}")
