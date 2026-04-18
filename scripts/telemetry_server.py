@@ -1291,13 +1291,40 @@ def _get_nrp_burst_status():
                     parts = line.split()
                     if len(parts) >= 3:
                         usage_map[parts[0]] = {
-                            "cpu_used": parts[1],     # e.g. "946m"
-                            "mem_used": parts[2],     # e.g. "710Mi"
+                            "cpu_used": parts[1],
+                            "mem_used": parts[2],
                         }
         except Exception:
             pass
 
-        # Merge usage into pods
+        # ── GPU metrics via nvidia-smi exec (only for running GPU pods) ──
+        gpu_pods = [p for p in pods_list
+                    if p.get("resources", {}).get("gpu")
+                    and p.get("phase") == "Running"]
+        for pod in gpu_pods[:8]:  # cap at 8 to avoid too many execs
+            try:
+                nv_result = subprocess.run(
+                    ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+                     "exec", pod["name"], "--",
+                     "nvidia-smi",
+                     "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+                     "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if nv_result.returncode == 0:
+                    parts = [x.strip() for x in nv_result.stdout.strip().split(",")]
+                    if len(parts) >= 4:
+                        pod["resources"]["gpu_model"] = parts[0].replace(
+                            "NVIDIA ", "").replace("GeForce ", "")
+                        pod["gpu_live"] = {
+                            "vram_used_mib": int(parts[1]),
+                            "vram_total_mib": int(parts[2]),
+                            "gpu_util_pct": int(parts[3]),
+                        }
+            except Exception:
+                pass
+
+        # Merge CPU/RAM usage into pods
         for pod in pods_list:
             usage = usage_map.get(pod["name"], {})
             if usage:

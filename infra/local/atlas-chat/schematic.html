@@ -1834,18 +1834,27 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
           if(mem.endsWith('Mi')) totalMemMi += parseInt(mem);
           else if(mem.endsWith('Gi')) totalMemMi += parseInt(mem) * 1024;
         });
-        var vramPerGpu = {'A100':80,'H100':80,'H200':141,'L40S':48,'V100':32,'T4':16,'GV100':32,'GPU':0};
-        var parts = [], totalVram = 0;
-        for(var gm in gpuModels){
-          parts.push(gpuModels[gm] + 'x ' + gm);
-          totalVram += gpuModels[gm] * (vramPerGpu[gm] || 0);
-        }
+        var parts = [], totalVramUsed = 0, totalVramTotal = 0, avgGpuUtil = 0, gpuUtilCount = 0;
+        active.forEach(function(p){
+          var gl = p.gpu_live || {};
+          if(gl.vram_used_mib) totalVramUsed += gl.vram_used_mib;
+          if(gl.vram_total_mib) totalVramTotal += gl.vram_total_mib;
+          if(gl.gpu_util_pct != null){ avgGpuUtil += gl.gpu_util_pct; gpuUtilCount++; }
+        });
+        for(var gm in gpuModels) parts.push(gpuModels[gm] + 'x ' + gm);
         if(!parts.length && totalGpu) parts.push(totalGpu + ' GPU');
         var cpuStr = totalCpuM >= 1000 ? (totalCpuM/1000).toFixed(1) + ' cores' : totalCpuM + 'm';
         var memStr = totalMemMi >= 1024 ? (totalMemMi/1024).toFixed(1) + ' GiB' : totalMemMi + ' MiB';
         var html = '';
         if(parts.length) html += '<span style="color:var(--accent)">' + parts.join(' + ') + '</span>';
-        if(totalVram) html += ' <span style="color:var(--accent);font-weight:700">' + totalVram + ' GB VRAM</span>';
+        if(totalVramTotal){
+          var vuG = (totalVramUsed/1024).toFixed(1), vtG = (totalVramTotal/1024).toFixed(0);
+          html += ' <span style="color:var(--accent);font-weight:700">' + vuG + '/' + vtG + ' GB VRAM</span>';
+        }
+        if(gpuUtilCount){
+          var avg = Math.round(avgGpuUtil / gpuUtilCount);
+          html += ' <span style="color:' + (avg>50?'var(--green)':'var(--yellow)') + '">' + avg + '% util</span>';
+        }
         if(totalCpuM) html += ' &nbsp;<span style="color:var(--green)">' + cpuStr + '</span>';
         if(totalMemMi) html += ' &nbsp;<span style="color:var(--text-dim)">' + memStr + ' RAM</span>';
         if(!html) html = '<span style="color:var(--text-dim)">no active pods</span>';
@@ -2129,9 +2138,19 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
             var statusText = p.reason || p.phase;
             var gpu = (p.resources||{}).gpu || '';
             var gpuModel = (p.resources||{}).gpu_model || '';
-            var vramMap = {'A100':'80G','H100':'80G','H200':'141G','L40S':'48G','V100':'32G','T4':'16G','GV100':'32G'};
-            var vram = gpuModel ? (vramMap[gpuModel]||'') : '';
-            var gpuDisplay = gpu ? (gpuModel ? gpu + 'x ' + gpuModel + (vram?' '+vram:'') : gpu + ' GPU') : '\u2014';
+            var gpuLive = p.gpu_live || {};
+            var gpuDisplay = '\u2014';
+            if(gpu){
+              if(gpuModel) gpuDisplay = gpuModel;
+              else gpuDisplay = gpu + ' GPU';
+              if(gpuLive.vram_used_mib != null){
+                var vu = gpuLive.vram_used_mib, vt = gpuLive.vram_total_mib;
+                var vuStr = vu >= 1024 ? (vu/1024).toFixed(1)+'G' : vu+'M';
+                var vtStr = vt >= 1024 ? (vt/1024).toFixed(0)+'G' : vt+'M';
+                gpuDisplay += ' ' + vuStr + '/' + vtStr;
+              }
+              if(gpuLive.gpu_util_pct != null) gpuDisplay += ' ' + gpuLive.gpu_util_pct + '%';
+            }
             var img = p.image || '\u2014';
             var node = p.node ? p.node.split('.')[0] : '\u2014';
             var usage = p.usage || {};
