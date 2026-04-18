@@ -1240,11 +1240,37 @@ def _get_nrp_burst_status():
                         reason = "Running"
                     elif "terminated" in cs:
                         reason = cs["terminated"].get("reason", "Terminated")
+                # Infer GPU model from node name patterns
+                node_name = spec.get("nodeName", "")
+                gpu_model = ""
+                if gpu:
+                    node_lower = node_name.lower()
+                    if "a100" in node_lower or "rci-nrp-gpu" in node_lower:
+                        gpu_model = "A100"
+                    elif "h100" in node_lower or "h200" in node_lower:
+                        gpu_model = "H100"
+                    elif "l40" in node_lower:
+                        gpu_model = "L40S"
+                    elif "v100" in node_lower:
+                        gpu_model = "V100"
+                    elif "t4" in node_lower:
+                        gpu_model = "T4"
+                    elif "haosu" in node_lower:
+                        gpu_model = "A100"
+                    elif "chase-ci" in node_lower:
+                        gpu_model = "A100"
+                    elif "ucsc" in node_lower:
+                        gpu_model = "GPU"
+                    elif gpu:
+                        gpu_model = "GPU"
+                    if gpu_model:
+                        res["gpu_model"] = gpu_model
+
                 pods_list.append({
                     "name": meta.get("name", ""),
                     "phase": phase,
                     "reason": reason,
-                    "node": spec.get("nodeName", ""),
+                    "node": node_name,
                     "image": image.split("/")[-1] if image else "",
                     "resources": res,
                     "created": meta.get("creationTimestamp", ""),

@@ -2052,8 +2052,10 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
             s += '<line x1="'+(leafX+leafR)+'" y1="'+leafY+'" x2="600" y2="'+py+'" stroke="'+pc+'" stroke-width="1" opacity="0.5"/>';
             s += '<circle cx="608" cy="'+py+'" r="6" fill="'+pc+'" opacity="0.85"/>';
             var pName = pod.name.replace(/-[a-z0-9]{5,}$/,'');
+            var gpuModel = (pod.resources||{}).gpu_model || '';
             var pDetail = pName;
-            if(gpu) pDetail += '  ·  ' + gpu + ' GPU';
+            if(gpu && gpuModel) pDetail += '  ·  ' + gpu + 'x ' + gpuModel;
+            else if(gpu) pDetail += '  ·  ' + gpu + ' GPU';
             if(img) pDetail += '  ·  ' + img.split(':')[0];
             s += '<text x="620" y="'+(py+4)+'" fill="var(--text)" font-size="10">'+pDetail+'</text>';
           }
@@ -2085,13 +2087,15 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
           active.forEach(function(p){
             var sc = p.phase==='Running'?'#22c55e':'#eab308';
             var statusText = p.reason || p.phase;
-            var gpu = (p.resources||{}).gpu || '—';
-            var img = p.image || '—';
-            var node = p.node ? p.node.split('.')[0] : '—';
+            var gpu = (p.resources||{}).gpu || '';
+            var gpuModel = (p.resources||{}).gpu_model || '';
+            var gpuDisplay = gpu ? (gpuModel ? gpu + 'x ' + gpuModel : gpu + ' GPU') : '\u2014';
+            var img = p.image || '\u2014';
+            var node = p.node ? p.node.split('.')[0] : '\u2014';
             th += '<tr style="border-top:1px solid rgba(255,255,255,0.05)">' +
               '<td style="padding:1px 3px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + p.name + '">' + p.name.replace(/-[a-z0-9]{5,}$/,'') + '</td>' +
               '<td style="padding:1px 3px;color:var(--text-dim);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + img + '">' + img + '</td>' +
-              '<td style="padding:1px 3px;text-align:center;color:var(--accent)">' + gpu + '</td>' +
+              '<td style="padding:1px 3px;text-align:center;color:var(--accent)">' + gpuDisplay + '</td>' +
               '<td style="padding:1px 3px;color:' + sc + '">' + statusText + '</td>' +
               '<td style="padding:1px 3px;color:var(--text-dim)">' + node + '</td></tr>';
           });
