@@ -139,21 +139,25 @@ def dream_analyze_failures(failures: list[dict]) -> str:
 
 
 def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
-    """Use Qwen 397B to synthesize a new compiler module from successes."""
+    """Use Qwen 397B to synthesize a new compiler module from successes.
+
+    Uses REAL existing compiler module source as few-shot (not just the
+    curriculum markdown), and returns the raw LLM response so the caller
+    can route it through the verification pipeline.
+    """
     token = os.environ.get("NRP_LLM_TOKEN", "")
     if not token or not successes:
         return ""
 
     from openai import OpenAI
-    client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1",
-                     timeout=120)
+    from agi.autonomous.erebus_compiler_tools import get_few_shot_modules
 
-    # Read existing curriculum
-    curriculum = ""
-    try:
-        curriculum = CURRICULUM_PATH.read_text()[:3000]
-    except Exception:
-        pass
+    client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1",
+                     timeout=180)
+
+    # Real source of the shortest well-formed compiler modules — this is
+    # the pattern Erebus must imitate, not the high-level curriculum text.
+    few_shot = get_few_shot_modules(max_modules=2, max_chars_each=2500)
 
     # Pick the most common transform pattern from successes
     codes = "\n\n".join(
@@ -163,8 +167,8 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
 
     prompt = (
         "You are building an ONNX compiler for ARC-AGI tasks.\n\n"
-        "Here are existing compiler modules (the curriculum):\n"
-        f"```\n{curriculum[:2000]}\n```\n\n"
+        "Here are two working compiler modules — imitate their structure:\n"
+        f"```python\n{few_shot}\n```\n\n"
         "Here are Python transforms that Erebus verified today:\n"
         f"```python\n{codes}\n```\n\n"
         f"Analysis of today's failures:\n{analysis[:1000]}\n\n"
@@ -172,8 +176,11 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
         "1. Follows the same pattern: nodes/inits/vinfo lists → make_model()\n"
         "2. Uses only opset 10 ops (Conv, Gather, Reshape, Slice, etc.)\n"
         "3. Handles a class of tasks, not just one specific task\n"
-        "4. Includes a detect_X() function that checks if a task matches\n\n"
-        "Write the complete module. ```python ... ```"
+        "4. Includes a detect_X(task_examples) -> bool that checks if a "
+        "task matches\n"
+        "5. Exposes a compile_X() (or make_model()) returning "
+        "onnx.ModelProto\n\n"
+        "Write the complete module in one ```python ... ``` block."
     )
 
     try:
@@ -186,6 +193,20 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
     except Exception as e:
         log.warning(f"Synthesis failed: {e}")
         return ""
+
+
+def _extract_python_block(response: str) -> str | None:
+    """Extract the first well-formed python code block from an LLM response."""
+    if "```" not in response:
+        return None
+    for part in response.split("```"):
+        stripped = part.lstrip()
+        if stripped.startswith("python"):
+            stripped = stripped[6:]
+        if any(marker in stripped for marker in (
+                "def compile_", "def detect_", "def make_model")):
+            return stripped.strip()
+    return None
 
 
 def dream_update_wiki(analysis: str, new_module: str):
@@ -293,44 +314,34 @@ def run_dream_cycle():
     if analysis:
         log.info(f"Analysis: {analysis[:200]}...")
 
-    # 3. Synthesize new compiler module
+    # 3. Synthesize new compiler module and route through the verification
+    # pipeline: syntax → import → ONNX runtime test against failing tasks.
     log.info("Synthesizing compiler module...")
     new_module = dream_synthesize_compiler(successes, analysis)
     if new_module:
-        # Extract code and save
-        import ast
-        code = None
-        if "```" in new_module:
-            for part in new_module.split("```"):
-                if part.startswith("python"):
-                    part = part[6:]
-                if ("def compile_" in part or "def detect_" in part
-                        or "def make_model" in part):
-                    code = part.strip()
-                    break
+        from agi.autonomous.erebus_compiler_tools import (
+            cluster_failures, write_compiler_module)
 
-        if code:
-            # Validate syntax before saving to avoid polluting compiler dir
-            try:
-                ast.parse(code)
-            except SyntaxError as e:
-                log.warning(f"Synthesized module has syntax error at line {e.lineno}: {e.msg}. Discarding.")
-                code = None
-
-        if code:
-            today = datetime.now().strftime("%Y%m%d")
-            module_path = TASK_DIR / f"src/compiler/dream_{today}.py"
-            module_path.write_text(code)
-            log.info(f"New compiler module saved to {module_path}")
-
-            # Test it
-            try:
-                ns = {}
-                exec(code, ns)
-                funcs = [k for k in ns if k.startswith(("compile_", "detect_", "make_"))]
-                log.info(f"Module defines: {funcs}")
-            except Exception as e:
-                log.warning(f"Module import-time error: {e}")
+        code = _extract_python_block(new_module)
+        if not code:
+            log.warning("No python block found in synthesis response.")
+        else:
+            today = datetime.now().strftime("%Y-%m-%d")
+            tag = datetime.now().strftime("%Y%m%d")
+            # Pick the biggest failure cluster as the test set.
+            clusters = cluster_failures(day=today)
+            test_task_nums = clusters[0]["tasks"][:5] if clusters else []
+            log.info(f"Testing synthesized module against tasks: "
+                     f"{test_task_nums}")
+            result = write_compiler_module(code, test_task_nums, tag,
+                                           min_solved_ratio=0.4)
+            for stage in result.get("stages", []):
+                log.info(f"  [{stage['stage']}] ok={stage.get('ok')} "
+                         f"{stage.get('error', '')[:200]}")
+            if result.get("promoted"):
+                log.info(f"Promoted: {result['path']}")
+            else:
+                log.info(f"Not promoted: {result.get('reason', 'pipeline failed')}")
 
     # 4. Update wiki
     dream_update_wiki(analysis, new_module)

@@ -206,6 +206,80 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "list_compiler_modules",
+            "description": (
+                "List all existing ONNX compiler modules (flip, crop_bbox, "
+                "color_remap, etc.) with their docstrings and exported "
+                "detect_X/compile_X functions. Use this to see what the "
+                "compiler already handles before writing a new module."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_compiler_module",
+            "description": (
+                "Read the full source of one existing compiler module. Use "
+                "this as a few-shot reference when writing a new module — "
+                "copy the node/init/vinfo list pattern and opset 10 ops."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string",
+                             "description": "Module stem, e.g. 'flip' or 'crop_bbox'"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_failure_clusters",
+            "description": (
+                "Group today's unsolved tasks by (error_type, similar_to) "
+                "pattern. Returns the biggest clusters first — these are "
+                "where a new compiler module would have the most leverage."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "day": {"type": "string",
+                            "description": "Filter to one day (YYYY-MM-DD). Default: all days."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_compiler_module",
+            "description": (
+                "Write a candidate ONNX compiler module, runtime-test it "
+                "against a list of tasks, and promote it to the compiler "
+                "directory only if it solves at least 50% of them. Pipeline: "
+                "syntax-check → import-check → ONNX runtime test → promote."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string",
+                             "description": "Complete Python source for the module. Must define compile_X() or make_model() that returns an onnx.ModelProto."},
+                    "test_task_nums": {"type": "array", "items": {"type": "integer"},
+                                       "description": "Task numbers to test the module against. Should be tasks you think the module handles."},
+                    "tag": {"type": "string",
+                            "description": "Short tag for the module file, e.g. 'enclosure_fill' → saved as dream_enclosure_fill.py"},
+                },
+                "required": ["code", "test_task_nums", "tag"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "set_nrp_mode",
             "description": (
                 "Set the NRP compute mode. "
@@ -604,6 +678,42 @@ class ToolExecutor:
             "Use 'auto' to let the watchdog decide."
         )
         return result
+
+    def _tool_list_compiler_modules(self) -> dict:
+        """List all existing compiler modules."""
+        from agi.autonomous.erebus_compiler_tools import list_compiler_modules
+        infos = list_compiler_modules()
+        return {
+            "n_modules": len(infos),
+            "modules": [{
+                "name": m.name,
+                "docstring": m.docstring,
+                "detect_fns": m.detect_fns,
+                "compile_fns": m.compile_fns,
+                "lines": m.line_count,
+            } for m in infos],
+        }
+
+    def _tool_read_compiler_module(self, name: str) -> dict:
+        """Read the full source of an existing compiler module."""
+        from agi.autonomous.erebus_compiler_tools import read_compiler_module
+        src = read_compiler_module(name)
+        if src is None:
+            return {"error": f"module '{name}' not found"}
+        return {"name": name, "source": src, "lines": src.count("\n")}
+
+    def _tool_list_failure_clusters(self, day: str = "") -> dict:
+        """Cluster unsolved tasks by error_type + similar_to pattern."""
+        from agi.autonomous.erebus_compiler_tools import cluster_failures
+        clusters = cluster_failures(day=day or None)
+        return {"n_clusters": len(clusters), "clusters": clusters[:10]}
+
+    def _tool_write_compiler_module(self, code: str,
+                                    test_task_nums: list[int],
+                                    tag: str) -> dict:
+        """Syntax + import + runtime test the candidate; save on success."""
+        from agi.autonomous.erebus_compiler_tools import write_compiler_module
+        return write_compiler_module(code, test_task_nums, tag)
 
     def _load_task(self, task_num: int) -> dict | None:
         tf = self.task_dir / f"task{task_num:03d}.json"
