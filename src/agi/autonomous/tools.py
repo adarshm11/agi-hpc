@@ -185,6 +185,29 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_nrp_mode",
+            "description": (
+                "Set the NRP compute mode. "
+                "'heavy': up to 4 pods at full GPU (for A100/H100). "
+                "'swarm': 5+ pods, all under 40% GPU (for many old GPUs). "
+                "'auto': let the watchdog decide based on available hardware."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "enum": ["auto", "heavy", "swarm"],
+                        "description": "Compute mode to use",
+                    },
+                },
+                "required": ["mode"],
+            },
+        },
+    },
 ]
 
 
@@ -444,6 +467,39 @@ class ToolExecutor:
         help_file.write_text(json.dumps(queue[-20:], indent=2))
 
         return {"status": "posted", "queue_length": len(queue)}
+
+    def _tool_set_nrp_mode(self, mode: str) -> dict:
+        """Set NRP compute mode and return available GPU info."""
+        import requests as _req
+        try:
+            r = _req.post("http://localhost:8085/api/nrp/mode",
+                          json={"mode": mode}, timeout=5)
+            result = r.json()
+        except Exception as e:
+            result = {"error": str(e)[:100]}
+
+        # Also return what GPUs are currently available
+        gpu_summary = {}
+        try:
+            r2 = _req.get("http://localhost:8085/api/nrp-burst", timeout=5)
+            burst = r2.json()
+            for pod in burst.get("pods", []):
+                if pod.get("phase") != "Running":
+                    continue
+                gm = (pod.get("resources", {}).get("gpu_model") or
+                      pod.get("gpu_live", {}).get("vram_total_mib", ""))
+                if gm:
+                    gpu_summary[str(gm)] = gpu_summary.get(str(gm), 0) + 1
+        except Exception:
+            pass
+
+        result["available_gpus"] = gpu_summary
+        result["recommendation"] = (
+            "Use 'heavy' mode for A100/H100/H200 (4 pods, full power). "
+            "Use 'swarm' mode for old GPUs like 1080Ti/2080Ti/T4 (many pods, light). "
+            "Use 'auto' to let the watchdog decide."
+        )
+        return result
 
     def _load_task(self, task_num: int) -> dict | None:
         tf = self.task_dir / f"task{task_num:03d}.json"

@@ -1149,20 +1149,25 @@ def _get_nrp_nats_telemetry():
 
 
 # ── NRP utilization watchdog ──────────────────────────────────
-# NRP Cluster Policy:
-#   - First 4 pods: can use up to 100% GPU, 200% CPU, 150% RAM
-#   - Pods 5+: must stay UNDER GPU 40%, CPU 20%, RAM 20%
-#     (i.e., must be lightweight / not resource-intensive)
-#   - Ignored: Memory <=2GB, CPU <=1
-#   - Jobs ending with sleep = ban
+# NRP Cluster Policy (either/or, no mixing):
 #
-# In practice: we get 4 "full power" slots. Any pods beyond 4
-# must be minimal (CPU-only lightweight work).
+#   Mode A (heavy):  up to 4 pods, each can use up to 100%
+#   Mode B (swarm):  5+ pods, ALL must stay under thresholds
+#                    (GPU <40%, CPU <20% or >200%, RAM <20% or >150%)
+#
+#   Ignored: Memory <=2GB, CPU <=1
+#   Jobs ending with sleep = ban
+#
+# The watchdog auto-detects which mode we're in and enforces it.
+# If we have 5+ pods and any is heavy → kill it.
+# If we have <=4 pods, heavy is fine.
 
-_nrp_violations: dict[str, int] = {}  # pod_name -> consecutive violation count
+_nrp_violations: dict[str, int] = {}
+_nrp_mode: dict = {"mode": "auto", "active": "unknown", "n_active": 0}
+# mode: "auto" (watchdog decides), "heavy" (force 4-pod max), "swarm" (force light)
 
 def _nrp_watchdog_check(pods: list[dict]):
-    """Enforce NRP tiered pod policy: 4 heavy pods max, rest must be light."""
+    """Enforce NRP either/or pod policy."""
     global _nrp_violations
     kubeconfig = os.path.expanduser("~/.kube/config")
     ns = "ssu-atlas-ai"
@@ -1184,61 +1189,75 @@ def _nrp_watchdog_check(pods: list[dict]):
         if val.endswith("GB"): return int(float(val[:-2]) * 1024)
         return 0
 
-    # Classify each pod as "heavy" or "light" based on utilization
-    heavy_pods = []   # pods exceeding the thresholds (GPU>40%, CPU 20-200%, RAM 20-150%)
-    light_pods = []   # pods under the thresholds
-
-    for pod in active:
-        name = pod["name"]
+    def _is_heavy(pod):
+        """Check if pod exceeds violation thresholds."""
         usage = pod.get("usage", {})
         gpu_live = pod.get("gpu_live", {})
         res = pod.get("resources", {})
 
-        is_heavy = False
-
-        # GPU > 40% = heavy
+        # GPU > 40%
         if res.get("gpu") and gpu_live.get("gpu_util_pct") is not None:
             if gpu_live["gpu_util_pct"] > 40:
-                is_heavy = True
+                return True
 
-        # CPU 20-200% of requested = heavy (ignored if <=1 CPU)
+        # CPU 20-200% of requested (ignored if <=1 CPU)
         cpu_req_m = _parse_cpu_m(res.get("cpu", ""))
         cpu_used_m = _parse_cpu_m(usage.get("cpu_used", ""))
         if cpu_req_m > 1000 and cpu_used_m > 0:
             cpu_pct = cpu_used_m * 100 // cpu_req_m
             if 20 <= cpu_pct <= 200:
-                is_heavy = True
+                return True
 
-        # RAM 20-150% of requested = heavy (ignored if <=2GB)
+        # RAM 20-150% of requested (ignored if <=2GB)
         mem_req_mi = _parse_mem_mi(res.get("memory", ""))
         mem_used_mi = _parse_mem_mi(usage.get("mem_used", ""))
         if mem_req_mi > 2048 and mem_used_mi > 0:
             mem_pct = mem_used_mi * 100 // mem_req_mi
             if 20 <= mem_pct <= 150:
-                is_heavy = True
+                return True
 
-        if is_heavy:
-            heavy_pods.append(pod)
-        else:
-            light_pods.append(pod)
+        return False
 
-    n_heavy = len(heavy_pods)
+    n_active = len(active)
 
-    # ── Enforcement ──
-    # First 4 heavy pods are fine. Kill the rest (newest first).
-    if n_heavy > 4:
-        # Sort by creation time, kill newest heavy pods first
-        heavy_pods.sort(key=lambda p: p.get("created", ""), reverse=True)
-        to_kill = heavy_pods[:n_heavy - 4]  # keep oldest 4
+    # Check configured mode (can be set via /api/nrp/mode)
+    mode = _nrp_mode.get("mode", "auto")
 
-        for pod in to_kill:
-            name = pod["name"]
+    if mode == "auto":
+        # Auto-select: if we have any datacenter GPUs (A100/H100/H200/L40),
+        # use heavy mode (4 pods max). Otherwise swarm mode.
+        datacenter_gpus = {"A100", "H100", "H200", "L40", "L40S"}
+        has_datacenter = any(
+            p.get("gpu_live", {}).get("vram_total_mib", 0) > 20000 or
+            any(dg in (p.get("resources", {}).get("gpu_model", "") or "")
+                for dg in datacenter_gpus)
+            for p in active if p.get("resources", {}).get("gpu")
+        )
+        mode = "heavy" if (has_datacenter and n_active <= 4) else (
+            "heavy" if n_active <= 4 else "swarm"
+        )
+
+    _nrp_mode["active"] = mode
+    _nrp_mode["n_active"] = n_active
+
+    if mode == "heavy" and n_active <= 4:
+        _nrp_violations.clear()
+        log.info(f"[nrp-watchdog] Mode HEAVY: {n_active} pods (<=4), no restrictions")
+        return
+
+    # MODE SWARM: 5+ pods — ALL must be lightweight
+    # Any heavy pod is a violation
+    log.info(f"[nrp-watchdog] Mode B: {n_active} pods (>4), all must be light")
+
+    for pod in active:
+        name = pod["name"]
+        if _is_heavy(pod):
             _nrp_violations[name] = _nrp_violations.get(name, 0) + 1
             count = _nrp_violations[name]
 
             if count >= 2:
-                log.warning(f"[nrp-watchdog] KILLING {name}: heavy pod #{n_heavy} "
-                           f"(max 4 allowed) — strike {count}")
+                log.warning(f"[nrp-watchdog] KILLING {name}: heavy pod in swarm mode "
+                           f"({n_active} pods, all must be <40% GPU) — strike {count}")
                 try:
                     job_name = pod.get("job", "")
                     target = ("job", job_name) if job_name else ("pod", name)
@@ -1250,15 +1269,10 @@ def _nrp_watchdog_check(pods: list[dict]):
                     log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
                 _nrp_violations.pop(name, None)
             else:
-                log.warning(f"[nrp-watchdog] {name}: heavy pod #{n_heavy} "
-                           f"(max 4 allowed) — strike {count}/2, will kill next check")
-    else:
-        # Under limit — clear all violations
-        _nrp_violations.clear()
-
-    if n_heavy > 0:
-        log.info(f"[nrp-watchdog] {n_heavy} heavy pods / {len(active)} total "
-                f"(limit: 4 heavy)")
+                log.warning(f"[nrp-watchdog] {name}: heavy in swarm mode "
+                           f"(strike {count}/2, will kill next check)")
+        else:
+            _nrp_violations.pop(name, None)
 
 
 def _get_nrp_burst_status():
@@ -1907,6 +1921,8 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response(_get_nrp_nats_telemetry())
         elif self.path == "/api/nats-live" or self.path.startswith("/api/nats-live?"):
             self._json_response(_get_nats_live())
+        elif self.path == "/api/nrp/mode" or self.path.startswith("/api/nrp/mode?"):
+            self._json_response(_nrp_mode)
         elif self.path == "/api/erebus/memory" or self.path.startswith("/api/erebus/memory?"):
             self._json_response(_get_erebus_memory())
         elif self.path == "/api/erebus/status" or self.path.startswith("/api/erebus/status?"):
@@ -1938,6 +1954,20 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response({"ok": True})
         elif self.path == "/api/training/start":
             self._handle_training_start()
+        elif self.path == "/api/nrp/mode":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else b"{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                data = {}
+            new_mode = data.get("mode", "")
+            if new_mode in ("auto", "heavy", "swarm"):
+                _nrp_mode["mode"] = new_mode
+                log.info(f"[nrp-watchdog] Mode set to: {new_mode}")
+                self._json_response({"ok": True, "mode": new_mode})
+            else:
+                self._json_response({"error": "mode must be auto|heavy|swarm"}, 400)
         elif self.path == "/api/erebus/chat":
             self._handle_erebus_chat()
         else:
