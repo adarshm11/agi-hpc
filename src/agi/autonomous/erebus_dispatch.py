@@ -40,8 +40,12 @@ def build_compile_tasks(day: str, top: int) -> list[dict]:
 
 async def run(tasks: list[dict], subject_suffix: str, wait: bool,
               timeout: int):
+    # durable=False: use core NATS queue groups. Atlas's NATS and the
+    # in-cluster leaf don't share JS federation, so JetStream streams
+    # on each end are isolated. Core NATS crosses the leaf transparently.
     async with TaskDispatcher(NATS_URL, stream=STREAM,
-                              result_prefix=RESULT_PREFIX) as td:
+                              result_prefix=RESULT_PREFIX,
+                              durable=False) as td:
         ids = await td.submit_many(f"{TASK_SUBJECT}.{subject_suffix}", tasks)
         print(f"dispatched {len(ids)} tasks: {ids}")
         if wait:

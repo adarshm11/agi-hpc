@@ -41,6 +41,10 @@ def main():
             "COMPILER_DIR": "/work/bundle/src/compiler",
             "PYTHONPATH": "/work/agi-hpc/src",
             "NATS_RESULT_PREFIX": "erebus.results.",
+            # Core NATS mode — JetStream on leaf isn't federated with
+            # Atlas's JS, so using core pub/sub (load-balanced via queue
+            # group) to cross the leaf transparently.
+            "NATS_DURABLE": "0",
         },
         env_from_secrets={
             "NRP_LLM_TOKEN": ("erebus-worker-secrets", "nrp-llm-token"),
