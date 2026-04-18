@@ -1826,8 +1826,9 @@ def _erebus_chat(user_message: str) -> str:
         ]
         extra = {"chat_template_kwargs": {"thinking": False}}
 
-        # Try agentic mode with tools
-        try:
+        # Agentic mode disabled for now — fingerprint loading too slow for chat
+        # TODO: pre-cache fingerprints at startup, not per-request
+        if False and False:  # disabled
             from pathlib import Path as _P
             import importlib.util
 
