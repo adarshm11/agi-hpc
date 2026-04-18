@@ -1162,6 +1162,23 @@ def _get_nrp_nats_telemetry():
 # If we have 5+ pods and any is heavy → kill it.
 # If we have <=4 pods, heavy is fine.
 
+def _get_pod_logs(pod_name: str, tail: int = 8) -> dict:
+    """Fetch recent logs from a pod via kubectl."""
+    kubeconfig = os.path.expanduser("~/.kube/config")
+    ns = "ssu-atlas-ai"
+    try:
+        result = subprocess.run(
+            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+             "logs", pod_name, f"--tail={tail}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return {"pod": pod_name, "logs": result.stdout.strip().split("\n")}
+        return {"pod": pod_name, "error": result.stderr.strip()[:200]}
+    except Exception as e:
+        return {"pod": pod_name, "error": str(e)[:200]}
+
+
 _nrp_violations: dict[str, int] = {}
 _nrp_mode: dict = {"mode": "auto", "active": "unknown", "n_active": 0}
 # mode: "auto" (watchdog decides), "heavy" (force 4-pod max), "swarm" (force light)
@@ -1921,6 +1938,9 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response(_get_nrp_nats_telemetry())
         elif self.path == "/api/nats-live" or self.path.startswith("/api/nats-live?"):
             self._json_response(_get_nats_live())
+        elif self.path.startswith("/api/nrp/logs/"):
+            pod_name = self.path.split("/api/nrp/logs/")[1].split("?")[0]
+            self._json_response(_get_pod_logs(pod_name))
         elif self.path == "/api/nrp/mode" or self.path.startswith("/api/nrp/mode?"):
             self._json_response(_nrp_mode)
         elif self.path == "/api/erebus/memory" or self.path.startswith("/api/erebus/memory?"):

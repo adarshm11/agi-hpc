@@ -774,6 +774,23 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       </div>
     </div>
 
+    <!-- Erebus Competition Status -->
+    <div class="metric-panel">
+      <div class="panel-title"><span class="icon">&#9670;</span> Erebus — NeuroGolf 2026</div>
+      <div id="erebus-competition" style="font-family:var(--mono);font-size:11px">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+          <span>ONNX: <b style="color:var(--accent)" id="ec-onnx">--</b></span>
+          <span>Score: <b style="color:var(--green)" id="ec-score">--</b></span>
+          <span>Solves: <b style="color:var(--accent)" id="ec-solves">--</b></span>
+          <span>Attempts: <b style="color:var(--text-dim)" id="ec-attempts">--</b></span>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;font-size:10px;color:var(--text-dim)">
+          <span id="ec-strategies"></span>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim)" id="ec-recent"></div>
+      </div>
+    </div>
+
     <!-- Memory Tiers -->
     <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9733;</span> Memory Tiers</div>
@@ -2187,8 +2204,9 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
             var memDisplay = memUsed !== '\u2014' && memLimit ? memUsed + '/' + memLimit : memUsed;
             // Color CPU: green if active, dim if idle
             var cpuColor = cpuUsed !== '\u2014' && cpuUsed !== '0m' ? 'var(--accent)' : 'var(--text-dim)';
-            th += '<tr style="border-top:1px solid rgba(255,255,255,0.05)">' +
-              '<td style="padding:1px 3px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + p.name + ' | ' + img + '">' + p.name.replace(/-[a-z0-9]{5,}$/,'') + '</td>' +
+            th += '<tr style="border-top:1px solid rgba(255,255,255,0.05);cursor:pointer" ' +
+              'onmouseenter="showPodLogs(this,\'' + p.name + '\')" onmouseleave="hidePodLogs()">' +
+              '<td style="padding:1px 3px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + p.name.replace(/-[a-z0-9]{5,}$/,'') + '</td>' +
               '<td style="padding:1px 3px;text-align:center;color:var(--accent)">' + gpuDisplay + '</td>' +
               '<td style="padding:1px 3px;text-align:right;color:' + cpuColor + ';font-size:9px">' + cpuUsed + '</td>' +
               '<td style="padding:1px 3px;text-align:right;color:var(--text-dim);font-size:9px">' + memDisplay + '</td>' +
@@ -2244,6 +2262,29 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   setInterval(poll, 5000);
   setInterval(pollEvents, 15000);
   setInterval(pollNRP, 30000);
+
+  // ─── Pod log tooltip ───
+  var _logTip = document.createElement('div');
+  _logTip.style.cssText = 'position:fixed;z-index:9999;background:#1a2240;border:1px solid #2a3555;border-radius:8px;padding:8px 10px;font-family:Cascadia Code,monospace;font-size:9px;color:#e0e6f0;max-width:500px;white-space:pre-wrap;word-break:break-all;pointer-events:none;display:none;box-shadow:0 4px 16px rgba(0,0,0,0.5)';
+  document.body.appendChild(_logTip);
+  var _logTimer = null;
+  async function showPodLogs(row, podName){
+    clearTimeout(_logTimer);
+    var rect = row.getBoundingClientRect();
+    _logTip.style.left = Math.min(rect.left, window.innerWidth - 520) + 'px';
+    _logTip.style.top = (rect.bottom + 4) + 'px';
+    _logTip.textContent = 'loading...';
+    _logTip.style.display = 'block';
+    try {
+      var r = await fetch('/api/nrp/logs/' + encodeURIComponent(podName));
+      var d = await r.json();
+      if(d.logs) _logTip.textContent = d.logs.join('\n');
+      else _logTip.textContent = d.error || 'no logs';
+    } catch(e){ _logTip.textContent = 'fetch error'; }
+  }
+  function hidePodLogs(){
+    _logTimer = setTimeout(function(){ _logTip.style.display = 'none'; }, 200);
+  }
   setInterval(pollNatsLive, 2000);
   tickUptime();
   setInterval(tickUptime, 1000);
