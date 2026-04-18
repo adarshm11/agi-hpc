@@ -206,6 +206,42 @@ def dream_update_wiki(analysis: str, new_module: str):
     log.info(f"Dream log saved to {log_file}")
 
 
+def run_qlora_training(min_pairs: int = 10) -> None:
+    """Launch dream_qlora_train.py as a subprocess. GPU 1 (Kirk) must be
+    freed before this runs — see atlas-operations.md."""
+    train_dir = TASK_DIR / "training_data"
+    if not train_dir.exists():
+        log.info("No training_data/ yet — skipping QLoRA")
+        return
+    pair_count = 0
+    for fp in train_dir.glob("solves_*.jsonl"):
+        pair_count += sum(1 for _ in fp.open())
+    if pair_count < min_pairs:
+        log.info(f"QLoRA skipped: {pair_count} pairs (< {min_pairs})")
+        return
+
+    script = Path(__file__).parent / "dream_qlora_train.py"
+    log.info(f"Launching QLoRA training on {pair_count} pairs")
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = "1"  # GV100 GPU 1 (Kirk's)
+    env.setdefault("HF_TOKEN", os.environ.get("HF_TOKEN", ""))
+    try:
+        result = subprocess.run(
+            [sys.executable, "-u", str(script),
+             "--base", "Qwen/Qwen2.5-32B-Instruct",
+             "--rank", "16", "--epochs", "3", "--min-pairs", str(min_pairs)],
+            env=env, timeout=5400, capture_output=True, text=True)
+        log.info(f"QLoRA exit={result.returncode}")
+        if result.stdout:
+            log.info(f"QLoRA stdout tail:\n{result.stdout[-2000:]}")
+        if result.returncode != 0 and result.stderr:
+            log.warning(f"QLoRA stderr tail:\n{result.stderr[-2000:]}")
+    except subprocess.TimeoutExpired:
+        log.warning("QLoRA training exceeded 90 min — aborted")
+    except Exception as e:
+        log.warning(f"QLoRA launch failed: {e}")
+
+
 def run_dream_cycle():
     """Execute one dreaming cycle."""
     log.info("=== EREBUS DREAMING CYCLE START ===")
@@ -266,6 +302,10 @@ def run_dream_cycle():
 
     # 4. Update wiki
     dream_update_wiki(analysis, new_module)
+
+    # 5. QLoRA weight updates — the real learning.
+    # Runs only if enough training pairs have accumulated.
+    run_qlora_training(min_pairs=10)
 
     log.info("=== EREBUS DREAMING CYCLE COMPLETE ===")
 
