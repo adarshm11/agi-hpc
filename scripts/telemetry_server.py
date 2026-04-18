@@ -1191,8 +1191,40 @@ def _classify_activity(line: str) -> str:
     return "info"
 
 
+def _seed_activity_from_tail(path: str, source: str, n_lines: int = 30) -> None:
+    """Pre-populate the ring buffer with the last N lines of a log so the
+    UI has context immediately instead of waiting for new activity."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            read = min(size, 16384)
+            f.seek(size - read)
+            tail = f.read(read).decode("utf-8", errors="replace")
+        lines = [ln for ln in tail.splitlines() if ln.strip()][-n_lines:]
+        with _EREBUS_ACTIVITY_LOCK:
+            for ln in lines:
+                _EREBUS_ACTIVITY_SEQ["n"] += 1
+                _EREBUS_ACTIVITY.append(
+                    {
+                        "seq": _EREBUS_ACTIVITY_SEQ["n"],
+                        "ts": time.time(),
+                        "source": source,
+                        "text": ln[:500],
+                        "kind": _classify_activity(ln),
+                    }
+                )
+    except FileNotFoundError:
+        pass
+    except Exception as _e:
+        log.debug(f"[activity-seed] {path}: {_e}")
+
+
 def _tail_erebus_logs():
     """Background thread: tail the 3 scientist logs, append to ring buffer."""
+    for source, path in _EREBUS_ACTIVITY_LOGS:
+        _seed_activity_from_tail(path, source, n_lines=30)
+
     positions: dict[str, int] = {}
     # Seed positions at each file's current end so we only show new activity
     for _, path in _EREBUS_ACTIVITY_LOGS:
