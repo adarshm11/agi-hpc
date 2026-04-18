@@ -1819,7 +1819,8 @@ def _erebus_chat(user_message: str) -> str:
 
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1")
+        client = OpenAI(api_key=token, base_url="https://ellm.nrp-nautilus.io/v1",
+                         timeout=30)
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -1904,10 +1905,10 @@ def _erebus_chat(user_message: str) -> str:
             import traceback
             log.warning(f"Agentic mode failed, falling back: {tool_err}\n{traceback.format_exc()}")
 
-        # Fallback: simple chat without tools
+        # Simple chat (no tools)
         r = client.chat.completions.create(
             model="kimi", max_tokens=1024, messages=messages,
-            extra_body=extra,
+            extra_body=extra, timeout=30,
         )
         return r.choices[0].message.content or ""
     except Exception as e:
