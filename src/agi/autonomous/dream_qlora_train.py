@@ -80,7 +80,7 @@ def format_example(pair: dict) -> dict:
     ]}
 
 
-def build_dataset(pairs: list[dict], tokenizer, max_len: int = 2048):
+def build_dataset(pairs: list[dict], tokenizer, max_len: int = 1024):
     """Tokenize chat examples with Qwen chat template. Mask labels on the user
     prompt so the loss only applies to the assistant's Python code."""
     import torch
@@ -188,6 +188,10 @@ def train(base: str, pairs: list[dict], rank: int, epochs: int,
                         "gate_proj", "up_proj", "down_proj"],
     )
     model = get_peft_model(model, lora)
+    # Gradient checkpointing trades compute for VRAM — essential on 32GB
+    # GV100 for 7B-14B models. Must enable input grads when base is frozen.
+    model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()
     model.print_trainable_parameters()
 
     out_path.mkdir(parents=True, exist_ok=True)
@@ -197,6 +201,7 @@ def train(base: str, pairs: list[dict], rank: int, epochs: int,
         num_train_epochs=epochs,
         per_device_train_batch_size=1,
         gradient_accumulation_steps=8,
+        gradient_checkpointing=True,
         learning_rate=2e-4,
         bf16=True,
         logging_steps=5,
