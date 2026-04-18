@@ -1149,13 +1149,20 @@ def _get_nrp_nats_telemetry():
 
 
 # ── NRP utilization watchdog ──────────────────────────────────
-# Enforces NRP guidelines: GPU >40%, CPU 20-200%, Memory 20-150%
-# Kills pods that violate for 2+ consecutive checks (60s grace)
+# NRP Cluster Policy (exact):
+#   - A single user can't submit more than 4 pods violating:
+#     GPU >40%, CPU 20-200%, RAM 20-150% of requested
+#   - Jobs with sleep command = ban
+#   - Ignored: Memory <=2GB, CPU <=1
+#
+# Strategy: kill violating pods aggressively to stay under 4.
+# One strike = warning. Two consecutive strikes = kill.
+# If 3+ pods are violating simultaneously, kill the worst immediately.
 
 _nrp_violations: dict[str, int] = {}  # pod_name -> consecutive violation count
 
 def _nrp_watchdog_check(pods: list[dict]):
-    """Check running pods for utilization violations and kill offenders."""
+    """Check running pods for utilization violations. Kill to stay under 4."""
     global _nrp_violations
     kubeconfig = os.path.expanduser("~/.kube/config")
     ns = "ssu-atlas-ai"
@@ -1189,6 +1196,8 @@ def _nrp_watchdog_check(pods: list[dict]):
         if val.endswith("Ki"):
             return int(val[:-2]) // 1024
         return 0
+
+    violating_pods = []  # (name, violations, pod)
 
     for pod in active:
         name = pod["name"]
@@ -1224,31 +1233,48 @@ def _nrp_watchdog_check(pods: list[dict]):
 
         if violations:
             _nrp_violations[name] = _nrp_violations.get(name, 0) + 1
-            count = _nrp_violations[name]
+            violating_pods.append((name, violations, pod))
+        else:
+            _nrp_violations.pop(name, None)
+
+    # ── Enforcement: stay under 4 violating pods ──
+    # NRP bans at 4+ violating pods. We kill at 3 to have margin.
+    n_violating = len(violating_pods)
+
+    for name, violations, pod in violating_pods:
+        count = _nrp_violations.get(name, 0)
+        kill = False
+
+        if n_violating >= 3:
+            # DANGER ZONE: kill immediately, no grace period
+            kill = True
+            log.warning(f"[nrp-watchdog] EMERGENCY KILL {name}: "
+                       f"{', '.join(violations)} — {n_violating} pods violating "
+                       f"(ban threshold is 4)")
+        elif count >= 2:
+            # Two consecutive strikes
+            kill = True
+            log.warning(f"[nrp-watchdog] KILLING {name}: "
+                       f"{', '.join(violations)} — strike {count}")
+        else:
             log.warning(f"[nrp-watchdog] {name}: {', '.join(violations)} "
                        f"(strike {count}/2)")
 
-            if count >= 2:
-                # Kill the pod
-                log.warning(f"[nrp-watchdog] KILLING {name} — utilization violation "
-                           f"for {count} consecutive checks")
-                try:
-                    job_name = pod.get("job", "")
-                    if job_name:
-                        subprocess.run(
-                            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
-                             "delete", "job", job_name],
-                            capture_output=True, timeout=10)
-                    else:
-                        subprocess.run(
-                            ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
-                             "delete", "pod", name],
-                            capture_output=True, timeout=10)
-                except Exception as e:
-                    log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
-                _nrp_violations.pop(name, None)
-        else:
-            # Clear violations if pod is now compliant
+        if kill:
+            try:
+                job_name = pod.get("job", "")
+                if job_name:
+                    subprocess.run(
+                        ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+                         "delete", "job", job_name],
+                        capture_output=True, timeout=10)
+                else:
+                    subprocess.run(
+                        ["kubectl", "--kubeconfig", kubeconfig, "-n", ns,
+                         "delete", "pod", name],
+                        capture_output=True, timeout=10)
+            except Exception as e:
+                log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
             _nrp_violations.pop(name, None)
 
 
