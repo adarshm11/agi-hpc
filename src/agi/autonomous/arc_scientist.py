@@ -469,6 +469,31 @@ def extract_code(response: str) -> str | None:
     return None
 
 
+def _write_training_pair(task_dir: Path, task_num: int, task: dict,
+                         code: str, strategy: str, model: str) -> None:
+    """Append a verified (task_examples, python_transform) pair to today's JSONL
+    for QLoRA fine-tuning. Stored under /archive/neurogolf/training_data/."""
+    try:
+        out_dir = task_dir / "training_data"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        day = datetime.now().strftime("%Y-%m-%d")
+        path = out_dir / f"solves_{day}.jsonl"
+        pair = {
+            "task_num": task_num,
+            "task_examples": task.get("train", []),
+            "test_examples": task.get("test", []),
+            "python_transform": code,
+            "strategy": strategy,
+            "model": model,
+            "timestamp": datetime.now().isoformat(),
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(pair) + "\n")
+    except Exception as e:
+        # Don't let logging failure break the solve loop.
+        print(f"[training_data] write failed: {e}", flush=True)
+
+
 def verify_transform(transform_fn, task: dict) -> tuple[int, int]:
     correct = total = 0
     for split in ("train", "test", "arc-gen"):
@@ -839,6 +864,8 @@ class ARCScientist:
                     code=code, task_summary=tsummary,
                 ))
                 unsolved.remove(tn)
+                _write_training_pair(self.task_dir, tn, task, code,
+                                     strategy_name, model)
                 print(f"-> SOLVED {correct}/{total}", flush=True)
             else:
                 attempts_this_cycle += 1

@@ -178,7 +178,7 @@ def dream_synthesize_compiler(successes: list[dict], analysis: str) -> str:
 
     try:
         r = client.chat.completions.create(
-            model="qwen3", max_tokens=4000,
+            model="qwen3", max_tokens=8000,
             messages=[{"role": "user", "content": prompt}],
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
@@ -230,14 +230,24 @@ def run_dream_cycle():
     new_module = dream_synthesize_compiler(successes, analysis)
     if new_module:
         # Extract code and save
+        import ast
         code = None
         if "```" in new_module:
             for part in new_module.split("```"):
                 if part.startswith("python"):
                     part = part[6:]
-                if "def compile_" in part or "def detect_" in part:
+                if ("def compile_" in part or "def detect_" in part
+                        or "def make_model" in part):
                     code = part.strip()
                     break
+
+        if code:
+            # Validate syntax before saving to avoid polluting compiler dir
+            try:
+                ast.parse(code)
+            except SyntaxError as e:
+                log.warning(f"Synthesized module has syntax error at line {e.lineno}: {e.msg}. Discarding.")
+                code = None
 
         if code:
             today = datetime.now().strftime("%Y%m%d")
@@ -249,10 +259,10 @@ def run_dream_cycle():
             try:
                 ns = {}
                 exec(code, ns)
-                funcs = [k for k in ns if k.startswith("compile_") or k.startswith("detect_")]
+                funcs = [k for k in ns if k.startswith(("compile_", "detect_", "make_"))]
                 log.info(f"Module defines: {funcs}")
             except Exception as e:
-                log.warning(f"Module has errors: {e}")
+                log.warning(f"Module import-time error: {e}")
 
     # 4. Update wiki
     dream_update_wiki(analysis, new_module)
