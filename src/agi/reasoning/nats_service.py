@@ -8,6 +8,7 @@ publishes heartbeat to agi.meta.monitor.ego.
 
 Uses the same NatsEventFabric as other AGI-HPC services.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,6 +27,7 @@ HEARTBEAT_S = 30
 
 async def _check_health() -> bool:
     import urllib.request
+
     try:
         r = urllib.request.urlopen(f"{EGO_URL}/health", timeout=3)
         return r.status == 200
@@ -49,17 +51,22 @@ async def run():
     # Heartbeat
     while True:
         healthy = await _check_health()
-        hb = Event.create("ego", "agi.meta.monitor.ego", {
-            "service": "divine_council",
-            "status": "online" if healthy else "offline",
-            "ts": time.time(),
-        })
+        hb = Event.create(
+            "ego",
+            "agi.meta.monitor.ego",
+            {
+                "service": "divine_council",
+                "status": "online" if healthy else "offline",
+                "ts": time.time(),
+            },
+        )
         await fabric.publish("agi.meta.monitor.ego", hb)
         await asyncio.sleep(HEARTBEAT_S)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    )
     logger.info("[ego-nats] starting Divine Council NATS bridge")
     asyncio.run(run())
