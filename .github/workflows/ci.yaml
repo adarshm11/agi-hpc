@@ -81,11 +81,22 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "--- Copying dashboard HTML ---"
-            cp -f atlas-chat-schematic.html /home/claude/atlas-chat/schematic.html
-            cp -f atlas-chat-schematic.html /home/claude/atlas-chat/atlas-chat-schematic.html
-            cp -f atlas-chat-index.html /home/claude/atlas-chat/index.html 2>/dev/null || true
-            cp -f atlas-chat-events.html /home/claude/atlas-chat/events.html 2>/dev/null || true
+            echo "--- Refreshing dashboard HTML symlinks ---"
+            # Never cp through the destination: it's a symlink into the git
+            # tree, so cp -f would write stale content back into the repo and
+            # cause silent working-tree drift. Use ln -sfn instead. The
+            # canonical source is infra/local/atlas-chat/*.html.
+            for f in schematic.html index.html events.html erebus.html; do
+              src="/home/claude/agi-hpc/infra/local/atlas-chat/$f"
+              dst="/home/claude/atlas-chat/$f"
+              if [ -f "$src" ]; then
+                ln -sfn "$src" "$dst"
+              fi
+            done
+            # Remove any stale legacy regular-file copies that previously shadowed the symlinks
+            rm -f /home/claude/atlas-chat/atlas-chat-schematic.html \
+                  /home/claude/atlas-chat/atlas-chat-index.html \
+                  /home/claude/atlas-chat/atlas-chat-events.html
 
             echo "--- Installing Python package ---"
             /home/claude/env/bin/pip install -e ".[nats]" --quiet
