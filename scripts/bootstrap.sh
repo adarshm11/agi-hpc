@@ -59,7 +59,7 @@ fi
 # 3. Install dependencies
 if $_bootstrap_ok; then
     info "Installing project dependencies (core + dev)..."
-    if pip install --upgrade pip --quiet && pip install -e "${REPO_ROOT}"'[dev]' --quiet; then
+    if pip install --upgrade pip --quiet && pip install -e "${REPO_ROOT}[dev]" --quiet; then
         banner "Dependencies installed"
     else
         fail "pip install failed"
