@@ -38,12 +38,18 @@ log "=== Deploying to Atlas ($ATLAS_HOST) ==="
 log "Pulling latest code..."
 ssh "$ATLAS_USER@$ATLAS_HOST" "cd $DEPLOY_PATH && git fetch origin main && git reset --hard origin/main"
 
-# Step 2: Copy dashboard HTML
-log "Copying dashboard HTML..."
+# Step 2: Ensure dashboard HTML symlinks point at the canonical git tree
+# (not a cp — cp -f through a symlink writes back into the repo and causes
+# silent working-tree drift; see post-mortem in commit message.)
+log "Refreshing dashboard HTML symlinks..."
 ssh "$ATLAS_USER@$ATLAS_HOST" << EOF
-cp -f $DEPLOY_PATH/atlas-chat-schematic.html $STATIC_PATH/schematic.html
-cp -f $DEPLOY_PATH/atlas-chat-index.html $STATIC_PATH/index.html 2>/dev/null || true
-cp -f $DEPLOY_PATH/atlas-chat-events.html $STATIC_PATH/events.html 2>/dev/null || true
+for f in schematic.html index.html events.html erebus.html; do
+  src="$DEPLOY_PATH/infra/local/atlas-chat/\$f"
+  dst="$STATIC_PATH/\$f"
+  if [ -f "\$src" ]; then
+    ln -sfn "\$src" "\$dst"
+  fi
+done
 EOF
 
 # Step 3: Install/update Python package

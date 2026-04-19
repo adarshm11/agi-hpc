@@ -1,8 +1,43 @@
 # Atlas AI — Roadmap to Artificial General Intelligence
 
 **Author:** Andrew H. Bond
-**Date:** April 2026
+**Date:** April 2026 (last update 2026-04-19)
 **Status:** Active Research Program
+
+---
+
+## Status snapshot — 2026-04-19
+
+| Track | Status | Detail |
+|---|---|---|
+| **Dual-hemisphere debate validation** | Pending experiment | Benchmark construction not started. |
+| **ARC Scientist (autonomous loop)** | Running | **100 / 400 tasks solved (25.0 %)**, 1,364 lifetime attempts. Mentor-preamble mechanism active. |
+| **The Primer (auto-sensei)** | Shipped, running | `atlas-primer.service` 2026-04-19. First verified note: `sensei_task_020.md` (symmetry-completion). vMOE ensemble over Kimi + GLM-4.7 + Qwen3; expert health tracker; 10-min cadence. See [`THE_PRIMER.md`](THE_PRIMER.md). |
+| **vMOE substrate** | Shipped | `src/agi/primer/vmoe.py`; four orchestration policies (route / cascade / ensemble / first_verified); 32 unit tests. See [`VMOE.md`](VMOE.md). |
+| **Chat ego as vMOE cascade** | Pending | Chat still pinned to `kimi` in `telemetry_server.py`. Cutover blocked on (a) self-hosted fine-tunable slot for dream adapters OR (b) acceptance that managed `glm-4.7` is "ego enough" for stable voice. See session-task #16. |
+| **Self-hosted ego pod** | Blocked on NRP capacity | PVC `erebus-ego-models` (300 Gi, rook-cephfs) is Bound and waiting. L40 effectively unavailable (15 / 17 nodes reserved for csu-tide); pivoted plan to GLM-4.5-Air AWQ on 4× A10 (abundant). Probe attempts in session didn't schedule — A10 sub-pool was also under pressure. Scheduled project, not today. See session-task #14–15. |
+| **Atlas llama.cpp fallback ego** | Pending | GLM-4.5-Air INT4 GGUF on 2× GV100 as tier-2 fallback for NRP outages. See session-task #17. |
+| **LoRA hot-swap for dreaming adapters** | Deferred | Depends on self-hosted slot. Pipeline producing adapters; serving side waits. Session-task #18. |
+| **Dashboard regression guards** | Shipped | Deploy-smoke + Dashboard-render CI workflows, dynamic UI version stamp, `/api/version`. See [`CHANGELOG.md`](CHANGELOG.md) §2026-04-19. |
+| **Ego labelling** | Fixed | Kirk is now labelled Ego (was mislabelled Id in topology). Systemd unit name `atlas-id.service` is historical; function is Ego. |
+
+The **Primer** is the most significant recent development. It closes the teaching loop for the ARC Scientist without a human sensei in the loop, and its verify-against-train discipline means the wiki only accumulates correct rules — the scaffold under which the Scientist's solve rate climbs.
+
+### Note — vLLM's native Anthropic-protocol serving (2026-04-19)
+
+As of vLLM's March 2026 release, `vllm serve` with `--tool-call-parser <hermes|mistral|llama3_json|pythonic|...>` speaks the Anthropic Messages API directly (not just OpenAI-compatible). This is distinct from NRP's `/anthropic` proxy which is a separate translation layer over shared models.
+
+**Implication for Phase 2 (self-hosted ego pod):** when we stand up GLM-4.6-AWQ or GLM-4.5-Air on vLLM, enable `--tool-call-parser` and expose both the OpenAI-compatible and Anthropic endpoints. That gives three valuable things for free:
+
+1. **Claude Code / open-claude-code against our own model.** `ruvnet/open-claude-code` is a MIT-licensed clean-room Claude Code CLI (25 tools, git worktree isolation, multi-file atomic edits, MCP transports). Point `ANTHROPIC_BASE_URL` at our vLLM endpoint, use `ANTHROPIC_MODEL=<served-model-name>`, and the full Claude Code agent loop runs against our fine-tuned weights.
+2. **Richer interactive ego sessions.** Today's chat handler does single-shot completions. A Claude-Code-style loop with tool use + git + file edits is the right shape for the ego's planned `/primer/ask` endpoint and general developer-facing interaction.
+3. **No lock-in.** Anthropic endpoint + OpenAI endpoint + NATS publish paths all coexist on the same pod. Clients pick the protocol that fits their agent loop.
+
+Caveat: Claude Code rejects model names containing `/`, so configure `--served-model-name` without the HuggingFace `org/name` slash (we'd already be doing this for our deployment — aliases like `erebus-ego` or `glm-4.5-air` are fine).
+
+Action: add the `--tool-call-parser` flag to the Phase-2 vLLM manifest template when we build it. Non-urgent — the OpenAI path is sufficient for the Primer and chat-ego cutover. But it's a zero-cost add when we're writing the pod spec anyway.
+
+**What this does NOT change:** The Primer stays programmatic. It's an auto-sensei with a vMOE ensemble and run-against-train verification — a CLI agent loop is the wrong shape for that role. Claude Code is a *client* story, not a replacement for the Primer.
 
 ---
 

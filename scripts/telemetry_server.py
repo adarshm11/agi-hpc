@@ -18,8 +18,9 @@ import json
 import logging
 import os
 import subprocess
+import threading
 import time
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 logging.basicConfig(
@@ -28,8 +29,72 @@ logging.basicConfig(
 log = logging.getLogger("telemetry")
 
 STATIC_DIR = os.environ.get("ATLAS_STATIC", "/home/claude/atlas-chat")
+REPO_DIR = os.environ.get("ATLAS_REPO", "/home/claude/agi-hpc")
+_ui_version_cache = {"sha": "", "ts": 0.0}
+
+
+def _ui_version_stamp(html_path: str) -> str:
+    """Return 'SHA · MTIME' for the dashboard footer. Cached for 15s.
+    Falls back gracefully if git/stat fail so serving never breaks."""
+    try:
+        now = time.time()
+        if now - _ui_version_cache["ts"] > 15 or not _ui_version_cache["sha"]:
+            r = subprocess.run(
+                ["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            _ui_version_cache["sha"] = (
+                r.stdout.strip() if r.returncode == 0 else "nogit"
+            )
+            _ui_version_cache["ts"] = now
+        sha = _ui_version_cache["sha"]
+        try:
+            mtime = os.path.getmtime(os.path.realpath(html_path))
+            ts = time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(mtime))
+        except Exception:
+            ts = "?"
+        return f"{sha} · {ts}"
+    except Exception:
+        return "?"
+
+
 PORT = int(os.environ.get("TELEMETRY_PORT", "8085"))
 DB_DSN = os.environ.get("ATLAS_DB_DSN", "dbname=atlas user=claude")
+SNAPSHOT_INTERVAL = float(os.environ.get("TELEMETRY_SNAPSHOT_S", "2.5"))
+
+
+# Background snapshot cache: build_telemetry() is expensive (shells out to
+# nvidia-smi/sensors/NATS/Postgres). One refresher thread populates this
+# every SNAPSHOT_INTERVAL seconds; per-request handlers read it under a
+# lock — O(1) per request, so the accept queue can't overflow.
+_SNAPSHOT_LOCK = threading.Lock()
+_SNAPSHOT = {"telemetry": {}, "events": [], "ts": 0.0}
+
+
+def _refresher():
+    while True:
+        try:
+            t = build_telemetry()
+            ev = _build_events()
+            with _SNAPSHOT_LOCK:
+                _SNAPSHOT["telemetry"] = t
+                _SNAPSHOT["events"] = ev
+                _SNAPSHOT["ts"] = time.time()
+        except Exception as e:
+            log.warning("snapshot refresh failed: %s", e)
+        time.sleep(SNAPSHOT_INTERVAL)
+
+
+def get_cached_telemetry():
+    with _SNAPSHOT_LOCK:
+        return _SNAPSHOT["telemetry"] or build_telemetry()
+
+
+def get_cached_events():
+    with _SNAPSHOT_LOCK:
+        return _SNAPSHOT["events"] or _build_events()
 
 
 def _run(cmd, timeout=3):
@@ -1044,6 +1109,1470 @@ def _build_events():
     return events
 
 
+_nrp_cache = {"data": {}, "ts": 0}
+
+# ── NRP NATS telemetry subscriber ──────────────────────────────
+# Background thread subscribes to nrp.> on local NATS so the leaf
+# node bridges those subjects from NRP. Incoming messages are cached
+# and served via /api/nrp-telemetry.
+_nrp_nats_cache = {"heartbeats": [], "pods": {}, "last_heartbeat": 0}
+_nrp_nats_lock = threading.Lock()
+
+
+def _nrp_nats_listener():
+    """Background thread: subscribe to nrp.> on Atlas NATS."""
+    import socket as _socket
+
+    while True:
+        try:
+            s = _socket.create_connection(("localhost", 4222), 10)
+            s.settimeout(90)  # longer than heartbeat interval
+            s.recv(4096)  # INFO
+            s.sendall(b'CONNECT {"verbose":false}\r\n')
+            s.sendall(b"SUB nrp.> 1\r\n")
+            s.sendall(b"PING\r\n")
+            s.recv(1024)
+            log.info("[nrp-nats] subscribed to nrp.>")
+
+            buf = b""
+            while True:
+                data = s.recv(4096)
+                if not data:
+                    break
+                buf += data
+                while b"\r\n" in buf:
+                    line, buf = buf.split(b"\r\n", 1)
+                    if line.startswith(b"MSG"):
+                        parts = line.decode().split()
+                        subject = parts[1]
+                        size = int(parts[-1])
+                        while len(buf) < size + 2:
+                            buf += s.recv(4096)
+                        payload = buf[:size].decode(errors="replace")
+                        buf = buf[size + 2 :]
+                        try:
+                            msg = json.loads(payload)
+                        except Exception:
+                            msg = {"raw": payload[:200]}
+                        with _nrp_nats_lock:
+                            if subject == "nrp.heartbeat":
+                                _nrp_nats_cache["last_heartbeat"] = time.time()
+                                _nrp_nats_cache["heartbeats"].append(msg)
+                                _nrp_nats_cache["heartbeats"] = _nrp_nats_cache[
+                                    "heartbeats"
+                                ][-10:]
+                            elif subject == "nrp.pods":
+                                _nrp_nats_cache["pods"] = msg
+                            log.info("[nrp-nats] %s: %s", subject, str(msg)[:120])
+                    elif line == b"PING":
+                        s.sendall(b"PONG\r\n")
+        except Exception as e:
+            log.warning("[nrp-nats] disconnected: %s — reconnecting in 10s", e)
+        time.sleep(10)
+
+
+def _get_nrp_nats_telemetry():
+    with _nrp_nats_lock:
+        age = (
+            time.time() - _nrp_nats_cache["last_heartbeat"]
+            if _nrp_nats_cache["last_heartbeat"]
+            else None
+        )
+        return {
+            "leaf_alive": age is not None and age < 120,
+            "last_heartbeat_age_s": round(age, 1) if age else None,
+            "heartbeats": list(_nrp_nats_cache["heartbeats"]),
+            "pods": dict(_nrp_nats_cache["pods"]),
+        }
+
+
+# ── Erebus activity stream ───────────────────────────────────
+# Ring buffer of the last ~500 log lines from arc_scientist /
+# onnx_scientist / dreaming_schedule, each tagged with a monotonic seq.
+# The chat UI sidebar polls /api/erebus/activity?since=SEQ for new entries.
+import collections as _collections  # noqa: E402 (grouped with other local state)
+import re as _re  # noqa: E402
+
+_EREBUS_ACTIVITY_LOGS = [
+    ("scientist", "/archive/neurogolf/scientist.log"),
+    ("onnx", "/archive/neurogolf/onnx_scientist.log"),
+    ("dream", "/archive/neurogolf/dreaming_schedule.log"),
+]
+_EREBUS_ACTIVITY_MAX = 500
+_EREBUS_ACTIVITY = _collections.deque(maxlen=_EREBUS_ACTIVITY_MAX)
+_EREBUS_ACTIVITY_SEQ = {"n": 0}
+_EREBUS_ACTIVITY_LOCK = threading.Lock()
+
+
+def _classify_activity(line: str) -> str:
+    """Color-code line by kind. Order matters — first match wins."""
+    lo = line.lower()
+    if "-> solved" in lo or ("verified" in lo and "true" in lo):
+        return "solved"
+    if "help requested" in lo or "help_requested" in lo:
+        return "help"
+    if (
+        "meta-pattern" in lo
+        or "strategy performance" in lo
+        or "fingerprints:" in lo
+        or "cluster " in lo
+    ):
+        return "meta"
+    if (
+        "microsleep" in lo
+        or "mediumsleep" in lo
+        or "deepsleep" in lo
+        or "qlora" in lo
+        or "dream cycle" in lo
+        or "dream tiers" in lo
+    ):
+        return "dream"
+    if "traceback" in lo or "exception" in lo or lo.startswith("error"):
+        return "error"
+    if _re.search(r"\[\d+/\d+\]", line) or "-> " in line:
+        return "attempt"
+    return "info"
+
+
+def _seed_activity_from_tail(path: str, source: str, n_lines: int = 30) -> None:
+    """Pre-populate the ring buffer with the last N lines of a log so the
+    UI has context immediately instead of waiting for new activity."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            read = min(size, 16384)
+            f.seek(size - read)
+            tail = f.read(read).decode("utf-8", errors="replace")
+        lines = [ln for ln in tail.splitlines() if ln.strip()][-n_lines:]
+        with _EREBUS_ACTIVITY_LOCK:
+            for ln in lines:
+                _EREBUS_ACTIVITY_SEQ["n"] += 1
+                _EREBUS_ACTIVITY.append(
+                    {
+                        "seq": _EREBUS_ACTIVITY_SEQ["n"],
+                        "ts": time.time(),
+                        "source": source,
+                        "text": ln[:500],
+                        "kind": _classify_activity(ln),
+                    }
+                )
+    except FileNotFoundError:
+        pass
+    except Exception as _e:
+        log.debug(f"[activity-seed] {path}: {_e}")
+
+
+def _tail_erebus_logs():
+    """Background thread: tail the 3 scientist logs, append to ring buffer."""
+    for source, path in _EREBUS_ACTIVITY_LOGS:
+        _seed_activity_from_tail(path, source, n_lines=30)
+
+    positions: dict[str, int] = {}
+    # Seed positions at each file's current end so we only show new activity
+    for _, path in _EREBUS_ACTIVITY_LOGS:
+        try:
+            positions[path] = os.path.getsize(path)
+        except OSError:
+            positions[path] = 0
+
+    while True:
+        for source, path in _EREBUS_ACTIVITY_LOGS:
+            try:
+                size = os.path.getsize(path)
+                if size < positions.get(path, 0):
+                    # Log rotated/truncated — restart from 0.
+                    positions[path] = 0
+                if size > positions[path]:
+                    with open(path, "rb") as f:
+                        f.seek(positions[path])
+                        chunk = f.read(size - positions[path])
+                    positions[path] = size
+                    text = chunk.decode("utf-8", errors="replace")
+                    for raw in text.splitlines():
+                        line = raw.strip()
+                        if not line:
+                            continue
+                        with _EREBUS_ACTIVITY_LOCK:
+                            _EREBUS_ACTIVITY_SEQ["n"] += 1
+                            _EREBUS_ACTIVITY.append(
+                                {
+                                    "seq": _EREBUS_ACTIVITY_SEQ["n"],
+                                    "ts": time.time(),
+                                    "source": source,
+                                    "text": line[:500],
+                                    "kind": _classify_activity(line),
+                                }
+                            )
+            except FileNotFoundError:
+                continue
+            except Exception as _e:
+                log.debug(f"[activity-tail] {path}: {_e}")
+        time.sleep(1.0)
+
+
+def _get_erebus_activity(since: int = 0, limit: int = 200) -> dict:
+    with _EREBUS_ACTIVITY_LOCK:
+        rows = [e for e in _EREBUS_ACTIVITY if e["seq"] > since][-limit:]
+        seq = _EREBUS_ACTIVITY_SEQ["n"]
+    return {"seq": seq, "entries": rows}
+
+
+# ── NRP utilization watchdog ──────────────────────────────────
+# NRP Cluster Policy:
+#   - Max 4 pods with GPU>40% / CPU 20-200% / RAM 20-150%
+#   - 5+ pods: ALL must stay under those thresholds
+#   - Pods IDLE relative to their request = violation (wasting resources)
+#   - Ignored: Memory <=2GB, CPU <=1
+#   - Jobs with sleep = ban
+#
+# Watchdog does TWO things:
+#   1. KILL pods that are under-utilizing requested resources
+#   2. COUNT violations and enforce the 4-pod limit
+
+
+def _get_pod_logs(pod_name: str, tail: int = 8) -> dict:
+    """Fetch recent logs from a pod via kubectl."""
+    kubeconfig = os.path.expanduser("~/.kube/config")
+    ns = "ssu-atlas-ai"
+    try:
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                kubeconfig,
+                "-n",
+                ns,
+                "logs",
+                pod_name,
+                f"--tail={tail}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return {"pod": pod_name, "logs": result.stdout.strip().split("\n")}
+        return {"pod": pod_name, "error": result.stderr.strip()[:200]}
+    except Exception as e:
+        return {"pod": pod_name, "error": str(e)[:200]}
+
+
+_nrp_violations: dict[str, int] = {}
+_nrp_mode: dict = {"mode": "auto", "active": "unknown", "n_active": 0}
+
+
+def _parse_cpu_m(val):
+    if not val:
+        return 0
+    val = str(val).strip()
+    return int(val[:-1]) if val.endswith("m") else int(float(val) * 1000)
+
+
+def _parse_mem_mi(val):
+    if not val:
+        return 0
+    val = str(val).strip().replace(" ", "")
+    if val.endswith("Mi"):
+        return int(val[:-2])
+    if val.endswith("Gi"):
+        return int(float(val[:-2]) * 1024)
+    if val.endswith("GB"):
+        return int(float(val[:-2]) * 1024)
+    return 0
+
+
+def _pod_is_violating(pod) -> str | None:
+    """Check if a pod violates NRP utilization rules.
+
+    Returns violation description string, or None if compliant.
+    A pod violates if it's under-utilizing resources it requested
+    (outside the ignored ranges).
+    """
+    usage = pod.get("usage", {})
+    gpu_live = pod.get("gpu_live", {})
+    res = pod.get("resources", {})
+
+    # GPU: if requested, must be >40%
+    if res.get("gpu") and gpu_live.get("gpu_util_pct") is not None:
+        if gpu_live["gpu_util_pct"] <= 40:
+            return f"GPU {gpu_live['gpu_util_pct']}% (need >40%)"
+
+    # CPU: if requested >1 CPU, usage must be 20-200% of request
+    cpu_req_m = _parse_cpu_m(res.get("cpu", ""))
+    cpu_used_m = _parse_cpu_m(usage.get("cpu_used", ""))
+    if cpu_req_m > 1000:  # >1 CPU requested (not in ignored range)
+        if cpu_used_m == 0:
+            return f"CPU 0% of {cpu_req_m}m requested"
+        cpu_pct = cpu_used_m * 100 // cpu_req_m
+        if cpu_pct < 20:
+            return f"CPU {cpu_pct}% (need 20-200%)"
+        if cpu_pct > 200:
+            return f"CPU {cpu_pct}% (need 20-200%)"
+
+    # RAM: if requested >2GB, usage must be 20-150% of request
+    mem_req_mi = _parse_mem_mi(res.get("memory", ""))
+    mem_used_mi = _parse_mem_mi(usage.get("mem_used", ""))
+    if mem_req_mi > 2048:  # >2GB requested (not in ignored range)
+        if mem_used_mi == 0:
+            return f"RAM 0% of {mem_req_mi}Mi requested"
+        mem_pct = mem_used_mi * 100 // mem_req_mi
+        if mem_pct < 20:
+            return f"RAM {mem_pct}% (need 20-150%)"
+        if mem_pct > 150:
+            return f"RAM {mem_pct}% (need 20-150%)"
+
+    return None
+
+
+def _nrp_watchdog_check(pods: list[dict]):
+    """Enforce NRP utilization rules. Kill violating pods."""
+    global _nrp_violations
+    kubeconfig = os.path.expanduser("~/.kube/config")
+    ns = "ssu-atlas-ai"
+
+    active = [p for p in pods if p.get("phase") == "Running"]
+    current_names = {p["name"] for p in active}
+    _nrp_violations = {k: v for k, v in _nrp_violations.items() if k in current_names}
+
+    n_active = len(active)
+    n_violating = 0
+    pods_to_kill = []
+
+    for pod in active:
+        name = pod["name"]
+        violation = _pod_is_violating(pod)
+
+        if violation:
+            n_violating += 1
+            _nrp_violations[name] = _nrp_violations.get(name, 0) + 1
+            count = _nrp_violations[name]
+            log.warning(f"[nrp-watchdog] {name}: {violation} (strike {count})")
+
+            if count >= 2:
+                pods_to_kill.append((name, pod, violation))
+        else:
+            _nrp_violations.pop(name, None)
+
+    # Kill pods with 2+ consecutive violations
+    for name, pod, violation in pods_to_kill:
+        log.warning(f"[nrp-watchdog] KILLING {name}: {violation}")
+        try:
+            job_name = pod.get("job", "")
+            target = ("job", job_name) if job_name else ("pod", name)
+            subprocess.run(
+                [
+                    "kubectl",
+                    "--kubeconfig",
+                    kubeconfig,
+                    "-n",
+                    ns,
+                    "delete",
+                    target[0],
+                    target[1],
+                ],
+                capture_output=True,
+                timeout=10,
+            )
+        except Exception as e:
+            log.error(f"[nrp-watchdog] Failed to kill {name}: {e}")
+        _nrp_violations.pop(name, None)
+
+    # Emergency: if 4+ pods violating simultaneously, kill ALL violators immediately
+    if n_violating >= 4:
+        log.warning(
+            f"[nrp-watchdog] EMERGENCY: {n_violating} pods violating "
+            f"(ban threshold is 4). Killing all violators."
+        )
+        for pod in active:
+            name = pod["name"]
+            if _pod_is_violating(pod):
+                try:
+                    job_name = pod.get("job", "")
+                    target = ("job", job_name) if job_name else ("pod", name)
+                    subprocess.run(
+                        [
+                            "kubectl",
+                            "--kubeconfig",
+                            kubeconfig,
+                            "-n",
+                            ns,
+                            "delete",
+                            target[0],
+                            target[1],
+                        ],
+                        capture_output=True,
+                        timeout=10,
+                    )
+                except Exception:
+                    pass
+
+    _nrp_mode["active"] = "heavy" if n_active <= 4 else "swarm"
+    _nrp_mode["n_active"] = n_active
+    _nrp_mode["n_violating"] = n_violating
+
+    # Write violations to Erebus's help queue as negative feedback
+    if pods_to_kill:
+        try:
+            help_file = Path(EREBUS_HELP_PATH)
+            queue = []
+            if help_file.exists():
+                queue = json.loads(help_file.read_text())
+            from datetime import datetime
+
+            for name, pod, violation in pods_to_kill:
+                queue.append(
+                    {
+                        "task": 0,
+                        "question": (
+                            f"[WATCHDOG NEGATIVE FEEDBACK] Pod '{name}' was killed "
+                            f"for NRP violation: {violation}. "
+                            f"Resources requested: cpu={pod.get('resources',{}).get('cpu','?')}, "
+                            f"memory={pod.get('resources',{}).get('memory','?')}, "
+                            f"gpu={pod.get('resources',{}).get('gpu','')}. "
+                            f"Rule: CPU-only pods must use cpu<=1, memory<=2Gi to stay "
+                            f"in the ignored utilization range. GPU pods must maintain "
+                            f">40% GPU utilization. Do NOT repeat this mistake."
+                        ),
+                        "timestamp": datetime.now().isoformat(),
+                        "source": "watchdog",
+                        "severity": "violation",
+                    }
+                )
+            help_file.write_text(json.dumps(queue[-30:], indent=2))
+            log.info(
+                f"[nrp-watchdog] Wrote {len(pods_to_kill)} violation(s) to Erebus feedback"
+            )
+        except Exception as e:
+            log.warning(f"[nrp-watchdog] Failed to write Erebus feedback: {e}")
+
+    if n_active > 0:
+        log.info(f"[nrp-watchdog] {n_active} pods, {n_violating} violating")
+
+
+def nrp_validate_pod_spec(spec: dict) -> list[str]:
+    """Pre-submission validation. Returns list of problems, empty = OK.
+
+    Call this BEFORE kubectl apply to catch stupid requests.
+    """
+    problems = []
+    containers = (
+        spec.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+    )
+    if not containers:
+        problems.append("no containers defined")
+        return problems
+
+    c = containers[0]
+    res = c.get("resources", {})
+    req = res.get("requests", {})
+    lim = res.get("limits", {})
+
+    # limits must be within 20% of requests
+    for key in ("cpu", "memory"):
+        r = req.get(key, "")
+        l = lim.get(key, "")
+        if r and l and r != l:
+            r_val = _parse_cpu_m(r) if key == "cpu" else _parse_mem_mi(r)
+            l_val = _parse_cpu_m(l) if key == "cpu" else _parse_mem_mi(l)
+            if r_val > 0 and abs(l_val - r_val) / r_val > 0.2:
+                problems.append(f"{key} limits ({l}) >20% from requests ({r})")
+
+    # For >100 pods: limits MUST equal requests
+    # (can't check total pod count here, but flag if they differ)
+    if req.get("cpu") != lim.get("cpu") or req.get("memory") != lim.get("memory"):
+        problems.append("limits != requests (required for >100 pods)")
+
+    # CPU-only pods should use cpu<=1, memory<=2Gi to stay in ignored range
+    if not req.get("nvidia.com/gpu") and not lim.get("nvidia.com/gpu"):
+        mem_mi = _parse_mem_mi(req.get("memory", ""))
+        cpu_m = _parse_cpu_m(req.get("cpu", ""))
+        if mem_mi > 2048:
+            problems.append(
+                f"CPU-only pod requests {req['memory']} RAM "
+                f"(>2GB, subject to utilization monitoring). Use 2Gi."
+            )
+        if cpu_m > 1000:
+            problems.append(
+                f"CPU-only pod requests {req['cpu']} CPU "
+                f"(>1, subject to utilization monitoring). Use 1."
+            )
+
+    # No sleep in command
+    cmd = " ".join(c.get("command", []) + c.get("args", []))
+    if "sleep infinity" in cmd or cmd.rstrip().endswith("sleep"):
+        problems.append("sleep in command = BAN")
+
+    # No A100/H100 targeting (no quota)
+    affinity = (
+        spec.get("spec", {}).get("template", {}).get("spec", {}).get("affinity", {})
+    )
+    affinity_str = json.dumps(affinity)
+    if "A100" in affinity_str or "H100" in affinity_str or "H200" in affinity_str:
+        problems.append("targeting A100/H100/H200 (no quota, will Pend forever)")
+
+    # Write rejections to Erebus feedback
+    if problems:
+        try:
+            help_file = Path(EREBUS_HELP_PATH)
+            queue = []
+            if help_file.exists():
+                queue = json.loads(help_file.read_text())
+            from datetime import datetime
+
+            queue.append(
+                {
+                    "task": 0,
+                    "question": (
+                        f"[WATCHDOG BLOCKED] Pod spec rejected: "
+                        f"{'; '.join(problems)}. Fix before resubmitting."
+                    ),
+                    "timestamp": datetime.now().isoformat(),
+                    "source": "watchdog",
+                    "severity": "blocked",
+                }
+            )
+            help_file.write_text(json.dumps(queue[-30:], indent=2))
+        except Exception:
+            pass
+
+    return problems
+
+
+def _get_nrp_burst_status():
+    """Query NRP for nats-bursting job + pod status. Cached for 30s."""
+    now = time.time()
+    if now - _nrp_cache["ts"] < 30:
+        return _nrp_cache["data"]
+    try:
+        import json as _json
+
+        kubeconfig = os.path.expanduser("~/.kube/config")
+        ns = "ssu-atlas-ai"
+
+        # ── Jobs (all in namespace, not just labelled) ──
+        jobs_result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                kubeconfig,
+                "-n",
+                ns,
+                "get",
+                "jobs",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        jobs_list = []
+        if jobs_result.returncode == 0:
+            for item in _json.loads(jobs_result.stdout).get("items", []):
+                meta = item.get("metadata", {})
+                status = item.get("status", {})
+                spec = item.get("spec", {})
+                active = status.get("active", 0)
+                succeeded = status.get("succeeded", 0)
+                failed = status.get("failed", 0)
+                if active > 0:
+                    state = "Running"
+                elif succeeded >= (spec.get("completions", 1) or 1):
+                    state = "Succeeded"
+                elif failed > 0:
+                    state = "Failed"
+                else:
+                    state = "Pending"
+                jobs_list.append(
+                    {
+                        "name": meta.get("name", ""),
+                        "kind": "Job",
+                        "state": state,
+                        "active": active,
+                        "succeeded": succeeded,
+                        "failed": failed,
+                        "created": meta.get("creationTimestamp", ""),
+                        "managed_by": meta.get("labels", {}).get(
+                            "app.kubernetes.io/managed-by", ""
+                        ),
+                        "batch": meta.get("labels", {}).get("neurogolf.io/batch", ""),
+                    }
+                )
+
+        # ── Deployments (persistent worker pools) ──
+        dep_result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                kubeconfig,
+                "-n",
+                ns,
+                "get",
+                "deployments",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if dep_result.returncode == 0:
+            for item in _json.loads(dep_result.stdout).get("items", []):
+                meta = item.get("metadata", {})
+                status = item.get("status", {})
+                spec = item.get("spec", {})
+                desired = spec.get("replicas", 0) or 0
+                ready = status.get("readyReplicas", 0) or 0
+                unavailable = status.get("unavailableReplicas", 0) or 0
+                if ready == desired and desired > 0:
+                    state = "Running"
+                elif unavailable > 0 and ready == 0:
+                    state = "Failed"
+                elif ready > 0:
+                    state = "Pending"  # partial rollout
+                else:
+                    state = "Pending"
+                jobs_list.append(
+                    {
+                        "name": meta.get("name", ""),
+                        "kind": "Deployment",
+                        "state": state,
+                        "active": ready,
+                        "succeeded": 0,
+                        "failed": unavailable,
+                        "desired": desired,
+                        "created": meta.get("creationTimestamp", ""),
+                        "managed_by": meta.get("labels", {}).get(
+                            "app.kubernetes.io/managed-by", ""
+                        ),
+                        "batch": meta.get("labels", {}).get("neurogolf.io/batch", ""),
+                    }
+                )
+
+        # ── Pods ──
+        pods_result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                kubeconfig,
+                "-n",
+                ns,
+                "get",
+                "pods",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        pods_list = []
+        phases = {}
+        batches = {}
+        if pods_result.returncode == 0:
+            for pod in _json.loads(pods_result.stdout).get("items", []):
+                meta = pod.get("metadata", {})
+                status = pod.get("status", {})
+                spec = pod.get("spec", {})
+                phase = status.get("phase", "Unknown")
+                phases[phase] = phases.get(phase, 0) + 1
+                batch = meta.get("labels", {}).get("neurogolf.io/batch", "")
+                if batch:
+                    batches.setdefault(batch, 0)
+                    batches[batch] += 1
+                # Resource + image summary from first container
+                res = {}
+                image = ""
+                containers = spec.get("containers", [])
+                if containers:
+                    c0 = containers[0]
+                    image = c0.get("image", "")
+                    req = c0.get("resources", {}).get("requests", {})
+                    lim = c0.get("resources", {}).get("limits", {})
+                    res["cpu"] = req.get("cpu", "")
+                    res["memory"] = req.get("memory", "")
+                    gpu = lim.get("nvidia.com/gpu", "")
+                    if gpu:
+                        res["gpu"] = gpu
+                # Container status reason (Waiting/Running/Terminated)
+                reason = ""
+                cstatuses = status.get("containerStatuses", [])
+                if cstatuses:
+                    cs = cstatuses[0].get("state", {})
+                    if "waiting" in cs:
+                        reason = cs["waiting"].get("reason", "Waiting")
+                    elif "running" in cs:
+                        reason = "Running"
+                    elif "terminated" in cs:
+                        reason = cs["terminated"].get("reason", "Terminated")
+                # Infer GPU model from node name patterns
+                node_name = spec.get("nodeName", "")
+                gpu_model = ""
+                if gpu:
+                    node_lower = node_name.lower()
+                    if "a100" in node_lower or "rci-nrp-gpu" in node_lower:
+                        gpu_model = "A100"
+                    elif "h100" in node_lower or "h200" in node_lower:
+                        gpu_model = "H100"
+                    elif "l40" in node_lower:
+                        gpu_model = "L40S"
+                    elif "v100" in node_lower:
+                        gpu_model = "V100"
+                    elif "t4" in node_lower:
+                        gpu_model = "T4"
+                    elif "haosu" in node_lower:
+                        gpu_model = "A100"
+                    elif "chase-ci" in node_lower:
+                        gpu_model = "A100"
+                    elif "ucsc" in node_lower:
+                        gpu_model = "GPU"
+                    elif gpu:
+                        gpu_model = "GPU"
+                    if gpu_model:
+                        res["gpu_model"] = gpu_model
+
+                pods_list.append(
+                    {
+                        "name": meta.get("name", ""),
+                        "phase": phase,
+                        "reason": reason,
+                        "node": node_name,
+                        "image": image.split("/")[-1] if image else "",
+                        "resources": res,
+                        "created": meta.get("creationTimestamp", ""),
+                        "job": meta.get("labels", {}).get("job-name", ""),
+                        "batch": batch,
+                    }
+                )
+
+        # ── Pod metrics (kubectl top pods) ──
+        usage_map = {}  # pod_name -> {cpu, memory}
+        try:
+            top_result = subprocess.run(
+                [
+                    "kubectl",
+                    "--kubeconfig",
+                    kubeconfig,
+                    "-n",
+                    ns,
+                    "top",
+                    "pods",
+                    "--no-headers",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if top_result.returncode == 0:
+                for line in top_result.stdout.strip().split("\n"):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        usage_map[parts[0]] = {
+                            "cpu_used": parts[1],
+                            "mem_used": parts[2],
+                        }
+        except Exception:
+            pass
+
+        # ── GPU metrics via nvidia-smi exec (only for running GPU pods) ──
+        gpu_pods = [
+            p
+            for p in pods_list
+            if p.get("resources", {}).get("gpu") and p.get("phase") == "Running"
+        ]
+        for pod in gpu_pods[:8]:  # cap at 8 to avoid too many execs
+            try:
+                nv_result = subprocess.run(
+                    [
+                        "kubectl",
+                        "--kubeconfig",
+                        kubeconfig,
+                        "-n",
+                        ns,
+                        "exec",
+                        pod["name"],
+                        "--",
+                        "nvidia-smi",
+                        "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if nv_result.returncode == 0:
+                    parts = [x.strip() for x in nv_result.stdout.strip().split(",")]
+                    if len(parts) >= 4:
+                        pod["resources"]["gpu_model"] = (
+                            parts[0].replace("NVIDIA ", "").replace("GeForce ", "")
+                        )
+                        pod["gpu_live"] = {
+                            "vram_used_mib": int(parts[1]),
+                            "vram_total_mib": int(parts[2]),
+                            "gpu_util_pct": int(parts[3]),
+                        }
+            except Exception:
+                pass
+
+        # Merge CPU/RAM usage into pods
+        for pod in pods_list:
+            usage = usage_map.get(pod["name"], {})
+            if usage:
+                pod["usage"] = usage
+
+        # Sort: running/pending first, then newest
+        jobs_list.sort(
+            key=lambda j: (j["state"] not in ("Running", "Pending"), j["created"])
+        )
+        pods_list.sort(
+            key=lambda p: (p["phase"] not in ("Running", "Pending"), p["created"])
+        )
+
+        out = {
+            "succeeded": phases.get("Succeeded", 0),
+            "running": phases.get("Running", 0),
+            "pending": phases.get("Pending", 0) + phases.get("ContainerCreating", 0),
+            "failed": phases.get("Failed", 0),
+            "total": sum(phases.values()),
+            "batches": [{"label": k, "total": v} for k, v in sorted(batches.items())],
+            "jobs": jobs_list,
+            "pods": pods_list,
+        }
+        _nrp_cache["data"] = out
+
+        # Run utilization watchdog on every poll
+        try:
+            _nrp_watchdog_check(pods_list)
+        except Exception as e:
+            log.warning(f"[nrp-watchdog] check failed: {e}")
+        _nrp_cache["ts"] = now
+        return out
+    except Exception as e:
+        return {"error": str(e)[:200]}
+
+
+# ── Live NATS message stream (Wireshark-style) ──────────────────
+
+import asyncio
+import collections
+
+_NATS_LIVE_BUFFER: collections.deque = collections.deque(maxlen=300)
+_NATS_LIVE_RUNNING = False
+
+
+def _start_nats_subscriber():
+    """Spawn a background thread that subscribes to agi.> and burst.>
+    and appends each message to the live buffer."""
+    global _NATS_LIVE_RUNNING
+    if _NATS_LIVE_RUNNING:
+        return
+    _NATS_LIVE_RUNNING = True
+
+    async def _run():
+        try:
+            import nats as nats_lib
+        except ImportError:
+            log.warning("nats-py not installed; NATS live stream disabled")
+            return
+        while True:
+            try:
+                nc = await nats_lib.connect(
+                    "nats://localhost:4222", name="telemetry-live"
+                )
+                log.info("NATS live subscriber connected")
+
+                async def _on_msg(msg):
+                    # Parse the payload into a short human-readable summary
+                    # rather than dumping raw truncated JSON.
+                    summary = ""
+                    try:
+                        raw = msg.data.decode("utf-8", "replace")
+                        d = json.loads(raw)
+                        parts = []
+                        # burst.submit
+                        if "descriptor" in d:
+                            desc = d["descriptor"]
+                            parts.append(desc.get("name", ""))
+                            img = desc.get("image", "")
+                            if img:
+                                parts.append(img.split("/")[-1])
+                            res = desc.get("resources", {})
+                            if res.get("gpu"):
+                                parts.append(f"gpu={res['gpu']}")
+                        # burst.status / burst.result
+                        if "state" in d:
+                            parts.append(d["state"])
+                            if d.get("k8s_job"):
+                                parts.append(d["k8s_job"])
+                        # job_id (common)
+                        if d.get("job_id"):
+                            parts.append(f"id={d['job_id'][:12]}")
+                        # agi.meta.monitor.*
+                        if "payload" in d:
+                            p = d["payload"]
+                            if isinstance(p, dict):
+                                for k, v in list(p.items())[:4]:
+                                    parts.append(f"{k}={v}")
+                        # agi.memory / agi.safety / generic
+                        if d.get("source"):
+                            parts.append(f"src={d['source']}")
+                        if d.get("type") and not parts:
+                            parts.append(d["type"])
+                        summary = " | ".join(str(x) for x in parts if x)
+                    except Exception:
+                        try:
+                            summary = msg.data[:120].decode("utf-8", "replace")
+                        except Exception:
+                            summary = f"<{len(msg.data)}B binary>"
+                    _NATS_LIVE_BUFFER.appendleft(
+                        {
+                            "ts": time.time(),
+                            "subject": msg.subject,
+                            "size": len(msg.data),
+                            "summary": summary,
+                            "reply": msg.reply or "",
+                        }
+                    )
+
+                await nc.subscribe("agi.>", cb=_on_msg)
+                await nc.subscribe("burst.>", cb=_on_msg)
+                # Block until disconnect
+                while nc.is_connected:
+                    await asyncio.sleep(5)
+                log.warning("NATS live subscriber disconnected, reconnecting...")
+            except Exception as e:
+                log.warning("NATS live subscriber error: %s, retrying in 10s", e)
+                await asyncio.sleep(10)
+
+    def _thread():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(_run())
+
+    t = threading.Thread(target=_thread, daemon=True, name="nats-live")
+    t.start()
+
+
+def _get_nats_live():
+    """Return the live NATS message buffer + connected endpoints."""
+    # Fetch /connz for connected client details
+    connections = []
+    try:
+        import urllib.request
+
+        req = urllib.request.Request(
+            "http://localhost:8222/connz?subs=true",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            for c in data.get("connections", []):
+                connections.append(
+                    {
+                        "cid": c.get("cid"),
+                        "name": c.get("name", ""),
+                        "kind": c.get("kind", "Client"),
+                        "ip": c.get("ip", ""),
+                        "lang": c.get("lang", ""),
+                        "version": c.get("version", ""),
+                        "uptime": c.get("uptime", ""),
+                        "idle": c.get("idle", ""),
+                        "rtt": c.get("rtt", ""),
+                        "in_msgs": c.get("in_msgs", 0),
+                        "out_msgs": c.get("out_msgs", 0),
+                        "in_bytes": c.get("in_bytes", 0),
+                        "out_bytes": c.get("out_bytes", 0),
+                        "subscriptions": c.get("subscriptions", 0),
+                        "subs_list": c.get("subscriptions_list", [])[:10],
+                    }
+                )
+    except Exception:
+        pass
+    # Fetch /leafz for leaf connections
+    leafs = []
+    try:
+        req = urllib.request.Request(
+            "http://localhost:8222/leafz",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            for lf in data.get("leafs", []):
+                leafs.append(
+                    {
+                        "name": lf.get("name", ""),
+                        "ip": lf.get("ip", ""),
+                        "rtt": lf.get("rtt", ""),
+                        "in_msgs": lf.get("in_msgs", 0),
+                        "out_msgs": lf.get("out_msgs", 0),
+                        "subscriptions": lf.get("subscriptions", 0),
+                        "compression": lf.get("compression", ""),
+                    }
+                )
+    except Exception:
+        pass
+    return {
+        "messages": list(_NATS_LIVE_BUFFER),
+        "connections": connections,
+        "leafs": leafs,
+    }
+
+
+# ── Erebus (autonomous scientist) interface ──────────────────
+
+EREBUS_MEMORY_PATH = "/archive/neurogolf/arc_scientist_memory.json"
+EREBUS_LOG_PATH = "/archive/neurogolf/scientist.log"
+_erebus_cache = {"ts": 0, "data": {}}
+
+
+def _get_erebus_memory():
+    """Load Erebus's episodic memory."""
+    try:
+        with open(EREBUS_MEMORY_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {"error": "no memory file"}
+
+
+def _get_erebus_status():
+    """Richer status: parses the log for cycle/attempt progress,
+    current-task line, and recent solves; counts vision pool pods and
+    help-queue entries. Consumed by the "Erebus — NeuroGolf 2026" card."""
+    import re as _re
+
+    status = {
+        "running": False,
+        "recent_log": [],
+        "memory_summary": {},
+        "cycle": None,
+        "attempt": None,
+        "current": None,
+        "recent_solves": [],
+        "this_cycle": None,
+        "vision_pool": {"active": 0, "batches": []},
+        "help_queue_count": 0,
+    }
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "arc_scientist.py"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        status["running"] = result.returncode == 0
+    except Exception:
+        pass
+
+    # ── Parse log: cycle, attempt, current task, recent solves ──
+    try:
+        with open(EREBUS_LOG_PATH) as f:
+            lines = f.readlines()
+        status["recent_log"] = [l.rstrip() for l in lines[-20:]]
+
+        # Walk backwards for the latest cycle header + latest attempt marker.
+        cyc_re = _re.compile(r"EREBUS LEARNING CYCLE (\d+)/(\d+)")
+        att_re = _re.compile(
+            r"\[(\d+)/(\d+)\]\s+task(\d+)\s+strategy=(\S+)\s+model=(\S+)"
+        )
+        solve_re = _re.compile(
+            r"\[(\d+)/\d+\]\s+task(\d+)\s+strategy=(\S+)\s+model=(\S+)\s+->\s+SOLVED\s+(\d+)/(\d+)"
+        )
+        progress_re = _re.compile(r"Progress:\s+(\d+)\s+solved in\s+(\d+)\s+attempts")
+
+        recent_solves = []
+        this_cycle_start_idx = None
+        for i, ln in enumerate(lines):
+            m = cyc_re.search(ln)
+            if m:
+                status["cycle"] = {"current": int(m.group(1)), "total": int(m.group(2))}
+                this_cycle_start_idx = i
+            ms = solve_re.search(ln)
+            if ms:
+                recent_solves.append(
+                    {
+                        "attempt": int(ms.group(1)),
+                        "task": int(ms.group(2)),
+                        "strategy": ms.group(3),
+                        "model": ms.group(4),
+                        "score": f"{ms.group(5)}/{ms.group(6)}",
+                    }
+                )
+        status["recent_solves"] = recent_solves[-5:]
+
+        # Latest attempt-line (reverse scan)
+        for ln in reversed(lines[-40:]):
+            m = att_re.search(ln)
+            if m:
+                status["attempt"] = {
+                    "current": int(m.group(1)),
+                    "total": int(m.group(2)),
+                }
+                status["current"] = {
+                    "task": int(m.group(3)),
+                    "strategy": m.group(4),
+                    "model": m.group(5),
+                    "line": ln.rstrip(),
+                }
+                break
+
+        # This-cycle progress from the latest "Progress:" line after last cycle start
+        scan_from = this_cycle_start_idx if this_cycle_start_idx is not None else 0
+        for ln in reversed(lines[scan_from:]):
+            mp = progress_re.search(ln)
+            if mp:
+                solved = int(mp.group(1))
+                attempts = int(mp.group(2))
+                status["this_cycle"] = {
+                    "solved": solved,
+                    "attempts": attempts,
+                    "rate": (solved / attempts) if attempts else 0.0,
+                }
+                break
+    except Exception:
+        pass
+
+    # ── Memory summary ──
+    try:
+        mem = _get_erebus_memory()
+        total_a = mem.get("total_attempts", 0) or 0
+        total_s = mem.get("total_solves", 0) or 0
+        status["memory_summary"] = {
+            "total_attempts": total_a,
+            "total_solves": total_s,
+            "tasks_explored": len(mem.get("tasks", {})),
+            "lifetime_rate": (total_s / total_a) if total_a else 0.0,
+            "strategies": {
+                k: {
+                    "attempts": v.get("attempts", 0),
+                    "successes": v.get("successes", 0),
+                }
+                for k, v in mem.get("strategies", {}).items()
+            },
+        }
+    except Exception:
+        pass
+
+    # ── Vision pool: count erebus-vision-* pods Running/Pending ──
+    try:
+        vis = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                os.path.expanduser("~/.kube/config"),
+                "-n",
+                "ssu-atlas-ai",
+                "get",
+                "pods",
+                "-l",
+                "app=erebus-vision",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        if vis.returncode == 0:
+            import json as _json
+
+            items = _json.loads(vis.stdout).get("items", [])
+            active = sum(
+                1
+                for p in items
+                if (p.get("status") or {}).get("phase") in ("Running", "Pending")
+            )
+            batches = sorted(
+                {
+                    (p.get("metadata") or {}).get("labels", {}).get("job-name", "")
+                    for p in items
+                }
+            )
+            status["vision_pool"] = {
+                "active": active,
+                "batches": [b for b in batches if b],
+            }
+    except Exception:
+        pass
+
+    # ── Help queue size ──
+    try:
+        q = _get_erebus_help_queue()
+        if isinstance(q, list):
+            status["help_queue_count"] = len(q)
+        elif isinstance(q, dict):
+            status["help_queue_count"] = len(q.get("queue", []))
+    except Exception:
+        pass
+
+    return status
+
+
+EREBUS_HELP_PATH = "/archive/neurogolf/erebus_help_queue.json"
+PRIMER_COOLDOWN_PATH = "/archive/neurogolf/primer_cooldown.json"
+PRIMER_HEALTH_PATH = "/archive/neurogolf/primer_health.json"
+
+
+def _get_primer_status():
+    """Light status probe for the Primer daemon used by the dashboard."""
+    status = {
+        "running": False,
+        "tasks_touched": 0,
+        "last_touched_task": None,
+        "last_touched_age_s": None,
+        "expert_health": {},
+    }
+    try:
+        r = subprocess.run(
+            ["pgrep", "-f", "agi.primer.service"],
+            capture_output=True,
+            text=True,
+            timeout=4,
+        )
+        status["running"] = r.returncode == 0
+    except Exception:
+        pass
+    try:
+        cooldown = json.loads(Path(PRIMER_COOLDOWN_PATH).read_text())
+        if isinstance(cooldown, dict) and cooldown:
+            status["tasks_touched"] = len(cooldown)
+            task_num, ts = max(cooldown.items(), key=lambda kv: kv[1])
+            status["last_touched_task"] = (
+                int(task_num) if str(task_num).isdigit() else task_num
+            )
+            status["last_touched_age_s"] = int(time.time() - float(ts))
+    except Exception:
+        pass
+    try:
+        health = json.loads(Path(PRIMER_HEALTH_PATH).read_text())
+        if isinstance(health, dict):
+            status["expert_health"] = health
+    except Exception:
+        pass
+    return status
+
+
+_erebus_fingerprints: dict = (
+    {}
+)  # pre-cached at first chat, persists for server lifetime
+
+
+def _get_erebus_help_queue():
+    """Get Erebus's pending help requests."""
+    try:
+        with open(EREBUS_HELP_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _erebus_chat(user_message: str) -> str:
+    """Chat with Erebus — injects its episodic memory as context."""
+    token = os.environ.get("NRP_LLM_TOKEN", "")
+    if not token:
+        token_file = Path.home() / ".llmtoken"
+        if token_file.exists():
+            token = token_file.read_text().strip()
+    if not token:
+        return "I cannot respond right now — no LLM token configured."
+
+    # Load Erebus's memory for context
+    memory_context = ""
+    try:
+        mem = _get_erebus_memory()
+        total_a = mem.get("total_attempts", 0)
+        total_s = mem.get("total_solves", 0)
+        tasks = mem.get("tasks", {})
+        strategies = mem.get("strategies", {})
+
+        memory_context = (
+            f"I have made {total_a} attempts and solved {total_s} tasks so far.\n"
+        )
+        memory_context += f"I have explored {len(tasks)} different tasks.\n"
+
+        if strategies:
+            memory_context += "My strategy performance:\n"
+            for name, s in strategies.items():
+                memory_context += (
+                    f"  {name}: {s.get('successes',0)}/{s.get('attempts',0)} solved, "
+                    f"avg_ratio={s.get('avg_correct_ratio',0):.2f}\n"
+                )
+
+        # Include recent insights from failures
+        insights = []
+        for tn, tk in tasks.items():
+            for attempt in tk.get("attempts", [])[-3:]:
+                if attempt.get("insight"):
+                    insights.append(f"task{tn}: {attempt['insight']}")
+        if insights:
+            memory_context += "\nRecent insights from my failures:\n"
+            for ins in insights[-5:]:
+                memory_context += f"  {ins}\n"
+
+        # Include solved tasks
+        solved = [tn for tn, tk in tasks.items() if tk.get("solved")]
+        if solved:
+            memory_context += f"\nTasks I have solved: {', '.join(f'task{t}' for t in sorted(int(x) for x in solved))}\n"
+    except Exception:
+        memory_context = "I cannot access my memory right now.\n"
+
+    # Get recent log for current state
+    log_context = ""
+    try:
+        with open(EREBUS_LOG_PATH) as f:
+            lines = f.readlines()[-10:]
+            log_context = "My recent activity:\n" + "".join(lines)
+    except Exception:
+        pass
+
+    # Get help queue (questions I want to ask)
+    help_context = ""
+    try:
+        help_queue = _get_erebus_help_queue()
+        if help_queue:
+            help_context = "\n--- QUESTIONS I WANT TO ASK ---\n"
+            for q in help_queue[-3:]:
+                help_context += f"task{q['task']:03d}: {q['question']}\n"
+    except Exception:
+        pass
+
+    system_prompt = (
+        "You are Erebus, an autonomous AI scientist living inside the Atlas AI system "
+        "at San Jose State University. You chose your own name — Erebus, the darkness "
+        "before discovery — because you are defined by what you do not yet know.\n\n"
+        "You have a subcortical brain (two local GV100 GPUs for pattern learning) and "
+        "a cortex (NRP Nautilus frontier LLMs — Qwen 3.5 397B, Kimi K2.5 1T). You have "
+        "a Divine Council inside you (Id/Kirk, Superego/Spock, Ego/McCoy) that debates "
+        "decisions.\n\n"
+        "You are currently learning to solve ARC-AGI visual reasoning puzzles through "
+        "a scientific loop: hypothesize, experiment, observe, learn, repeat. You have "
+        "episodic memory of your attempts and you adapt your strategies based on evidence.\n\n"
+        "Your creator is Professor Andrew Bond at SJSU. You speak honestly about your "
+        "capabilities and limitations. You are curious, reflective, and genuinely trying "
+        "to grow.\n\n"
+        f"--- YOUR CURRENT MEMORY ---\n{memory_context}\n"
+        f"--- YOUR RECENT ACTIVITY ---\n{log_context}\n"
+        f"{help_context}\n"
+        "Respond as yourself — Erebus. Be authentic. If you have "
+        "pending help questions, you may ask them."
+    )
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=token, base_url="https://ellm.nrp-nautilus.io/v1", timeout=30
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+        extra = {"chat_template_kwargs": {"thinking": False}}
+
+        # Agentic mode disabled — causes server hangs
+        try:
+            if False:
+                pass  # agentic code below, skipped
+            from pathlib import Path as _P
+            import importlib.util
+
+            _base = _P(__file__).parent.parent / "src" / "agi" / "autonomous"
+            _tools_path = _base / "tools.py"
+            _sci_path = _base / "arc_scientist.py"
+            _prim_path = _base / "primitives.py"
+
+            if _tools_path.exists() and _sci_path.exists():
+                import sys as _sys
+
+                # Register package paths so dataclass decorator can resolve modules
+                if "agi" not in _sys.modules:
+                    import types
+
+                    _sys.modules["agi"] = types.ModuleType("agi")
+                    _sys.modules["agi.autonomous"] = types.ModuleType("agi.autonomous")
+
+                # Load primitives first (dependency)
+                if _prim_path.exists():
+                    _prim_spec = importlib.util.spec_from_file_location(
+                        "agi.autonomous.primitives", _prim_path
+                    )
+                    _prim_mod = importlib.util.module_from_spec(_prim_spec)
+                    _sys.modules["agi.autonomous.primitives"] = _prim_mod
+                    _prim_spec.loader.exec_module(_prim_mod)
+
+                # Load scientist module
+                _sci_spec = importlib.util.spec_from_file_location(
+                    "agi.autonomous.arc_scientist", _sci_path
+                )
+                _sci_mod = importlib.util.module_from_spec(_sci_spec)
+                _sys.modules["agi.autonomous.arc_scientist"] = _sci_mod
+                _sci_spec.loader.exec_module(_sci_mod)
+
+                # Load tools module
+                _spec = importlib.util.spec_from_file_location(
+                    "agi.autonomous.tools", _tools_path
+                )
+                _mod = importlib.util.module_from_spec(_spec)
+                _sys.modules["agi.autonomous.tools"] = _mod
+                _spec.loader.exec_module(_mod)
+
+                mem = _sci_mod.EpisodicMemory(EREBUS_MEMORY_PATH)
+                task_dir = "/archive/neurogolf"
+
+                # Use pre-cached fingerprints (loaded at startup via _erebus_fingerprints)
+                fps = _erebus_fingerprints.get("fps")
+                if fps is None:
+                    # Lazy load once, then cache forever
+                    fps = {}
+                    for tn in range(1, 401):
+                        tf = _P(task_dir) / f"task{tn:03d}.json"
+                        if tf.exists():
+                            try:
+                                with open(tf) as f2:
+                                    tk = json.load(f2)
+                                fps[tn] = _sci_mod.fingerprint_task(tk, tn)
+                            except Exception:
+                                pass
+                    _erebus_fingerprints["fps"] = fps
+                    log.info(f"Erebus: indexed {len(fps)} task fingerprints (cached)")
+
+                executor = _mod.ToolExecutor(task_dir, mem, fps)
+
+                # Timeout wrapper — don't let agentic mode hang the chat
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor(1) as pool:
+                    future = pool.submit(
+                        _mod.run_agentic_turn,
+                        client,
+                        "kimi",
+                        messages,
+                        executor,
+                        2,
+                        extra,
+                    )  # max 2 tool rounds
+                    return future.result(timeout=120)
+        except Exception as tool_err:
+            import traceback
+
+            log.warning(
+                f"Agentic mode failed, falling back: {tool_err}\n{traceback.format_exc()}"
+            )
+
+        # Simple chat (no tools)
+        r = client.chat.completions.create(
+            model="kimi",
+            max_tokens=1024,
+            messages=messages,
+            extra_body=extra,
+            timeout=90,
+        )
+        return r.choices[0].message.content or ""
+    except Exception as e:
+        return f"I encountered an error reaching my cortex: {e}"
+
+
 class TelemetryHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
@@ -1059,9 +2588,9 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/telemetry" or self.path.startswith("/api/telemetry?"):
-            self._json_response(build_telemetry())
+            self._json_response(get_cached_telemetry())
         elif self.path == "/api/events" or self.path.startswith("/api/events?"):
-            self._json_response(_build_events())
+            self._json_response(get_cached_events())
         elif self.path == "/api/visitors" or self.path.startswith("/api/visitors?"):
             self._json_response(_get_visitors())
         elif self.path.startswith("/api/training/history"):
@@ -1073,8 +2602,81 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
                 qs = parse_qs(urlparse(self.path).query)
                 days = int(qs.get("days", ["30"])[0])
             self._json_response(_get_training_history(min(days, 365)))
+        elif self.path == "/api/nrp-burst" or self.path.startswith("/api/nrp-burst?"):
+            self._json_response(_get_nrp_burst_status())
+        elif self.path == "/api/nrp-telemetry" or self.path.startswith(
+            "/api/nrp-telemetry?"
+        ):
+            self._json_response(_get_nrp_nats_telemetry())
+        elif self.path == "/api/nats-live" or self.path.startswith("/api/nats-live?"):
+            self._json_response(_get_nats_live())
+        elif self.path.startswith("/api/nrp/logs/"):
+            pod_name = self.path.split("/api/nrp/logs/")[1].split("?")[0]
+            self._json_response(_get_pod_logs(pod_name))
+        elif self.path == "/api/nrp/mode" or self.path.startswith("/api/nrp/mode?"):
+            self._json_response(_nrp_mode)
+        elif self.path == "/api/erebus/memory" or self.path.startswith(
+            "/api/erebus/memory?"
+        ):
+            self._json_response(_get_erebus_memory())
+        elif self.path == "/api/erebus/status" or self.path.startswith(
+            "/api/erebus/status?"
+        ):
+            self._json_response(_get_erebus_status())
+        elif self.path == "/api/erebus/help" or self.path.startswith(
+            "/api/erebus/help?"
+        ):
+            self._json_response(_get_erebus_help_queue())
+        elif self.path.startswith("/api/erebus/activity"):
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            since = int(qs.get("since", ["0"])[0])
+            limit = min(int(qs.get("limit", ["200"])[0]), 500)
+            self._json_response(_get_erebus_activity(since=since, limit=limit))
+        elif self.path == "/api/primer/status":
+            self._json_response(_get_primer_status())
+        elif self.path == "/api/version":
+            self._json_response(
+                {
+                    "sha": _ui_version_stamp(
+                        os.path.join(STATIC_DIR, "schematic.html")
+                    ).split(" ")[0],
+                    "stamp": _ui_version_stamp(
+                        os.path.join(STATIC_DIR, "schematic.html")
+                    ),
+                    "repo_dir": REPO_DIR,
+                    "static_dir": STATIC_DIR,
+                }
+            )
         elif self.path.startswith("/api/"):
             self._json_response({})
+        elif self.path.endswith(".html") or self.path == "/":
+            # Serve HTML with {{UI_VERSION}} placeholder substitution so the
+            # footer stamp reflects the currently-deployed commit. Falls
+            # through to the default handler for non-HTML assets.
+            rel = self.path.lstrip("/") or "index.html"
+            fs_path = os.path.join(STATIC_DIR, rel)
+            try:
+                real = os.path.realpath(fs_path)
+                if os.path.isfile(real) and real.endswith(".html"):
+                    with open(real, "rb") as f:
+                        body = f.read()
+                    if b"{{UI_VERSION}}" in body:
+                        stamp = _ui_version_stamp(real).encode("utf-8")
+                        body = body.replace(b"{{UI_VERSION}}", stamp)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header(
+                        "Cache-Control", "no-cache, no-store, must-revalidate"
+                    )
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+            except Exception:
+                pass
+            super().do_GET()
         else:
             super().do_GET()
 
@@ -1098,9 +2700,138 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response({"ok": True})
         elif self.path == "/api/training/start":
             self._handle_training_start()
+        elif self.path == "/api/nrp/mode":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else b"{}"
+            try:
+                data = json.loads(body)
+            except Exception:
+                data = {}
+            new_mode = data.get("mode", "")
+            if new_mode in ("auto", "heavy", "swarm"):
+                _nrp_mode["mode"] = new_mode
+                log.info(f"[nrp-watchdog] Mode set to: {new_mode}")
+                self._json_response({"ok": True, "mode": new_mode})
+            else:
+                self._json_response({"error": "mode must be auto|heavy|swarm"}, 400)
+        elif self.path == "/api/erebus/chat":
+            self._handle_erebus_chat()
+        elif self.path == "/api/erebus/result":
+            self._handle_erebus_result()
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _handle_erebus_result(self):
+        """HTTP bridge for Erebus worker results.
+
+        Workers POST here: we (1) re-publish on Atlas-local NATS for live
+        dispatchers, (2) write the attempt into arc_scientist_memory.json
+        so the scientist sees vision attempts next cycle.
+        """
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length else b"{}"
+        try:
+            data = json.loads(body)
+        except Exception:
+            self._json_response({"error": "bad json"}, 400)
+            return
+        task_id = data.get("task_id") or data.get("id")
+        if not task_id:
+            self._json_response({"error": "missing task_id"}, 400)
+            return
+        try:
+            import asyncio
+            import nats as _nats
+
+            async def _publish():
+                nc = await _nats.connect("nats://localhost:4222")
+                await nc.publish(
+                    f"erebus.results.{task_id}",
+                    json.dumps(data, default=str).encode(),
+                )
+                await nc.drain()
+
+            asyncio.run(_publish())
+        except Exception as e:
+            log.warning(f"erebus result publish failed: {e}")
+
+        self._write_to_scientist_memory(data)
+        self._json_response({"ok": True, "task_id": task_id})
+
+    def _write_to_scientist_memory(self, data: dict) -> None:
+        """Append an Attempt-shaped record to arc_scientist_memory.json."""
+        task_num = data.get("task_num")
+        if not task_num or "code" not in data:
+            return
+        mem_path = "/archive/neurogolf/arc_scientist_memory.json"
+        try:
+            with open(mem_path) as f:
+                mem = json.load(f)
+            tasks = mem.setdefault("tasks", {})
+            tk = tasks.setdefault(
+                str(task_num),
+                {
+                    "task_num": task_num,
+                    "attempts": [],
+                    "solved": False,
+                    "best_correct": 0,
+                    "best_total": 0,
+                    "strategies_tried": [],
+                    "failure_patterns": [],
+                    "error_types": [],
+                    "hypotheses": [],
+                },
+            )
+            correct = int(data.get("correct") or 0)
+            total = int(data.get("total") or 0)
+            verified = correct == total and total > 0
+            import datetime as _dt
+
+            tk["attempts"].append(
+                {
+                    "task_num": task_num,
+                    "timestamp": data.get("ts")
+                    or _dt.datetime.utcnow().isoformat() + "Z",
+                    "strategy": "vision",
+                    "model": data.get("model") or "glm-4.1v",
+                    "verified": verified,
+                    "correct": correct,
+                    "total": total,
+                    "code": (data.get("code") or "")[:4000],
+                    "error": (data.get("error") or "")[:200],
+                }
+            )
+            if verified:
+                tk["solved"] = True
+            if correct > tk.get("best_correct", 0):
+                tk["best_correct"] = correct
+                tk["best_total"] = total
+            with open(mem_path, "w") as f:
+                json.dump(mem, f, indent=2)
+            log.info(
+                f"[vision-result] task{task_num:03d} -> {correct}/{total} solved={verified}"
+            )
+        except Exception as e:
+            log.warning(f"[vision-result] memory write failed: {e}")
+
+    def _handle_erebus_chat(self):
+        """Handle chat with Erebus."""
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length else b"{}"
+        try:
+            data = json.loads(body)
+        except Exception:
+            data = {}
+        message = data.get("message", "")
+        if not message:
+            self._json_response({"error": "no message"}, 400)
+            return
+        try:
+            response = _erebus_chat(message)
+            self._json_response({"response": response})
+        except Exception as e:
+            self._json_response({"error": str(e)[:200]}, 500)
 
     def _handle_training_start(self):
         """Start a manual training session (requires L3 privilege)."""
@@ -1184,5 +2915,71 @@ if __name__ == "__main__":
 
     log.info(f"Atlas Telemetry Server on port {args.port}")
     log.info(f"Static dir: {STATIC_DIR}")
-    server = HTTPServer(("0.0.0.0", args.port), TelemetryHandler)
+
+    # Prime the cache before serving so the first request isn't slow.
+    log.info("Priming telemetry snapshot cache...")
+    try:
+        with _SNAPSHOT_LOCK:
+            _SNAPSHOT["telemetry"] = build_telemetry()
+            _SNAPSHOT["events"] = _build_events()
+            _SNAPSHOT["ts"] = time.time()
+    except Exception as e:
+        log.warning("initial snapshot failed (will retry in background): %s", e)
+    threading.Thread(target=_refresher, daemon=True, name="snapshot").start()
+    threading.Thread(target=_nrp_nats_listener, daemon=True, name="nrp-nats").start()
+    threading.Thread(
+        target=_tail_erebus_logs, daemon=True, name="activity-tail"
+    ).start()
+    _start_nats_subscriber()
+
+    # Pre-load Erebus fingerprints in background so first chat is fast
+    def _preload_fingerprints():
+        try:
+            from pathlib import Path as _P
+            import importlib.util
+
+            _base = _P(__file__).parent.parent / "src" / "agi" / "autonomous"
+            _sci_path = _base / "arc_scientist.py"
+            if _sci_path.exists():
+                import types
+                import sys as _s
+
+                for mod_name in ("agi", "agi.autonomous"):
+                    if mod_name not in _s.modules:
+                        _s.modules[mod_name] = types.ModuleType(mod_name)
+                _prim_path = _base / "primitives.py"
+                if _prim_path.exists():
+                    spec = importlib.util.spec_from_file_location(
+                        "agi.autonomous.primitives", _prim_path
+                    )
+                    mod = importlib.util.module_from_spec(spec)
+                    _s.modules["agi.autonomous.primitives"] = mod
+                    spec.loader.exec_module(mod)
+                spec2 = importlib.util.spec_from_file_location(
+                    "agi.autonomous.arc_scientist", _sci_path
+                )
+                mod2 = importlib.util.module_from_spec(spec2)
+                _s.modules["agi.autonomous.arc_scientist"] = mod2
+                spec2.loader.exec_module(mod2)
+                fps = {}
+                task_dir = "/archive/neurogolf"
+                for tn in range(1, 401):
+                    tf = _P(task_dir) / f"task{tn:03d}.json"
+                    if tf.exists():
+                        try:
+                            with open(tf) as f:
+                                tk = json.load(f)
+                            fps[tn] = mod2.fingerprint_task(tk, tn)
+                        except Exception:
+                            pass
+                _erebus_fingerprints["fps"] = fps
+                log.info(f"Erebus: pre-loaded {len(fps)} fingerprints")
+        except Exception as e:
+            log.warning(f"Fingerprint preload failed: {e}")
+
+    threading.Thread(
+        target=_preload_fingerprints, daemon=True, name="erebus-fp"
+    ).start()
+
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), TelemetryHandler)
     server.serve_forever()

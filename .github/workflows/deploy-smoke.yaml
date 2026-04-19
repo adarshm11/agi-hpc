@@ -1,0 +1,79 @@
+name: Deploy Smoke
+
+# Runs after a push to main, waits for deploy window, then verifies the
+# live dashboard matches the commit. Catches the silent regression class
+# where code pushes land in git but never reach the production server
+# (the "dashboard broken for 10 checkins" failure mode).
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Also run every 30 min as a drift detector
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+env:
+  DASHBOARD_URL: https://atlas-sjsu.duckdns.org
+
+jobs:
+  smoke:
+    name: Verify live dashboard matches main
+    runs-on: ubuntu-latest
+    # Don't block the PR queue — this is a deploy-state signal, not a code check.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Wait for deploy window
+        # Manual deploy process means the live site may take minutes to
+        # catch up. Give it two minutes for push-triggered runs.
+        if: github.event_name == 'push'
+        run: sleep 120
+
+      - name: Fetch live /api/version
+        id: live
+        run: |
+          set -e
+          LIVE_JSON=$(curl -sk --max-time 20 "$DASHBOARD_URL/api/version" || echo '{}')
+          echo "raw=$LIVE_JSON"
+          LIVE_SHA=$(echo "$LIVE_JSON" | jq -r '.sha // "unknown"')
+          LIVE_STAMP=$(echo "$LIVE_JSON" | jq -r '.stamp // "unknown"')
+          echo "live_sha=$LIVE_SHA" >> "$GITHUB_OUTPUT"
+          echo "live_stamp=$LIVE_STAMP" >> "$GITHUB_OUTPUT"
+          echo "Live dashboard: $LIVE_STAMP"
+
+      - name: Compare live vs expected commit
+        run: |
+          set -e
+          EXPECTED_SHA=$(git rev-parse --short=7 HEAD)
+          LIVE_SHA="${{ steps.live.outputs.live_sha }}"
+          echo "expected=$EXPECTED_SHA"
+          echo "live=$LIVE_SHA"
+          if [ "$LIVE_SHA" = "unknown" ] || [ -z "$LIVE_SHA" ]; then
+            echo "::error::/api/version not reachable or malformed — live dashboard may be down"
+            exit 1
+          fi
+          if [ "$EXPECTED_SHA" != "$LIVE_SHA" ]; then
+            # How far back in history is the live SHA?
+            BEHIND=$(git rev-list --count "$LIVE_SHA..$EXPECTED_SHA" 2>/dev/null || echo "?")
+            echo "::warning::Live dashboard is $BEHIND commits behind main."
+            echo "::warning::Live=$LIVE_SHA, main=$EXPECTED_SHA"
+            echo "::warning::Run: bash scripts/deploy_to_atlas.sh"
+            exit 1
+          fi
+          echo "Live dashboard matches main ($EXPECTED_SHA)."
+
+      - name: Assert key widgets present
+        run: |
+          set -e
+          PAGE=$(curl -sk --max-time 20 "$DASHBOARD_URL/schematic.html")
+          for needle in "NATS Topology" "NRP Burst Jobs" "NATS Live" "Erebus Cognitive Architecture"; do
+            if ! echo "$PAGE" | grep -qF "$needle"; then
+              echo "::error::Missing widget on live page: '$needle'"
+              exit 1
+            fi
+          done
+          echo "All key widgets present."
