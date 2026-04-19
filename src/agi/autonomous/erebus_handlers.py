@@ -212,8 +212,131 @@ def handle_classify_error(task: dict) -> dict:
         return {"classification": {"raw": content[:500]}}
 
 
+# ─── solve_task_vision (multimodal) ──────────────────────────────────
+# Module-level model cache so we pay the load cost once per pod lifetime.
+_VISION_MODEL: dict = {"model": None, "processor": None}
+
+
+def _load_vision_model():
+    """Lazy-load GLM-4.1V-9B-Thinking. ~18 GB bf16 → requires GPU."""
+    if _VISION_MODEL["model"] is not None:
+        return _VISION_MODEL["model"], _VISION_MODEL["processor"]
+    import torch
+    from transformers import AutoModelForCausalLM, AutoProcessor
+
+    model_id = os.environ.get("VISION_MODEL_ID", "THUDM/GLM-4.1V-9B-Thinking")
+    proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        torch_dtype=dtype,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    _VISION_MODEL["model"] = model
+    _VISION_MODEL["processor"] = proc
+    return model, proc
+
+
+def handle_solve_task_vision(task: dict) -> dict:
+    """Multimodal solve: render the ARC grid examples as PNGs and hand them
+    to a vision-language model (default GLM-4.1V-9B-Thinking). The model
+    writes a Python transform which we then verify locally."""
+    import sys
+
+    sys.path.insert(0, "/work/agi-hpc/src")
+    from agi.autonomous.arc_grid_image import task_to_pngs
+
+    import io
+    import numpy as np
+    import torch
+    from PIL import Image
+
+    task_num = task["task_num"]
+    tf = TASK_DIR / f"task{task_num:03d}.json"
+    if not tf.exists():
+        return {"error": f"task {task_num} not found"}
+    task_obj = json.loads(tf.read_text())
+
+    model, proc = _load_vision_model()
+
+    pngs = task_to_pngs(task_obj, max_examples=3)
+    images = [Image.open(io.BytesIO(b)) for b in pngs]
+
+    prompt = (
+        "These are ARC-AGI training examples — each image shows an INPUT grid "
+        "on the left and the corresponding OUTPUT grid on the right. Look at "
+        "the spatial transformation from input to output across all examples, "
+        "then write a Python function that performs it:\n\n"
+        "    def transform(grid: list[list[int]]) -> list[list[int]]\n\n"
+        "The grid uses integer color codes 0-9 (same palette as the images). "
+        "Return only the function in a ```python``` block."
+    )
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                *[{"type": "image", "image": img} for img in images],
+                {"type": "text", "text": prompt},
+            ],
+        }
+    ]
+
+    inputs = proc.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    ).to(model.device)
+
+    with torch.inference_mode():
+        out_ids = model.generate(**inputs, max_new_tokens=2048, do_sample=False)
+    out_text = proc.batch_decode(
+        out_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+    )[0]
+
+    code = _extract_python(out_text, ("def transform",))
+    if not code:
+        return {"status": "no_code", "task_num": task_num, "model": "glm-4.1v"}
+
+    ns = {"np": np, "numpy": np}
+    try:
+        exec(code, ns)
+        fn = ns["transform"]
+        correct = total = 0
+        for split in ("train", "test"):
+            for ex in task_obj.get(split, []):
+                total += 1
+                try:
+                    got = fn(ex["input"])
+                    if isinstance(got, np.ndarray):
+                        got = got.tolist()
+                    if got == ex["output"]:
+                        correct += 1
+                except Exception:
+                    pass
+        return {
+            "status": "solved" if correct == total and total > 0 else "partial",
+            "task_num": task_num,
+            "correct": correct,
+            "total": total,
+            "code": code,
+            "model": "glm-4.1v",
+        }
+    except Exception as e:
+        return {
+            "status": "exec_error",
+            "error": str(e)[:200],
+            "task_num": task_num,
+            "model": "glm-4.1v",
+        }
+
+
 HANDLERS = {
     "solve_task": handle_solve_task,
     "compile_attempt": handle_compile_attempt,
     "classify_error": handle_classify_error,
+    "solve_task_vision": handle_solve_task_vision,
 }
