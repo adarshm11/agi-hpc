@@ -725,8 +725,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       </div>
     </div>
 
-    <!-- NATS Live (Wireshark-style message stream) -->
-    <div class="metric-panel" style="grid-column:span 2">
+    <!-- NATS Live (left) + NRP Burst Jobs + Worker Pools (right) -->
+    <div class="metric-panel">
       <div class="panel-title" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span><span class="icon">&#9656;</span> NATS Live</span>
         <span style="font-size:9px;font-weight:400;color:var(--text-dim)">
@@ -748,18 +748,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       <div id="nats-live-stream" style="font-family:var(--mono);font-size:10px;max-height:220px;overflow-y:auto;line-height:1.5;scrollbar-width:thin"></div>
     </div>
 
-    <!-- NATS Topology (left) + NRP Burst Pods (right) -->
     <div class="metric-panel">
-      <div class="panel-title"><span class="icon">&#9670;</span> NATS Topology
-        <span style="font-size:9px;font-weight:400;color:var(--text-dim)">
-          In: <span id="nats-in">0</span> Out: <span id="nats-out">0</span> Conns: <span id="nats-conns">0</span> JS: <span id="nats-js-msgs">0</span>
-        </span>
-      </div>
-      <svg id="nats-topo-svg" viewBox="0 0 800 180" style="width:100%;height:160px;display:block;margin-bottom:4px"></svg>
-      <div id="nats-active-pods" style="font-family:var(--mono);font-size:10px;max-height:120px;overflow-y:auto;scrollbar-width:thin"></div>
-    </div>
-    <div class="metric-panel">
-      <div class="panel-title"><span class="icon">&#9992;</span> NRP Burst Jobs</div>
+      <div class="panel-title"><span class="icon">&#9992;</span> NRP Burst Jobs + Worker Pools</div>
       <div id="nrp-burst-center" style="font-size:11px">
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">
           <span style="color:var(--green)" id="nrp-succeeded">0</span><span style="color:var(--text-muted)"> done</span>
@@ -772,6 +762,17 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         <div id="nrp-jobs-table" style="font-family:var(--mono);font-size:10px;max-height:200px;overflow-y:auto;margin-bottom:4px"></div>
         <div id="nrp-batches" style="color:var(--text-dim);font-family:var(--mono);font-size:10px"></div>
       </div>
+    </div>
+
+    <!-- NATS Topology (full-width below the Live/Burst row) -->
+    <div class="metric-panel" style="grid-column:span 2">
+      <div class="panel-title"><span class="icon">&#9670;</span> NATS Topology
+        <span style="font-size:9px;font-weight:400;color:var(--text-dim)">
+          In: <span id="nats-in">0</span> Out: <span id="nats-out">0</span> Conns: <span id="nats-conns">0</span> JS: <span id="nats-js-msgs">0</span>
+        </span>
+      </div>
+      <svg id="nats-topo-svg" viewBox="0 0 800 180" style="width:100%;height:160px;display:block;margin-bottom:4px"></svg>
+      <div id="nats-active-pods" style="font-family:var(--mono);font-size:10px;max-height:120px;overflow-y:auto;scrollbar-width:thin"></div>
     </div>
 
     <!-- Erebus Competition Status -->
@@ -1890,19 +1891,27 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         if(!html) html = '<span style="color:var(--text-dim)">no active pods</span>';
         sumEl.innerHTML = html;
       }
-      // Job detail table
+      // Job detail table (includes Deployments as Worker Pools)
       var tbl = el('nrp-jobs-table');
       if(tbl && d.jobs && d.jobs.length){
         var html = '<table style="width:100%;border-collapse:collapse">' +
           '<tr style="color:var(--text-dim);font-size:9px;text-transform:uppercase">' +
-          '<th style="text-align:left;padding:2px 4px">Job</th>' +
+          '<th style="text-align:left;padding:2px 4px">Name</th>' +
+          '<th style="text-align:left;padding:2px 4px">Kind</th>' +
           '<th style="text-align:left;padding:2px 4px">State</th>' +
           '<th style="text-align:left;padding:2px 4px">Batch</th>' +
           '<th style="text-align:right;padding:2px 4px">Age</th></tr>';
         d.jobs.forEach(function(j){
+          var kind = j.kind || 'Job';
+          var kindColor = kind === 'Deployment' ? 'var(--yellow)' : 'var(--accent)';
+          var stateLabel = j.state;
+          if(kind === 'Deployment' && j.desired != null){
+            stateLabel += ' ' + (j.active || 0) + '/' + j.desired;
+          }
           html += '<tr style="border-top:1px solid rgba(255,255,255,0.05)">' +
             '<td style="padding:2px 4px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + j.name + '">' + j.name + '</td>' +
-            '<td style="padding:2px 4px;color:' + nrpStateColor(j.state) + '">' + j.state + '</td>' +
+            '<td style="padding:2px 4px;font-size:9px;color:' + kindColor + '">' + kind + '</td>' +
+            '<td style="padding:2px 4px;color:' + nrpStateColor(j.state) + '">' + stateLabel + '</td>' +
             '<td style="padding:2px 4px;color:var(--text-dim)">' + (j.batch || '') + '</td>' +
             '<td style="padding:2px 4px;text-align:right;color:var(--text-dim)">' + nrpAge(j.created) + '</td></tr>';
         });

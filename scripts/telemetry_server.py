@@ -1656,10 +1656,61 @@ def _get_nrp_burst_status():
                 jobs_list.append(
                     {
                         "name": meta.get("name", ""),
+                        "kind": "Job",
                         "state": state,
                         "active": active,
                         "succeeded": succeeded,
                         "failed": failed,
+                        "created": meta.get("creationTimestamp", ""),
+                        "managed_by": meta.get("labels", {}).get(
+                            "app.kubernetes.io/managed-by", ""
+                        ),
+                        "batch": meta.get("labels", {}).get("neurogolf.io/batch", ""),
+                    }
+                )
+
+        # ── Deployments (persistent worker pools) ──
+        dep_result = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                kubeconfig,
+                "-n",
+                ns,
+                "get",
+                "deployments",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if dep_result.returncode == 0:
+            for item in _json.loads(dep_result.stdout).get("items", []):
+                meta = item.get("metadata", {})
+                status = item.get("status", {})
+                spec = item.get("spec", {})
+                desired = spec.get("replicas", 0) or 0
+                ready = status.get("readyReplicas", 0) or 0
+                unavailable = status.get("unavailableReplicas", 0) or 0
+                if ready == desired and desired > 0:
+                    state = "Running"
+                elif unavailable > 0 and ready == 0:
+                    state = "Failed"
+                elif ready > 0:
+                    state = "Pending"  # partial rollout
+                else:
+                    state = "Pending"
+                jobs_list.append(
+                    {
+                        "name": meta.get("name", ""),
+                        "kind": "Deployment",
+                        "state": state,
+                        "active": ready,
+                        "succeeded": 0,
+                        "failed": unavailable,
+                        "desired": desired,
                         "created": meta.get("creationTimestamp", ""),
                         "managed_by": meta.get("labels", {}).get(
                             "app.kubernetes.io/managed-by", ""
