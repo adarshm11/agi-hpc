@@ -15,9 +15,7 @@ def _load_module():
     pure-function parts without starting the HTTP server."""
     import importlib.util
 
-    path = (
-        Path(__file__).resolve().parents[2] / "scripts" / "telemetry_server.py"
-    )
+    path = Path(__file__).resolve().parents[2] / "scripts" / "telemetry_server.py"
     spec = importlib.util.spec_from_file_location("tsrv", str(path))
     mod = importlib.util.module_from_spec(spec)
     sys.modules["tsrv"] = mod

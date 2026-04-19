@@ -23,7 +23,6 @@ from evals.harness import (
     run_harness,
 )
 
-
 FIXTURES = Path(__file__).resolve().parents[1].parent / "evals" / "fixtures"
 
 
