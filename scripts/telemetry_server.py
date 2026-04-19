@@ -29,6 +29,35 @@ logging.basicConfig(
 log = logging.getLogger("telemetry")
 
 STATIC_DIR = os.environ.get("ATLAS_STATIC", "/home/claude/atlas-chat")
+REPO_DIR = os.environ.get("ATLAS_REPO", "/home/claude/agi-hpc")
+_ui_version_cache = {"sha": "", "ts": 0.0}
+
+
+def _ui_version_stamp(html_path: str) -> str:
+    """Return 'SHA · MTIME' for the dashboard footer. Cached for 15s.
+    Falls back gracefully if git/stat fail so serving never breaks."""
+    try:
+        now = time.time()
+        if now - _ui_version_cache["ts"] > 15 or not _ui_version_cache["sha"]:
+            r = subprocess.run(
+                ["git", "-C", REPO_DIR, "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            _ui_version_cache["sha"] = (
+                r.stdout.strip() if r.returncode == 0 else "nogit"
+            )
+            _ui_version_cache["ts"] = now
+        sha = _ui_version_cache["sha"]
+        try:
+            mtime = os.path.getmtime(os.path.realpath(html_path))
+            ts = time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(mtime))
+        except Exception:
+            ts = "?"
+        return f"{sha} · {ts}"
+    except Exception:
+        return "?"
 PORT = int(os.environ.get("TELEMETRY_PORT", "8085"))
 DB_DSN = os.environ.get("ATLAS_DB_DSN", "dbname=atlas user=claude")
 SNAPSHOT_INTERVAL = float(os.environ.get("TELEMETRY_SNAPSHOT_S", "2.5"))
@@ -2426,6 +2455,32 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response(_get_erebus_activity(since=since, limit=limit))
         elif self.path.startswith("/api/"):
             self._json_response({})
+        elif self.path.endswith(".html") or self.path == "/":
+            # Serve HTML with {{UI_VERSION}} placeholder substitution so the
+            # footer stamp reflects the currently-deployed commit. Falls
+            # through to the default handler for non-HTML assets.
+            rel = self.path.lstrip("/") or "index.html"
+            fs_path = os.path.join(STATIC_DIR, rel)
+            try:
+                real = os.path.realpath(fs_path)
+                if os.path.isfile(real) and real.endswith(".html"):
+                    with open(real, "rb") as f:
+                        body = f.read()
+                    if b"{{UI_VERSION}}" in body:
+                        stamp = _ui_version_stamp(real).encode("utf-8")
+                        body = body.replace(b"{{UI_VERSION}}", stamp)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header(
+                        "Cache-Control", "no-cache, no-store, must-revalidate"
+                    )
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+            except Exception:
+                pass
+            super().do_GET()
         else:
             super().do_GET()
 
