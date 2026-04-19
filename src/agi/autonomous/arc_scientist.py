@@ -349,25 +349,30 @@ class EpisodicMemory:
         return patterns
 
     def get_unsolved_tasks(
-        self, all_tasks: list[int], max_attempts_soft_cap: int = 20
+        self,
+        all_tasks: list[int],
+        max_attempts_soft_cap: int = 20,
+        mentor_task_nums: "set[int] | None" = None,
     ) -> list[int]:
-        """Return unsolved tasks, deprioritizing ones Erebus has already
-        thrashed on (> max_attempts_soft_cap unsuccessful attempts).
-
-        The thrashed tasks aren't dropped — they go to the end of the list
-        so Erebus still gets to them eventually, but tries fresh tasks first.
+        """Return unsolved tasks, deprioritizing thrashed ones BUT rescuing
+        any task that has fresh mentor guidance — sensei just answered your
+        question, go try it again with the new insight.
         """
+        mentor_task_nums = mentor_task_nums or set()
         unsolved = [
             t for t in all_tasks if t not in self.tasks or not self.tasks[t].solved
         ]
-        # Partition: hot (not thrashed yet) vs. cold (many failed attempts)
         hot, cold = [], []
         for t in unsolved:
-            if t in self.tasks and len(self.tasks[t].attempts) > max_attempts_soft_cap:
+            thrashed = (
+                t in self.tasks and len(self.tasks[t].attempts) > max_attempts_soft_cap
+            )
+            # Mentor-noted tasks always stay hot, even if thrashed — guidance
+            # deserves a fresh attempt.
+            if thrashed and t not in mentor_task_nums:
                 cold.append(t)
             else:
                 hot.append(t)
-        # Within each bucket, sort by best_correct desc (closer to solved first)
         for bucket in (hot, cold):
             bucket.sort(
                 key=lambda t: self.tasks[t].best_correct if t in self.tasks else 0,
@@ -568,17 +573,25 @@ class ARCScientist:
         self.llm_base_url = llm_base_url
         self.client = None
         self._init_client()
-        # Mentor notes — hand-written guidance from Professor Bond, keyed by
-        # task_num as string. Injected into every prompt for that task.
-        self._mentor_notes: dict = {}
+        # Mentor notes are hand-written wiki articles in
+        # /home/claude/agi-hpc/wiki/sensei_task_NNN.md — the same place
+        # RAG pulls Tier-1 knowledge from. Single source of truth, not a
+        # sidecar JSON. We load the .md bodies here at init, keyed by
+        # task_num, and prepend them to every prompt for that task.
+        self._mentor_notes: dict[str, str] = {}
+        wiki_dir = Path(
+            os.environ.get("EREBUS_WIKI_DIR", "/home/claude/agi-hpc/wiki")
+        )
         try:
-            mn_path = self.task_dir / "mentor_notes.json"
-            if mn_path.exists():
-                self._mentor_notes = {
-                    str(k): v
-                    for k, v in json.loads(mn_path.read_text()).items()
-                    if not str(k).startswith("_")
-                }
+            if wiki_dir.exists():
+                import re as _re
+
+                for mdfile in wiki_dir.glob("sensei_task_*.md"):
+                    m = _re.search(r"sensei_task_(\d+)", mdfile.stem)
+                    if not m:
+                        continue
+                    task_num = str(int(m.group(1)))  # strip leading zeros
+                    self._mentor_notes[task_num] = mdfile.read_text()
         except Exception:
             pass
 
@@ -602,12 +615,19 @@ class ARCScientist:
             self.client = OpenAI(api_key=self.llm_token, base_url=self.llm_base_url)
 
     def _mentor_preamble(self, tn: int) -> str:
-        notes = self._mentor_notes.get(str(tn)) or self._mentor_notes.get(f"{tn:03d}")
-        if not notes:
+        """Return the wiki article for this task (if any), formatted as a
+        prompt preamble. Content is the raw markdown — the LLM reads it as
+        guidance before seeing the examples/strategy prompt."""
+        body = self._mentor_notes.get(str(tn))
+        if not body:
             return ""
-        body = "\n".join(f"- {n}" for n in notes)
+        # Strip YAML frontmatter; keep the title + body
+        if body.startswith("---"):
+            parts = body.split("---", 2)
+            if len(parts) >= 3:
+                body = parts[2].strip()
         return (
-            "\n=== GUIDANCE FROM PROFESSOR BOND (read this carefully) ===\n"
+            "\n=== GUIDANCE FROM PROFESSOR BOND (wiki sensei_note) ===\n"
             f"{body}\n"
             "=== end guidance ===\n\n"
         )
@@ -860,7 +880,15 @@ class ARCScientist:
         if models is None:
             models = ["kimi", "qwen3"]
 
-        unsolved = self.memory.get_unsolved_tasks(self.all_tasks)
+        mentor_nums = set()
+        for k in self._mentor_notes.keys():
+            try:
+                mentor_nums.add(int(k))
+            except ValueError:
+                pass
+        unsolved = self.memory.get_unsolved_tasks(
+            self.all_tasks, mentor_task_nums=mentor_nums
+        )
         print("Erebus starting learning cycle")
         print(f"  Tasks: {len(self.all_tasks)} total, {len(unsolved)} unsolved")
 
