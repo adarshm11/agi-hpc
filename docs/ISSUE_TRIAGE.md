@@ -1,0 +1,228 @@
+# Issue Triage Plan — 2026-04-19
+
+**Status:** snapshot of where every non-trivial open issue on `ahb-sjsu/agi-hpc` stands and the plan to address it.
+
+Refresh quarterly or whenever a cluster closes.
+
+---
+
+## Completed in this session
+
+| # | Title | Resolution |
+|---|---|---|
+| **#35** | Deployment runbooks + on-call playbook | `docs/DEPLOYMENT_RUNBOOK.md` + `docs/ONCALL_PLAYBOOK.md` shipped (ee7f588) |
+| **#36** | Inventory existing metrics, logs, evaluation artifacts | `docs/METRICS_INVENTORY.md` shipped (ee7f588) |
+| **#37** | Define core SLOs / KPIs | `docs/SLOS_AND_KPIS.md` shipped (ee7f588) |
+| **#42** | Document Evaluation & Metrics practices | `docs/METRICS_CONTRIBUTOR_GUIDE.md` shipped (ee7f588) |
+
+---
+
+## Cluster A — Remaining observability (#34, #38, #39, #40, #41)
+
+Four documentation/infra tickets. #34 has a long status comment (mostly shipped via deploy-smoke + dashboard-render + dynamic version stamp). The others need actual implementation work, not just docs.
+
+### #40 — Design dashboards for ops and evaluation
+
+**Scope:** small. Most is already built — the schematic dashboard at `atlas-sjsu.duckdns.org/schematic.html` covers ops comprehensively. What's missing is an explicit *evaluation* dashboard (Erebus solve trends over time, Primer verification rate per week, strategy win-rate deltas).
+
+**Plan:**
+1. Add a `Trends` tab or separate page (`trends.html`) showing time-series.
+2. Backend: `/api/trends/erebus` returning `{"solves_by_day":[...], "solves_by_week":[...]}` from memory-file snapshots.
+3. Snapshot job: cron on Atlas dumps `arc_scientist_memory.json.solves` every night to a compact per-day JSON in `/archive/neurogolf/trends/`.
+4. Frontend: sparklines / line charts of the per-day series.
+
+**Estimate:** 1 focused session. Closes #40.
+
+### #38 — Instrument core job lifecycle paths
+
+**Scope:** medium. Touches arc_scientist, dreaming, vision-burst dispatch, possibly nats-bursting workers. Requires adding structured logs + rough metrics across five subsystems.
+
+**Plan (phased):**
+1. Adopt the log-format convention from `METRICS_CONTRIBUTOR_GUIDE.md` §3 across services. First pass: `arc_scientist.py` attempt log lines (currently partially structured).
+2. Add a `job_lifecycle` log category: `job_submitted` → `job_running` → `job_complete | job_failed | job_timeout`, with duration fields.
+3. Optional: a `/api/jobs/recent` endpoint aggregating recent lifecycle events for a dashboard panel.
+
+**Estimate:** 2–3 sessions. Partial progress per session is fine; doesn't need to be atomic.
+
+**Prereq:** none; can start immediately.
+
+### #39 — Build evaluation harness
+
+**Scope:** medium. A repeatable offline test runner for ARC-like workloads. Overlaps with existing `tests/` — distinction is that this runs a *portfolio* of stuck tasks through a fixed strategy set and reports per-task outcomes.
+
+**Plan:**
+1. Directory `evals/` with task-selection config YAML + harness script.
+2. Harness drives arc_scientist in "evaluate-only" mode (no memory updates).
+3. Outputs per-run JSON: `{"timestamp":..., "git_sha":..., "tasks":{...}, "aggregate":{...}}`.
+4. Optional: CI nightly runs a small portfolio and posts diff vs. previous run.
+
+**Estimate:** 1–2 sessions.
+
+**Prereq:** none; useful independently.
+
+### #41 — Evaluation hooks for cognitive arch / ErisML
+
+**Scope:** larger. Needs decision-point instrumentation inside the cognitive stack (Ego, Superego, Divine Council) and a judging function for decision quality.
+
+**Plan:**
+1. Identify 3–4 decision types to instrument (e.g. Superego veto, Council final call, ego routing choice).
+2. Per-decision log record: `{decision_type, inputs_hash, output, alternatives_considered, time_s}`.
+3. Offline eval pipeline: human or LLM judge compares `alternatives_considered` to `output`; produces quality signal.
+4. Aggregate into a weekly "decision quality" panel.
+
+**Estimate:** 3+ sessions. Partly research, partly code.
+
+**Prereq:** #38 (lifecycle logging) is useful foundation.
+
+### #34 — Deployment observability (status-ed already)
+
+Already has long comment describing what's shipped vs. to do. Recommend splitting into child issues:
+- `#34a` Structured JSON logs
+- `#34b` OpenTelemetry tracing
+- `#34c` Alerting pipeline
+- `#34d` Error-budget automation
+
+Each is standalone 1–2 sessions. Splitting gets them off the "too big to start" pile.
+
+---
+
+## Cluster B — DCGM attestation (#74, #75, #77)
+
+Hardware-level verification that GPU work actually happened. Three issues; the first is data-collection, the other two depend on it.
+
+### #74 — Power-profile fingerprinting
+
+**Scope:** research + code. Must collect power traces on Atlas GPUs during representative workloads (Qwen forward pass, BGE batch, idle, replayed output) and build a classifier.
+
+**Plan:**
+1. Instrument a data-collection script: `nvidia-smi --query-gpu=power.draw --format=csv -lms 100` during scripted workloads.
+2. Label each trace by workload type; export to `evals/dcgm_profiles/`.
+3. Train a threshold-based or small-sklearn classifier.
+4. Wrap the classifier behind `DCGMAttestor.classify(trace)`.
+
+**Estimate:** 1 session for data collection + baseline classifier.
+
+**Prereq:** Atlas access, GPU idle window, no concurrent work contending for GPU 0 or 1.
+
+### #75 — Integrate DCGM attestation with DEME safety gateway
+
+**Scope:** code. Wire `DCGMAttestor.snapshot()` before/after the forward pass in `src/agi/safety/deme_gateway.py`; NATS publish `agi.safety.attestation`.
+
+**Plan:**
+1. Patch the gateway's inference path.
+2. Emit attestation event.
+3. Add a gateway test that simulates a failed attestation (e.g. by mocking no power delta).
+4. Dashboard panel: attestation pass/fail rate.
+
+**Estimate:** 1 session.
+
+**Prereq:** #74 (or at least a working `DCGMAttestor.attest()` with the coarse heuristic).
+
+### #77 — Verify GPU utilization on NRP burst pods
+
+**Scope:** code + NRP investigation.
+
+**Plan:**
+1. `kubectl describe node <nrp-gpu-node> | grep -i dcgm` — check if NRP exposes DCGM.
+2. If yes: add a DCGM sidecar to burst-pod specs (vision pool + any future GPU pod).
+3. If no: fall back to `nvidia-smi` polling from inside the pod during its own work.
+4. Either way: publish a post-job attestation summary to `agi.safety.attestation`.
+
+**Estimate:** 1 session once the kubectl investigation is done.
+
+**Prereq:** live NRP connectivity.
+
+**Dependency graph:** `#74 → #75 → #77` (attestor → gateway integration → NRP generalization).
+
+---
+
+## Cluster C — BIP-fusion Sprint 1–6 (#45–65)
+
+Twenty-one issues across six sprints, implementing a **separate research package** (`bip_fusion`) that applies the BIP framework to fusion-reactor stabilization. Despite living as issues on this repo, the code would likely go in a sibling package.
+
+### Recommendation: extract to its own repo
+
+The bip-fusion work is a distinct research program from Atlas cognitive architecture. Carrying 21 issues on `ahb-sjsu/agi-hpc` obscures the rest of the roadmap.
+
+**Plan:**
+1. Create `ahb-sjsu/bip-fusion` with a proper package skeleton.
+2. Move issues #45–65 to the new repo (GitHub supports issue transfer).
+3. Leave a single tracking issue on `agi-hpc` linking to the new repo.
+4. Continue work at the natural cadence in the fusion repo.
+
+**Estimate:** 30 minutes to set up repo + transfer issues. Substantial research work afterward, but decoupled from agi-hpc's release cadence.
+
+### If staying in this repo
+
+If you want to keep bip-fusion under `agi-hpc` for coherence:
+
+- **Sprint 1 (#45–48)** — scaffolding + grounding + canonicalization + theorem property tests. All code-only, no hardware. Estimate: 2 sessions for skeleton + canonical library; 1 session for theorem tests.
+- **Sprint 2 (#49–52)** — stratified space + stratum classifier + decidability checker + frontier validator. Math-heavy; needs careful type design. Estimate: 3 sessions.
+- **Sprint 3 (#53–55)** — invariance + transformation-group library + cross-machine transfer. Estimate: 2 sessions.
+- **Sprint 4 (#56–59)** — shot archive + replay harness + reconstructor + synthetic generator. DIII-D data access required (#56 is the blocking step). Estimate: open-ended pending data.
+- **Sprint 5 (#60–62)** — latency profiler + FPGA harness + DeepMind RL baseline. Each is a whole subsystem. Estimate: 4+ sessions per.
+- **Sprint 6 (#63–65)** — rank-4 tensor + cryptographic audit + verifier CLI. Estimate: 3 sessions.
+
+Total if in-repo: **20+ sessions** of focused work. This is why extraction to a sibling repo is the methodical answer.
+
+---
+
+## Cluster D — Student quest issues (#66, #67, #68, #69, #70, #73, #76)
+
+**Explicitly excluded from this plan** per user direction. These are for student contributors. PR #71 (adarshm11) addresses #67; PR #72 addresses #68. Both reviewed separately. Other student quests remain open for future contributors.
+
+---
+
+## Execution plan — recommended order
+
+If attacking remaining issues in a single chunk of sessions:
+
+### Session 1 — closable observability wins
+
+- **#40** — Trends dashboard (existing schematic already covers ops; evaluation tab is the gap)
+- **#39** — Evaluation harness skeleton (independent; unblocks #41 later)
+
+**Deliverable:** both closed.
+
+### Session 2 — job-lifecycle logging
+
+- **#38** first pass: convert arc_scientist logs to structured format; add lifecycle log category.
+
+**Deliverable:** #38 partial; #34 moved closer (JSON log migration is the big one).
+
+### Session 3 — bip-fusion extraction
+
+- Create `ahb-sjsu/bip-fusion` repo.
+- Transfer #45–65 to the new repo.
+- Leave tracking issue on `agi-hpc`.
+- Close #45–65 here.
+
+**Deliverable:** 21 issues off the agi-hpc queue; bip-fusion has its own room to grow.
+
+### Session 4 — DCGM data collection
+
+- **#74** — collect power traces, baseline classifier.
+
+**Deliverable:** #74 closed; #75 and #77 unblocked.
+
+### Session 5+ — whatever's left
+
+Remaining: #34 subsections, #38 completion, #41, #75, #77. Attack in whatever order the operational needs dictate.
+
+---
+
+## Out-of-scope for this plan
+
+- **PR review #71 / #72** — tracked separately; #71 has follow-up fix, #72 has posted review.
+- **Student quest issues** — per explicit user direction.
+- **GPU reservation / capacity expansion** — not a code issue; requires ops negotiation with NRP admins.
+- **Chat ego cutover (Phase 3)** — tracked in `AGI_ROADMAP.md` status snapshot; not a Github issue.
+- **Self-host ego pod (Phase 2)** — same as above; session-scoped task, waits on capacity.
+
+---
+
+## Keeping this plan fresh
+
+1. When an issue closes, strike it from the plan and add to "Completed in this session" at the top.
+2. When a new issue arrives, classify it into one of the four clusters (A/B/C/D) — or open a new cluster if it doesn't fit.
+3. Re-read quarterly; delete any cluster that's stayed stale for two quarters (signals the work isn't real and the issue should close).
