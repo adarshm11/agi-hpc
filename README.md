@@ -261,6 +261,11 @@ For production deployment on Atlas, see [`docs/ATLAS_OPERATIONS.md`](docs/ATLAS_
 | [`docs/THE_PRIMER.md`](docs/THE_PRIMER.md) | The Primer — design, safety invariants, operation |
 | [`docs/VMOE.md`](docs/VMOE.md) | Virtual Mixture-of-Experts — routing policies, health |
 | [`docs/ATLAS_OPERATIONS.md`](docs/ATLAS_OPERATIONS.md) | Atlas workstation ops: systemd, thermal, backup |
+| [`docs/DEPLOYMENT_RUNBOOK.md`](docs/DEPLOYMENT_RUNBOOK.md) | How to deploy, roll back, and perform common maintenance |
+| [`docs/ONCALL_PLAYBOOK.md`](docs/ONCALL_PLAYBOOK.md) | "Something is broken, what do I look at" |
+| [`docs/SLOS_AND_KPIS.md`](docs/SLOS_AND_KPIS.md) | Proposed SLOs, research KPIs, error budget policy |
+| [`docs/METRICS_INVENTORY.md`](docs/METRICS_INVENTORY.md) | What's measured / logged today, with endpoints and gaps |
+| [`docs/METRICS_CONTRIBUTOR_GUIDE.md`](docs/METRICS_CONTRIBUTOR_GUIDE.md) | Conventions for adding metrics, logs, endpoints |
 | [`docs/AGI_ROADMAP.md`](docs/AGI_ROADMAP.md) | Phase status, pending work, long-horizon plan |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Per-date ship log |
 

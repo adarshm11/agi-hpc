@@ -23,6 +23,22 @@
 
 The **Primer** is the most significant recent development. It closes the teaching loop for the ARC Scientist without a human sensei in the loop, and its verify-against-train discipline means the wiki only accumulates correct rules — the scaffold under which the Scientist's solve rate climbs.
 
+### Note — vLLM's native Anthropic-protocol serving (2026-04-19)
+
+As of vLLM's March 2026 release, `vllm serve` with `--tool-call-parser <hermes|mistral|llama3_json|pythonic|...>` speaks the Anthropic Messages API directly (not just OpenAI-compatible). This is distinct from NRP's `/anthropic` proxy which is a separate translation layer over shared models.
+
+**Implication for Phase 2 (self-hosted ego pod):** when we stand up GLM-4.6-AWQ or GLM-4.5-Air on vLLM, enable `--tool-call-parser` and expose both the OpenAI-compatible and Anthropic endpoints. That gives three valuable things for free:
+
+1. **Claude Code / open-claude-code against our own model.** `ruvnet/open-claude-code` is a MIT-licensed clean-room Claude Code CLI (25 tools, git worktree isolation, multi-file atomic edits, MCP transports). Point `ANTHROPIC_BASE_URL` at our vLLM endpoint, use `ANTHROPIC_MODEL=<served-model-name>`, and the full Claude Code agent loop runs against our fine-tuned weights.
+2. **Richer interactive ego sessions.** Today's chat handler does single-shot completions. A Claude-Code-style loop with tool use + git + file edits is the right shape for the ego's planned `/primer/ask` endpoint and general developer-facing interaction.
+3. **No lock-in.** Anthropic endpoint + OpenAI endpoint + NATS publish paths all coexist on the same pod. Clients pick the protocol that fits their agent loop.
+
+Caveat: Claude Code rejects model names containing `/`, so configure `--served-model-name` without the HuggingFace `org/name` slash (we'd already be doing this for our deployment — aliases like `erebus-ego` or `glm-4.5-air` are fine).
+
+Action: add the `--tool-call-parser` flag to the Phase-2 vLLM manifest template when we build it. Non-urgent — the OpenAI path is sufficient for the Primer and chat-ego cutover. But it's a zero-cost add when we're writing the pod spec anyway.
+
+**What this does NOT change:** The Primer stays programmatic. It's an auto-sensei with a vMOE ensemble and run-against-train verification — a CLI agent loop is the wrong shape for that role. Claude Code is a *client* story, not a replacement for the Primer.
+
 ---
 
 ## Preamble: What AGI Means in This Document
