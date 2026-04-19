@@ -579,9 +579,7 @@ class ARCScientist:
         # sidecar JSON. We load the .md bodies here at init, keyed by
         # task_num, and prepend them to every prompt for that task.
         self._mentor_notes: dict[str, str] = {}
-        wiki_dir = Path(
-            os.environ.get("EREBUS_WIKI_DIR", "/home/claude/agi-hpc/wiki")
-        )
+        wiki_dir = Path(os.environ.get("EREBUS_WIKI_DIR", "/home/claude/agi-hpc/wiki"))
         try:
             if wiki_dir.exists():
                 import re as _re
