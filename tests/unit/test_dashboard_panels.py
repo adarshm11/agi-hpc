@@ -144,7 +144,7 @@ class TestFreudianLabels:
     def test_gpu_labels_freudian(self) -> None:
         content = DASHBOARD.read_text(encoding="utf-8")
         assert "GPU 0 (Superego)" in content
-        assert "GPU 1 (Id)" in content
+        assert "GPU 1 (Ego)" in content
 
     def test_bottom_bar_ego(self) -> None:
         content = DASHBOARD.read_text(encoding="utf-8")
