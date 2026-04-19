@@ -1,6 +1,7 @@
 [Unit]
 Description=Atlas Primer — always-on teaching daemon for Erebus (vMOE over NRP frontier models)
-After=network-online.target
+Documentation=file:///home/claude/agi-hpc/docs/THE_PRIMER.md
+After=network-online.target atlas-nats.service
 Wants=network-online.target
 
 [Service]
@@ -11,8 +12,23 @@ Environment=PYTHONPATH=/home/claude/agi-hpc/src
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-/home/claude/.primer.env
 ExecStart=/home/claude/env/bin/python3 -m agi.primer.service
-Restart=on-failure
+
+# Always-on daemon: restart on any exit (clean or crash). A clean
+# exit would mean the poll loop broke, which is a bug, not success.
+Restart=always
 RestartSec=10
+
+# Crash-loop guard so a broken deploy can't hammer NRP.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Boot-storm smoothing.
+RandomizedDelaySec=15
+
+# Graceful stop for atomic cooldown/health writes.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
 StandardOutput=journal
 StandardError=journal
 

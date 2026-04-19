@@ -1,0 +1,54 @@
+[Unit]
+Description=Erebus ARC Scientist (autonomous solver, background learner)
+Documentation=file:///home/claude/agi-hpc/docs/THE_PRIMER.md
+After=network-online.target postgresql.service atlas-nats.service \
+      atlas-memory.service atlas-safety.service atlas-primer.service
+Wants=atlas-nats.service atlas-memory.service atlas-primer.service
+# Operator escape hatch: touch the sentinel to disable; remove to re-enable.
+ConditionPathExists=!/archive/neurogolf/.erebus_disabled
+
+[Service]
+Type=simple
+User=claude
+WorkingDirectory=/archive/neurogolf
+Environment=PYTHONPATH=/home/claude/agi-hpc/src
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/home/claude/.erebus.env
+
+ExecStartPre=/home/claude/agi-hpc/scripts/preflight_erebus.sh
+ExecStart=/home/claude/env/bin/python3 -u -m agi.autonomous.arc_scientist \
+          --task-dir /archive/neurogolf \
+          --memory /archive/neurogolf/arc_scientist_memory.json \
+          --attempts 400 \
+          --cycles 5
+
+# Restart only on failure (exit != 0). A clean finish of --cycles 5
+# should stay finished; the operator (or Primer) kicks off next run.
+Restart=on-failure
+RestartSec=30s
+
+# Crash-loop guard: 5 failures in 10 min → leave unit in failed state.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# Boot-storm smoothing: don't race llama.cpp + primer + scientist on
+# a freshly booted box. 0-30s randomized delay.
+RandomizedDelaySec=30
+
+# Graceful stop: let EpisodicMemory.save() (4 MB JSON, atomic write)
+# finish before we SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# Yield to Kirk/Spock/Primer under load. Scientist is bulk work.
+Nice=5
+
+# Sanity caps (scientist is Python + subprocess per candidate).
+MemoryMax=12G
+CPUQuota=800%
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=atlas.target

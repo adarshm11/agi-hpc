@@ -25,6 +25,8 @@ SERVICES=(
     atlas-caddy
     atlas-oauth2-proxy
     atlas-watchdog
+    atlas-primer
+    atlas-scientist
 )
 
 # Old names to clean up
@@ -158,6 +160,8 @@ START_ORDER=(
     atlas-oauth2-proxy
     atlas-caddy
     atlas-watchdog
+    atlas-primer
+    atlas-scientist
 )
 for svc in "${START_ORDER[@]}"; do
     if [ -f "$SYSTEMD_DIR/$svc.service" ]; then
