@@ -2453,6 +2453,19 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             since = int(qs.get("since", ["0"])[0])
             limit = min(int(qs.get("limit", ["200"])[0]), 500)
             self._json_response(_get_erebus_activity(since=since, limit=limit))
+        elif self.path == "/api/version":
+            self._json_response(
+                {
+                    "sha": _ui_version_stamp(
+                        os.path.join(STATIC_DIR, "schematic.html")
+                    ).split(" ")[0],
+                    "stamp": _ui_version_stamp(
+                        os.path.join(STATIC_DIR, "schematic.html")
+                    ),
+                    "repo_dir": REPO_DIR,
+                    "static_dir": STATIC_DIR,
+                }
+            )
         elif self.path.startswith("/api/"):
             self._json_response({})
         elif self.path.endswith(".html") or self.path == "/":
