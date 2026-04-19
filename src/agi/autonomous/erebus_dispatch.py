@@ -28,6 +28,11 @@ def build_solve_tasks(task_nums: list[int], model: str) -> list[dict]:
     return [{"type": "solve_task", "task_num": tn, "model": model} for tn in task_nums]
 
 
+def build_vision_tasks(task_nums: list[int]) -> list[dict]:
+    """Dispatch ARC tasks to the GLM-4.1V vision pool."""
+    return [{"type": "solve_task_vision", "task_num": tn} for tn in task_nums]
+
+
 def build_compile_tasks(day: str, top: int) -> list[dict]:
     sys.path.insert(0, str(Path(__file__).parent))
     from erebus_compiler_tools import cluster_failures
@@ -68,10 +73,18 @@ def main():
     sp_compile.add_argument("--wait", action="store_true")
     sp_compile.add_argument("--timeout", type=int, default=600)
 
+    sp_vision = sub.add_parser("solve_task_vision")
+    sp_vision.add_argument("--tasks", type=int, nargs="+", required=True)
+    sp_vision.add_argument("--wait", action="store_true")
+    sp_vision.add_argument("--timeout", type=int, default=300)
+
     args = ap.parse_args()
     if args.cmd == "solve_task":
         tasks = build_solve_tasks(args.tasks, args.model)
         asyncio.run(run(tasks, "solve_task", args.wait, args.timeout))
+    elif args.cmd == "solve_task_vision":
+        tasks = build_vision_tasks(args.tasks)
+        asyncio.run(run(tasks, "solve_task_vision", args.wait, args.timeout))
     else:
         tasks = build_compile_tasks(args.day, args.top)
         asyncio.run(run(tasks, "compile_attempt", args.wait, args.timeout))
