@@ -612,6 +612,90 @@ class ARCScientist:
             "=== end guidance ===\n\n"
         )
 
+    def _vision_candidates(self, limit: int = 40) -> list[int]:
+        """Tasks that classify-as-perception and haven't been tried on the
+        vision pool yet. These are the strongest candidates for multimodal
+        spatial reasoning — text-only models keep mis-perceiving them.
+        """
+        out = []
+        for tn, tk in self.memory.tasks.items():
+            if tk.solved:
+                continue
+            if any(a.get("model", "").startswith("glm-4.1v") for a in tk.attempts):
+                continue  # already attempted on vision pool
+            perception_count = sum(
+                1 for a in tk.attempts if a.get("error_type") == "perception"
+            )
+            if perception_count >= 1 and len(tk.attempts) >= 3:
+                out.append(tn)
+        return sorted(out)[:limit]
+
+    def _dispatch_vision_burst(self, task_nums: list[int]) -> None:
+        """Fire a vision burst: publish tasks to NATS + kubectl apply the
+        4-parallel Job manifest. Best-effort; errors logged but don't block
+        the main learning loop.
+        """
+        if not task_nums:
+            return
+        try:
+            import asyncio
+            import subprocess
+
+            import nats as _nats
+
+            async def _pub():
+                nc = await _nats.connect(
+                    os.environ.get("NATS_URL", "nats://localhost:4222")
+                )
+                for tn in task_nums:
+                    import uuid
+
+                    payload = {
+                        "type": "solve_task_vision",
+                        "id": uuid.uuid4().hex[:12],
+                        "task_num": int(tn),
+                    }
+                    await nc.publish(
+                        "erebus.tasks.solve_task_vision",
+                        json.dumps(payload).encode(),
+                    )
+                await nc.drain()
+
+            asyncio.run(_pub())
+            print(
+                f"[vision-dispatch] queued {len(task_nums)} tasks, "
+                f"applying Job manifest...",
+                flush=True,
+            )
+
+            render_script = str(
+                Path(__file__).parent.parent.parent.parent
+                / "scripts"
+                / "render_erebus_vision_job.py"
+            )
+            rendered = subprocess.check_output(
+                [sys.executable, render_script, "--parallelism", "4"], timeout=30
+            )
+            r = subprocess.run(
+                ["kubectl", "apply", "-f", "-"],
+                input=rendered,
+                capture_output=True,
+                timeout=30,
+            )
+            if r.returncode == 0:
+                print(
+                    f"[vision-dispatch] Job applied: {r.stdout.decode().strip()}",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[vision-dispatch] kubectl apply failed: "
+                    f"{r.stderr.decode()[:200]}",
+                    flush=True,
+                )
+        except Exception as e:
+            print(f"[vision-dispatch] error: {e}", flush=True)
+
     def _load_task(self, tn: int) -> dict:
         with open(self.task_dir / f"task{tn:03d}.json") as f:
             return json.load(f)
@@ -779,6 +863,17 @@ class ARCScientist:
         unsolved = self.memory.get_unsolved_tasks(self.all_tasks)
         print("Erebus starting learning cycle")
         print(f"  Tasks: {len(self.all_tasks)} total, {len(unsolved)} unsolved")
+
+        # Vision burst trigger: when enough perception-error tasks have
+        # piled up, dispatch them to the GLM-4.1V multimodal pool. Fires
+        # at most once per cycle so we don't spam kubectl.
+        vcandidates = self._vision_candidates(limit=40)
+        if len(vcandidates) >= 10:
+            print(
+                f"  Vision burst: {len(vcandidates)} perception-error tasks "
+                "need multimodal reasoning → dispatching"
+            )
+            self._dispatch_vision_burst(vcandidates)
         print(
             f"  Memory: {self.memory.total_attempts} prior attempts, "
             f"{self.memory.total_solves} solves"
