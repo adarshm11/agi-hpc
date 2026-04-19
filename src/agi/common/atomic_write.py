@@ -51,7 +51,10 @@ def atomic_write_text(path: Path | str, text: str, *, fsync: bool = True) -> Non
             if fsync:
                 os.fsync(f.fileno())
         os.replace(tmp_name, p)
-    except Exception:
+    except BaseException:
+        # BaseException (not Exception) so SIGTERM → SystemExit and
+        # KeyboardInterrupt also clean up their tempfile. A leftover
+        # tempfile is cosmetic but grows noise in /archive over time.
         try:
             os.unlink(tmp_name)
         except OSError:

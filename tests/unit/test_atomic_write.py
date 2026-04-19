@@ -102,3 +102,25 @@ def test_fsync_can_be_disabled(tmp_path: Path):
     p = tmp_path / "state.json"
     atomic_write_text(p, "fast-path", fsync=False)
     assert p.read_text() == "fast-path"
+
+
+def test_systemexit_during_write_still_cleans_tempfile(tmp_path: Path):
+    """SIGTERM → SystemExit is BaseException, not Exception.
+
+    Caught a real leftover on Atlas when we SIGTERM'd Erebus mid-save;
+    cleanup requires catching BaseException.
+    """
+    p = tmp_path / "state.json"
+
+    real_fsync = os.fsync
+
+    def kill_mid_write(_):
+        raise SystemExit(1)
+
+    with patch("agi.common.atomic_write.os.fsync", kill_mid_write):
+        with pytest.raises(SystemExit):
+            atomic_write_text(p, "x")
+
+    # Target file never created, tempfile cleaned up
+    assert list(tmp_path.iterdir()) == []
+    _ = real_fsync  # silence unused
