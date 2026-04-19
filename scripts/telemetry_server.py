@@ -2134,29 +2134,112 @@ def _get_erebus_memory():
 
 
 def _get_erebus_status():
-    """Check if Erebus is running and get recent log."""
-    import shutil
+    """Richer status: parses the log for cycle/attempt progress,
+    current-task line, and recent solves; counts vision pool pods and
+    help-queue entries. Consumed by the "Erebus — NeuroGolf 2026" card."""
+    import re as _re
 
-    status = {"running": False, "recent_log": [], "memory_summary": {}}
+    status = {
+        "running": False,
+        "recent_log": [],
+        "memory_summary": {},
+        "cycle": None,
+        "attempt": None,
+        "current": None,
+        "recent_solves": [],
+        "this_cycle": None,
+        "vision_pool": {"active": 0, "batches": []},
+        "help_queue_count": 0,
+    }
     try:
         result = subprocess.run(
-            ["pgrep", "-f", "arc_scientist"], capture_output=True, text=True, timeout=5
+            ["pgrep", "-f", "arc_scientist.py"],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         status["running"] = result.returncode == 0
     except Exception:
         pass
+
+    # ── Parse log: cycle, attempt, current task, recent solves ──
     try:
         with open(EREBUS_LOG_PATH) as f:
             lines = f.readlines()
-            status["recent_log"] = [l.rstrip() for l in lines[-20:]]
+        status["recent_log"] = [l.rstrip() for l in lines[-20:]]
+
+        # Walk backwards for the latest cycle header + latest attempt marker.
+        cyc_re = _re.compile(r"EREBUS LEARNING CYCLE (\d+)/(\d+)")
+        att_re = _re.compile(
+            r"\[(\d+)/(\d+)\]\s+task(\d+)\s+strategy=(\S+)\s+model=(\S+)"
+        )
+        solve_re = _re.compile(
+            r"\[(\d+)/\d+\]\s+task(\d+)\s+strategy=(\S+)\s+model=(\S+)\s+->\s+SOLVED\s+(\d+)/(\d+)"
+        )
+        progress_re = _re.compile(r"Progress:\s+(\d+)\s+solved in\s+(\d+)\s+attempts")
+
+        recent_solves = []
+        this_cycle_start_idx = None
+        for i, ln in enumerate(lines):
+            m = cyc_re.search(ln)
+            if m:
+                status["cycle"] = {"current": int(m.group(1)), "total": int(m.group(2))}
+                this_cycle_start_idx = i
+            ms = solve_re.search(ln)
+            if ms:
+                recent_solves.append(
+                    {
+                        "attempt": int(ms.group(1)),
+                        "task": int(ms.group(2)),
+                        "strategy": ms.group(3),
+                        "model": ms.group(4),
+                        "score": f"{ms.group(5)}/{ms.group(6)}",
+                    }
+                )
+        status["recent_solves"] = recent_solves[-5:]
+
+        # Latest attempt-line (reverse scan)
+        for ln in reversed(lines[-40:]):
+            m = att_re.search(ln)
+            if m:
+                status["attempt"] = {
+                    "current": int(m.group(1)),
+                    "total": int(m.group(2)),
+                }
+                status["current"] = {
+                    "task": int(m.group(3)),
+                    "strategy": m.group(4),
+                    "model": m.group(5),
+                    "line": ln.rstrip(),
+                }
+                break
+
+        # This-cycle progress from the latest "Progress:" line after last cycle start
+        scan_from = this_cycle_start_idx if this_cycle_start_idx is not None else 0
+        for ln in reversed(lines[scan_from:]):
+            mp = progress_re.search(ln)
+            if mp:
+                solved = int(mp.group(1))
+                attempts = int(mp.group(2))
+                status["this_cycle"] = {
+                    "solved": solved,
+                    "attempts": attempts,
+                    "rate": (solved / attempts) if attempts else 0.0,
+                }
+                break
     except Exception:
         pass
+
+    # ── Memory summary ──
     try:
         mem = _get_erebus_memory()
+        total_a = mem.get("total_attempts", 0) or 0
+        total_s = mem.get("total_solves", 0) or 0
         status["memory_summary"] = {
-            "total_attempts": mem.get("total_attempts", 0),
-            "total_solves": mem.get("total_solves", 0),
+            "total_attempts": total_a,
+            "total_solves": total_s,
             "tasks_explored": len(mem.get("tasks", {})),
+            "lifetime_rate": (total_s / total_a) if total_a else 0.0,
             "strategies": {
                 k: {
                     "attempts": v.get("attempts", 0),
@@ -2167,6 +2250,61 @@ def _get_erebus_status():
         }
     except Exception:
         pass
+
+    # ── Vision pool: count erebus-vision-* pods Running/Pending ──
+    try:
+        vis = subprocess.run(
+            [
+                "kubectl",
+                "--kubeconfig",
+                os.path.expanduser("~/.kube/config"),
+                "-n",
+                "ssu-atlas-ai",
+                "get",
+                "pods",
+                "-l",
+                "app=erebus-vision",
+                "-o",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        if vis.returncode == 0:
+            import json as _json
+
+            items = _json.loads(vis.stdout).get("items", [])
+            active = sum(
+                1
+                for p in items
+                if (p.get("status") or {}).get("phase") in ("Running", "Pending")
+            )
+            batches = sorted(
+                {
+                    (p.get("metadata") or {})
+                    .get("labels", {})
+                    .get("job-name", "")
+                    for p in items
+                }
+            )
+            status["vision_pool"] = {
+                "active": active,
+                "batches": [b for b in batches if b],
+            }
+    except Exception:
+        pass
+
+    # ── Help queue size ──
+    try:
+        q = _get_erebus_help_queue()
+        if isinstance(q, list):
+            status["help_queue_count"] = len(q)
+        elif isinstance(q, dict):
+            status["help_queue_count"] = len(q.get("queue", []))
+    except Exception:
+        pass
+
     return status
 
 

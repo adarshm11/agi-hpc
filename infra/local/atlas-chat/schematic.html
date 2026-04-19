@@ -777,17 +777,36 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 
     <!-- Erebus Competition Status -->
     <div class="metric-panel">
-      <div class="panel-title"><span class="icon">&#9670;</span> Erebus — NeuroGolf 2026</div>
+      <div class="panel-title" style="display:flex;align-items:center;gap:6px">
+        <span class="icon">&#9670;</span> Erebus — NeuroGolf 2026
+        <span id="ec-live-dot" title="Running?" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-left:4px"></span>
+      </div>
       <div id="erebus-competition" style="font-family:var(--mono);font-size:11px">
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px">
-          <span>ONNX: <b style="color:var(--accent)" id="ec-onnx">--</b></span>
-          <span>Score: <b style="color:var(--green)" id="ec-score">--</b></span>
-          <span>Solves: <b style="color:var(--accent)" id="ec-solves">--</b></span>
-          <span>Attempts: <b style="color:var(--text-dim)" id="ec-attempts">--</b></span>
+        <!-- Top line: lifetime totals + cycle -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+          <span>Solves: <b style="color:var(--green)" id="ec-solves">--</b>/<span id="ec-attempts" style="color:var(--text-dim)">--</span> <span style="color:var(--text-muted)" id="ec-rate">--</span></span>
+          <span>Cycle: <b style="color:var(--accent)" id="ec-cycle">--</b></span>
+          <span>Attempt: <b style="color:var(--accent)" id="ec-attempt">--</b></span>
+          <span>Tasks: <span style="color:var(--text-dim)" id="ec-tasks">--</span></span>
         </div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;font-size:10px;color:var(--text-dim)">
-          <span id="ec-strategies"></span>
+        <!-- This cycle progress -->
+        <div style="margin-bottom:4px;font-size:10px">
+          <span style="color:var(--text-dim)">This cycle:</span> <b style="color:var(--green)" id="ec-cycle-solved">--</b>/<span style="color:var(--text-dim)" id="ec-cycle-attempts">--</span> <span id="ec-cycle-rate" style="color:var(--accent)">--</span>
         </div>
+        <!-- Currently working on -->
+        <div style="margin-bottom:6px;font-size:10px;font-family:var(--mono);color:var(--text-dim);border-left:2px solid var(--accent);padding:2px 6px;background:rgba(74,158,255,0.05)">
+          <span style="color:var(--accent);font-weight:600">NOW</span>
+          <span id="ec-current">idle</span>
+        </div>
+        <!-- Strategy win-rate table -->
+        <div id="ec-strategies" style="margin-bottom:6px;font-size:10px"></div>
+        <!-- Vision pool + help queue -->
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:4px;font-size:10px">
+          <span>Vision pool: <b id="ec-vision" style="color:var(--accent)">0</b></span>
+          <span>Help queue: <b id="ec-help" style="color:var(--yellow)">0</b></span>
+          <span>Strategies: <span style="color:var(--text-dim)" id="ec-strat-count">--</span></span>
+        </div>
+        <!-- Recent solves -->
         <div style="font-size:10px;color:var(--text-dim)" id="ec-recent"></div>
       </div>
     </div>
@@ -2263,14 +2282,99 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     } catch(e){}
   }
 
+  // ─── Erebus competition status ───
+  async function pollErebus(){
+    try {
+      var res = await fetch('/api/erebus/status');
+      if(!res.ok) return;
+      var d = await res.json();
+      var m = d.memory_summary || {};
+      var a = d.attempt || {};
+      var cy = d.cycle || {};
+      var cur = d.current || null;
+      var tc = d.this_cycle || null;
+
+      el('ec-live-dot').style.background = d.running ? 'var(--green)' : 'var(--red)';
+      el('ec-solves').textContent = m.total_solves || 0;
+      el('ec-attempts').textContent = m.total_attempts || 0;
+      el('ec-rate').textContent = m.lifetime_rate != null
+        ? '(' + (m.lifetime_rate*100).toFixed(1) + '%)' : '';
+      el('ec-cycle').textContent = cy.current ? (cy.current + '/' + cy.total) : '--';
+      el('ec-attempt').textContent = a.current ? (a.current + '/' + a.total) : '--';
+      el('ec-tasks').textContent = m.tasks_explored || 0;
+
+      if(tc){
+        el('ec-cycle-solved').textContent = tc.solved;
+        el('ec-cycle-attempts').textContent = tc.attempts;
+        el('ec-cycle-rate').textContent = '(' + (tc.rate*100).toFixed(1) + '%)';
+      } else {
+        el('ec-cycle-solved').textContent = '--';
+        el('ec-cycle-attempts').textContent = '--';
+        el('ec-cycle-rate').textContent = '';
+      }
+
+      // Current task
+      var curEl = el('ec-current');
+      if(cur){
+        curEl.innerHTML = ' task<b style="color:var(--text)">' + String(cur.task).padStart(3,'0') + '</b>'
+          + ' · <span style="color:var(--accent)">' + cur.strategy + '</span>'
+          + ' · <span style="color:var(--text-dim)">' + cur.model + '</span>';
+      } else {
+        curEl.textContent = ' idle or waiting on LLM';
+      }
+
+      // Strategy win-rate bars
+      var strats = m.strategies || {};
+      var entries = Object.keys(strats).map(function(k){
+        var s = strats[k], att = s.attempts||0, suc = s.successes||0;
+        return {name: k, attempts: att, successes: suc, rate: att ? suc/att : 0};
+      }).sort(function(a,b){ return b.rate - a.rate; });
+      var sh = '';
+      entries.forEach(function(e){
+        var pct = (e.rate*100).toFixed(1);
+        var barW = Math.min(100, e.rate*500); // 20% -> full bar
+        var color = e.rate > 0.1 ? 'var(--green)' : (e.rate > 0.05 ? 'var(--yellow)' : 'var(--red)');
+        sh += '<div style="display:flex;align-items:center;gap:6px;font-size:10px;line-height:1.3">'
+            + '<span style="width:110px;color:var(--text-dim)">' + e.name + '</span>'
+            + '<span style="width:60px;color:var(--text);text-align:right">' + e.successes + '/' + e.attempts + '</span>'
+            + '<span style="width:44px;color:' + color + ';text-align:right">' + pct + '%</span>'
+            + '<div style="flex:1;height:4px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden">'
+            +   '<div style="width:' + barW + '%;height:100%;background:' + color + '"></div>'
+            + '</div></div>';
+      });
+      el('ec-strategies').innerHTML = sh || '<span style="color:var(--text-muted)">no strategy data yet</span>';
+      el('ec-strat-count').textContent = entries.length;
+
+      // Vision pool + help queue
+      el('ec-vision').textContent = (d.vision_pool && d.vision_pool.active) || 0;
+      el('ec-help').textContent = d.help_queue_count || 0;
+
+      // Recent solves
+      var rs = d.recent_solves || [];
+      if(rs.length){
+        var rh = '<span style="color:var(--green);font-weight:600">RECENT SOLVES</span><br>';
+        rs.slice().reverse().forEach(function(s){
+          rh += '<span style="color:var(--text)">task' + String(s.task).padStart(3,'0') + '</span>'
+             + ' <span style="color:var(--text-muted)">' + s.score + '</span>'
+             + ' via <span style="color:var(--accent)">' + s.strategy + '</span>+<span style="color:var(--text-dim)">' + s.model + '</span><br>';
+        });
+        el('ec-recent').innerHTML = rh;
+      } else {
+        el('ec-recent').innerHTML = '<span style="color:var(--text-muted)">no recent solves in current log window</span>';
+      }
+    } catch(e){}
+  }
+
   // ─── Init ───
   poll();
   pollEvents();
   pollNRP();
   pollNatsLive();
+  pollErebus();
   setInterval(poll, 5000);
   setInterval(pollEvents, 15000);
   setInterval(pollNRP, 30000);
+  setInterval(pollErebus, 5000);
 
   // ─── Pod log tooltip ───
   var _logTip = document.createElement('div');
