@@ -1,0 +1,22 @@
+name: arc_smoke
+description: |
+  5-task smoke portfolio for CI and fast local feedback.
+  Includes a mix of already-solved tasks (regression sanity) and stuck
+  ones (ambition sanity). A healthy run passes 2-3 of 5; a regression
+  below 1 should flag.
+tasks:
+  - id: 20
+    difficulty: medium
+    note: symmetry-completion family — first Primer auto-solve
+  - id: 56
+    difficulty: medium
+    note: symmetry-classifier — solved after corrected sensei note
+  - id: 45
+    difficulty: easy
+    note: solved by direct+qwen3 early in cycle
+  - id: 210
+    difficulty: medium
+    note: solved by failure_aware+kimi
+  - id: 48
+    difficulty: hard
+    note: classification task — known stuck, tests the long tail

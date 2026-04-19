@@ -48,6 +48,9 @@ credentials.json
 *.log
 /tmp/
 
+# Evaluation harness output — per-run JSON reports go here
+evals/results/
+
 # Backup
 *.dump
 *.tar.gz
