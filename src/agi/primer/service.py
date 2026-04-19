@@ -127,12 +127,27 @@ Output format: a single JSON object with these keys:
 """
 
 
+def _stripped_task(task: dict) -> dict:
+    """Shrink a raw task to just what the Primer needs.
+
+    Drops the ``arc-gen`` augmentation block (hundreds of examples,
+    100K+ tokens on some tasks — see service.py smoke postmortem) and
+    caps the visible test list. We only verify against ``train``;
+    ``arc-gen`` is for scaling up training, not for teaching the rule.
+    """
+    return {
+        "train": task.get("train", []),
+        "test": (task.get("test") or [])[:3],
+    }
+
+
 def _context_for_task(task_num: int, cfg: Config, task: dict) -> str:
-    """Build the user-message context bundle: task JSON + attempt history
-    + any wiki articles Erebus has for this task or its family."""
+    """Build the user-message context bundle: stripped task JSON +
+    attempt history + any wiki articles Erebus has for this task."""
     parts: list[str] = []
     parts.append(
-        f"## Task {task_num:03d}\n\n```json\n{json.dumps(task, indent=2)}\n```\n"
+        f"## Task {task_num:03d}\n\n```json\n"
+        f"{json.dumps(_stripped_task(task), indent=2)}\n```\n"
     )
 
     # Prior-attempt summary from arc_scientist memory
