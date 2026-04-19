@@ -31,7 +31,7 @@ def transform(grid):
     r_min, r_max = rows.min(), rows.max()
     c_min, c_max = cols.min(), cols.max()
     
-    # Center of the bounding box
+    # Center of the bounding box (may be half-integer)
     center_r = (r_min + r_max) / 2.0
     center_c = (c_min + c_max) / 2.0
     
