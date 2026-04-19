@@ -262,6 +262,47 @@ class DCGMAttestor:
             raise GroundingViolation(result.reason)
         return result
 
+    def attest_trace(
+        self,
+        trace_samples: list[dict[str, Any]],
+        *,
+        thresholds: dict[str, float] | None = None,
+    ) -> AttestationResult:
+        """Attest via the *shape* of a power trace rather than two snapshots.
+
+        This is the stronger attestation path — distinguishes a cached
+        replay (zero sustained power) from a real forward pass (steady
+        elevated power) by looking at the full curve. Collect traces
+        with ``scripts/collect_gpu_power_trace.py`` and pass the
+        ``samples`` list here.
+
+        The result's fields are populated as follows:
+
+        - ``computation`` — True iff classify_trace returns active_burst
+          or active_sustained.
+        - ``integrity`` — always True (trace-based attestation doesn't
+          carry ECC info; combine with :meth:`attest` for full coverage).
+        - ``resource_match`` — same as ``computation``; the trace IS the
+          resource-match evidence.
+        - ``reason`` — the classifier's reason + profile + confidence.
+        """
+        from .dcgm_classifier import classify_trace, profile_matches_compute_claim
+
+        cl = classify_trace(trace_samples, thresholds=thresholds)
+        passed = profile_matches_compute_claim(cl.profile)
+        reason = (
+            f"profile={cl.profile} confidence={cl.confidence:.2f} " f"({cl.reason})"
+        )
+        return AttestationResult(
+            passed=passed,
+            computation=passed,
+            integrity=True,
+            resource_match=passed,
+            reason=reason,
+            before=None,
+            after=None,
+        )
+
     # ── internals ──
 
     def _empty_snapshot(self) -> GPUSnapshot:
