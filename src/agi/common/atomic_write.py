@@ -41,9 +41,7 @@ def atomic_write_text(path: Path | str, text: str, *, fsync: bool = True) -> Non
     """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=p.parent, prefix=p.name + ".", suffix=".tmp"
-    )
+    fd, tmp_name = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(text)

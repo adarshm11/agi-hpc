@@ -199,9 +199,7 @@ def _context_for_task(task_num: int, cfg: Config, task: dict) -> str:
     task_note = cfg.wiki_dir / f"sensei_task_{task_num:03d}.md"
     body = read_if_verified(task_note)
     if body is not None:
-        wiki_snips.append(
-            f"### Existing sensei_task_{task_num:03d}.md\n{body[:4000]}"
-        )
+        wiki_snips.append(f"### Existing sensei_task_{task_num:03d}.md\n{body[:4000]}")
     for meta in sorted(cfg.wiki_dir.glob("sensei_meta_*.md")):
         meta_body = read_if_verified(meta)
         if meta_body is not None:
