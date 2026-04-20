@@ -382,15 +382,41 @@ AGI-HPC Environment subsystem to interact with the real world.
 
 ### Architecture
 
-```
-JetBot (Jetson Nano)              Atlas (HP Z840)
-  Camera (CSI)  ──┐               ┌── LH (Gemma 4) - reasoning
-  IMU/sensors   ──┤  NATS over    │── RH (Qwen 3) - creativity
-  Battery/status ─┤  LAN/Tailscale│── Safety Gateway - veto dangerous commands
-                  ├──────────────→├── Memory - episodic + spatial (PostGIS)
-  Left motor   ←──┤               │── Metacognition - battery monitoring
-  Right motor  ←──┤               └── Integration - coordinate all
-  Camera servo ←──┘
+```mermaid
+flowchart LR
+    subgraph JB[JetBot Jetson Nano]
+      CAM[Camera CSI]
+      IMU[IMU sensors]
+      BAT[Battery status]
+      ML[Left motor]
+      MR[Right motor]
+      CS[Camera servo]
+    end
+
+    NATS[NATS over LAN / Tailscale]
+
+    subgraph ATLAS[Atlas HP Z840]
+      LH[LH Gemma 4 reasoning]
+      RH[RH Qwen 3 creativity]
+      SG[Safety Gateway veto dangerous]
+      MEM[Memory episodic + spatial PostGIS]
+      META[Metacognition battery monitoring]
+      INT[Integration coordinator]
+    end
+
+    CAM --> NATS
+    IMU --> NATS
+    BAT --> NATS
+    NATS --> LH
+    NATS --> RH
+    NATS --> SG
+    NATS --> MEM
+    NATS --> META
+    NATS --> INT
+    INT --> NATS
+    NATS --> ML
+    NATS --> MR
+    NATS --> CS
 ```
 
 ### NATS Subjects

@@ -103,6 +103,47 @@ flowchart TB
 
 ## NATS topology and NRP burst
 
+```mermaid
+flowchart TB
+    subgraph NRP[NRP Nautilus - 100+ university nodes]
+      LLM[Managed LLM API ellm.nrp-nautilus.io v1<br/>OpenAI-compat + /anthropic proxy<br/>Kimi K2.5 1T, Qwen 3.5 397B<br/>GLM-4.7 358B, MiniMax M2.7, Gemma 4]
+      VIS[Burst Jobs ephemeral K8s<br/>GLM-4.1V vision on L40 / L40S / A10]
+      WP[Worker pools Deployments<br/>erebus-workers 8x nats-bursting]
+      STO[CephFS PVC erebus-ego-models<br/>300 Gi rook-cephfs]
+      LEAF[NATS leaf node :7422<br/>TLS s2_fast]
+    end
+
+    TS[Tailscale VPN mesh<br/>100.68.134.21]
+
+    subgraph ATLAS[Atlas Workstation HP Z840 SJSU]
+      NATS[NATS JetStream :4222]
+      G0[GPU 0 Superego<br/>Gemma 4 31B llama.cpp :8080]
+      G1[GPU 1 Ego<br/>Qwen 3 32B llama.cpp :8082]
+      CPU[CPU Council<br/>Gemma 4 26B-A4B :8084 --par 8]
+      PG[PostgreSQL + pgvector<br/>RAG :8081 Telemetry :8085]
+      PRIMER[atlas-primer vMOE tutor]
+      ARC[arc_scientist ARC loop]
+      CADDY[Caddy + oauth2-proxy<br/>atlas-sjsu.duckdns.org]
+    end
+
+    LLM --> LEAF
+    VIS --> LEAF
+    WP --> LEAF
+    STO --- WP
+    LEAF <-.TLS.-> TS
+    TS <--> NATS
+    G0 --> NATS
+    G1 --> NATS
+    CPU --> NATS
+    NATS --> PG
+    NATS --> PRIMER
+    NATS --> ARC
+    CADDY --> PG
+```
+
+<details>
+<summary>ASCII version</summary>
+
 ```
                         ┌────────────────────────────────────────┐
                         │      NRP NAUTILUS                      │
@@ -163,6 +204,8 @@ flowchart TB
                         │  Caddy → oauth2-proxy → service        │
                         └─────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 

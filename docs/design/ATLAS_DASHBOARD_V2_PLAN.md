@@ -84,23 +84,13 @@ Three pieces are the reason this rebuild exists. If I build these and nothing el
 
 A centered WebGL or canvas composition with three nodes arranged in a triangle:
 
-```
-                  ╭──────────╮
-                  │ SUPEREGO │    ← Qwen 72B · GPU 0
-                  │  Spock   │    · analytical · watches for safety
-                  ╰────┬─────╯
-                       │
-                       ▼
-                  ╭─────────╮
-                  │   EGO   │     ← Gemma 4 × 7 · CPU · council
-                  │ Council │     · deliberates, synthesizes
-                  ╰────┬────╯
-                       │
-                       ▼
-                  ╭──────────╮
-                  │    ID    │     ← Qwen 32B · GPU 1
-                  │  Kirk    │     · creative · generates
-                  ╰──────────╯
+```mermaid
+flowchart TB
+    SUPEREGO[SUPEREGO Spock<br/>Qwen 72B GPU 0<br/>analytical watches for safety]
+    EGO[EGO Council<br/>Gemma 4 x 7 CPU<br/>deliberates synthesizes]
+    ID[ID Kirk<br/>Qwen 32B GPU 1<br/>creative generates]
+
+    SUPEREGO --> EGO --> ID
 ```
 
 **What's animated (per real user request):**
@@ -148,6 +138,26 @@ This is the "trust the machine" story: Atlas isn't a black box; it tells you *wh
 
 Single-screen at 1920×1080 (what investors present on). Breakpoints down to mobile for phones.
 
+```mermaid
+flowchart TB
+    HEADER[Header compact<br/>Atlas Live Council consensus 94pct Pitch Mode]
+
+    subgraph ROW1[Main row]
+      HERO[Trinity Live<br/>hero viz]
+      FEED[Recent queries<br/>live feed]
+    end
+
+    subgraph ROW2[Platform and safety]
+      PH[Platform Heartbeat<br/>Spock temp GPU Kirk temp GPU<br/>Ego jobs threads RAM]
+      ST[Safety Telemetry<br/>Ethicist veto rate<br/>Fallback activation<br/>Consensus rate<br/>Signed artifacts]
+    end
+
+    HEADER --> ROW1 --> ROW2
+```
+
+<details>
+<summary>ASCII wireframe</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  ATLAS  ·  Live  ·  Council consensus: 94%  ·  [Pitch Mode] 🎬   │ ← header (compact)
@@ -169,6 +179,8 @@ Single-screen at 1920×1080 (what investors present on). Breakpoints down to mob
 │  256 GB RAM · 85% free    │  Signed artifacts     12,094 today   │
 └───────────────────────────┴─────────────────────────────────────┘
 ```
+
+</details>
 
 **Pitch Mode** (toggle in header): hides operator noise (service labels, exact temps), emphasizes the trinity animation, speeds up the activity feed so something is always happening. One click from "ops dashboard" to "investor demo".
 

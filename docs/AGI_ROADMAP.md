@@ -136,6 +136,30 @@ Atlas should do the same during low-usage periods (nights, weekends).
 
 ### 1.2 Architecture: The Dreaming Subsystem
 
+```mermaid
+flowchart TB
+    subgraph DS[Dreaming Subsystem - runs during idle periods]
+      EPI[Episodic Memory<br/>recent conversations]
+      PE[Pattern Extractor LLM-driven<br/>what did I learn from these<br/>50 conversations?]
+      CR[Contradiction Resolver<br/>I said X on Monday but Y on Thursday.<br/>Which is correct?]
+      SM[Semantic Memory Update<br/>new facts, corrected beliefs]
+      PM[Procedural Memory Update<br/>when asked about X approach Y worked best]
+      DG[Dream Generator<br/>novel recombination of episodic fragments<br/>creative synthesis for latent insights]
+    end
+
+    NATS[NATS subjects<br/>agi.dreaming.replay<br/>agi.dreaming.extract<br/>agi.dreaming.resolve<br/>agi.dreaming.consolidate<br/>agi.dreaming.dream]
+
+    EPI --> PE --> CR
+    CR --> SM
+    CR --> PM
+    EPI --> DG
+
+    DS --- NATS
+```
+
+<details>
+<summary>ASCII version</summary>
+
 ```
                     ┌─────────────────────────────────────────┐
                     │           DREAMING SUBSYSTEM             │
@@ -185,6 +209,8 @@ Atlas should do the same during low-usage periods (nights, weekends).
                     │         resolve,consolidate,dream}       │
                     └─────────────────────────────────────────┘
 ```
+
+</details>
 
 ### 1.3 Implementation: Five Stages of Sleep
 

@@ -76,20 +76,33 @@ flowchart TB
 
 ### Backend abstraction
 
-```
-Caller  ──►  DivineCouncil.deliberate()
-                  │
-                  ▼
-          CouncilBackend (Protocol)
-                  │
-                  ├─► LlamaServerBackend(Gemma 4, :8084)   ← primary
-                  │       · health probe (GET /health, cached 5 s)
-                  │       · per-request retry (3 attempts, exponential)
-                  │       · circuit breaker (open after 5 consecutive fails)
-                  │
-                  └─► LlamaServerBackend(Spock/Qwen 72B, :8080)   ← fallback
-                          · same health/retry semantics
-                          · used in "degraded" mode: one model, all 7 roles
+```mermaid
+flowchart TB
+    CAL[Caller]
+    DEL[DivineCouncil.deliberate]
+    CB[CouncilBackend Protocol]
+
+    subgraph PRI[Primary]
+      P1[LlamaServerBackend<br/>Gemma 4 :8084]
+      P2[health probe GET /health cached 5s]
+      P3[per-request retry 3 attempts exponential]
+      P4[circuit breaker open after 5 fails]
+    end
+
+    subgraph FB[Fallback]
+      F1[LlamaServerBackend<br/>Spock Qwen 72B :8080]
+      F2[same health / retry semantics]
+      F3[degraded mode one model all 7 roles]
+    end
+
+    CAL --> DEL --> CB
+    CB --> P1
+    P1 --> P2
+    P1 --> P3
+    P1 --> P4
+    CB -.fallback.-> F1
+    F1 --> F2
+    F1 --> F3
 ```
 
 `FallbackBackend(primary, fallback)` composes them: it tries primary; if primary's circuit is open OR health check fails, it routes to fallback and sets a `degraded_mode=True` flag on the returned vote. Verdicts carry this flag so callers can log/display the degradation.

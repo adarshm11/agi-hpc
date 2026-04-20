@@ -27,6 +27,9 @@ flowchart TB
     REF -.veto.-> ACT
 ```
 
+<details>
+<summary>ASCII version (legacy)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         AGI-HPC COGNITIVE LAYER                         │
@@ -69,6 +72,8 @@ flowchart TB
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+</details>
 
 ---
 
@@ -819,6 +824,37 @@ class EthicalDecisionLogger:
 
 ## 7. Service Topology
 
+```mermaid
+flowchart TB
+    subgraph ROW1[Pre-action pipeline]
+      LH[LH Service :50051]
+      PRE[Pre-Action Safety :50055]
+      ERIS[ErisML Service :50060]
+    end
+
+    subgraph ROW2[Action tier]
+      MEM[Memory Services :50052-54]
+      IN[In-Action Safety :50056]
+      EPI[Episodic Memory :50053]
+    end
+
+    subgraph ROW3[Post-action]
+      RH[RH Service :50057]
+      POST[Post-Action Safety :50058]
+    end
+
+    LH --> PRE --> ERIS
+    LH --> MEM
+    PRE --> IN
+    ERIS --> EPI
+    MEM --> RH
+    IN --> POST
+    POST -.logs outcomes.-> EPI
+```
+
+<details>
+<summary>ASCII version</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    AGI-HPC SERVICE MESH                         │
@@ -849,9 +885,31 @@ class EthicalDecisionLogger:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ---
 
 ## 8. Decision Flow Example
+
+```mermaid
+flowchart TB
+    P1[1 LH generates plan<br/>Navigate to red cube pick it up]
+    P2[2 LH calls PreActionSafety.CheckPlan]
+    P3[3 Rule-based checks<br/>no banned tools = PASS]
+    P4[4 ErisML.EvaluatePlan step_facts]
+    P5["5a ReflexLayer<br/>no hard vetoes"]
+    P6[5b TacticalLayer<br/>MoralVectors<br/>physical safety 0.2<br/>autonomy respected]
+    P7[5c Bond Index 0.12<br/>within threshold]
+    P8[6 ErisML returns<br/>plan_approved true<br/>DecisionProof hash chain]
+    P9[7 Pre-action ALLOW to LH]
+    P10[8 LH publishes<br/>plan.step_ready events]
+    P11[9 Post-action logs<br/>outcomes to episodic memory]
+
+    P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11
+```
+
+<details>
+<summary>Text trace</summary>
 
 ```
 1. LH generates plan: "Navigate to red cube, pick it up"
@@ -885,6 +943,8 @@ class EthicalDecisionLogger:
    └── EthicalDecisionLogger.record_outcome()
    └── Hash chain maintained for audit
 ```
+
+</details>
 
 ---
 

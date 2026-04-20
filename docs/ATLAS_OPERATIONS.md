@@ -93,6 +93,45 @@ flowchart TB
 
 Atlas implements a 10-subsystem cognitive architecture inspired by dual-process theory (Kahneman, 2011), Global Workspace Theory (Baars, 1988), and biologically-inspired memory hierarchies.
 
+```mermaid
+flowchart TB
+    UI[Web UI atlas-chat]
+    CADDY[Caddy TLS + Reverse :443]
+    AUTH[OAuth2 Proxy Google :4180]
+    RAG[RAG Server Flask :8081<br/>Wiki → PCA-384 → FTS]
+
+    subgraph GPU[GPUs]
+      SPOCK[Spock GPU 0<br/>Qwen 72B Q5 :8080]
+      KIRK[Kirk GPU 1<br/>when available :8082]
+    end
+
+    NATS[NATS JetStream :4222<br/>Event fabric agi.* subjects]
+
+    subgraph SYS[Subsystems]
+      MEM[Memory :50300]
+      SAFE[Safety :50055]
+      META[Metacognition]
+      DHT[DHT registry]
+      ENV[Environment]
+      INT[Integration]
+    end
+
+    UI -->|HTTPS| CADDY --> AUTH --> RAG
+    RAG --> SPOCK
+    RAG --> KIRK
+    SPOCK --> NATS
+    KIRK --> NATS
+    NATS --> MEM
+    NATS --> SAFE
+    NATS --> META
+    NATS --> DHT
+    NATS --> ENV
+    NATS --> INT
+```
+
+<details>
+<summary>ASCII version</summary>
+
 ```
                         ┌─────────────────────────┐
                         │   Web UI (atlas-chat)    │
@@ -122,6 +161,8 @@ Atlas implements a 10-subsystem cognitive architecture inspired by dual-process 
                Memory Safety Meta DHT  Env  Integration
                :50300 :50055       ...
 ```
+
+</details>
 
 ### 2.2 Dual-Hemisphere Design
 
@@ -366,6 +407,49 @@ sudo bash deploy/systemd/install-services.sh --uninstall
 
 ### 3.3 Request Flow
 
+```mermaid
+flowchart LR
+    B[Browser]
+    CADDY[Caddy :443 TLS]
+    AUTH[OAuth2 Proxy :4180<br/>Google Auth]
+    RAG[RAG Server :8081]
+
+    subgraph RET[Retrieval cascade]
+      WIKI[Wiki filesystem under 1ms]
+      PCA[PCA-384 IVFFlat pgvector 4.4ms]
+      FTS[tsvector FTS fallback 2.9ms]
+      BGE[BGE-M3 embed 232ms]
+    end
+
+    subgraph HEMI[Hemispheres]
+      SPOCK[Spock :8080]
+      KIRK[Kirk :8082]
+    end
+
+    SC[Safety check]
+    RESP[Stream response]
+
+    TEL[Telemetry :8085<br/>via /api/telemetry /api/events /api/visitors<br/>bypasses OAuth2]
+
+    B --> CADDY --> AUTH --> RAG
+    RAG --> WIKI
+    RAG --> PCA
+    RAG --> FTS
+    RAG --> BGE
+    WIKI --> SPOCK
+    PCA --> SPOCK
+    WIKI --> KIRK
+    PCA --> KIRK
+    SPOCK <-->|4 rounds| KIRK
+    SPOCK --> SC
+    KIRK --> SC
+    SC --> RESP --> B
+    CADDY -.-> TEL
+```
+
+<details>
+<summary>Text pipeline</summary>
+
 ```
 Browser → Caddy (:443, TLS)
   → OAuth2 Proxy (:4180, Google Auth)
@@ -384,6 +468,8 @@ Telemetry: Caddy routes /api/telemetry, /api/events, /api/visitors
   directly to Telemetry Server (:8085), bypassing OAuth2.
 ```
 
+</details>
+
 ### 3.5 nats-bursting (K8s cloud bursting)
 
 Atlas bursts training jobs and long-tail inference to **NRP Nautilus**
@@ -397,6 +483,34 @@ local services.
 `authentik.nrp-nautilus.io`).
 
 #### Topology
+
+```mermaid
+flowchart LR
+    subgraph ATLAS[Atlas HP Z840]
+      SUB[agi.* subsystems]
+      HUB[NATS :4222 hub]
+      LEAF[NATS :7422 leaf listener<br/>TLS via Caddy cert]
+      NB[nats-bursting<br/>Go controller systemd]
+    end
+
+    subgraph NRP[NRP ssu-atlas-ai]
+      POD[Burst pods]
+      SVC[atlas-nats leaf service]
+      LEAFPOD[NATS leaf pod Deployment]
+    end
+
+    NAT["Router NAT<br/>0.0.0.0:7422 → 192.168.0.7:7422<br/>atlas-sjsu.duckdns.org"]
+
+    SUB --> HUB
+    HUB <--> LEAF
+    NB --> LEAF
+    LEAF <-.TLS outbound.-> LEAFPOD
+    LEAFPOD --> SVC --> POD
+    NAT -.-> LEAF
+```
+
+<details>
+<summary>ASCII version</summary>
 
 ```
       ┌──────────────── Atlas ────────────────┐             ┌──── NRP (ssu-atlas-ai) ────┐
@@ -415,6 +529,8 @@ local services.
              Router NAT: 0.0.0.0:7422 → 192.168.0.7:7422
                    Public hostname: atlas-sjsu.duckdns.org
 ```
+
+</details>
 
 #### Key files on Atlas
 
