@@ -153,12 +153,12 @@ sequenceDiagram
     Pr->>Val: validate(code, task.train)
   end
   alt any candidate passes all train examples
-    Pr->>Wiki: write sensei_task_167.md (frontmatter: verified_by)
-    Pr->>Wiki: git commit + push (CI deploys)
-    Pr->>UKG: promote gap → filled (created_at preserved)
+    Pr->>Wiki: write sensei_task_167.md (frontmatter verified_by)
+    Pr->>Wiki: git commit and push (CI deploys)
+    Pr->>UKG: promote gap to filled (created_at preserved)
     Sci->>Wiki: read as mentor preamble next attempt
   else none verify
-    Pr->>Pr: cooldown 6h; try again later
+    Pr->>Pr: cooldown 6h then try again
   end
 ```
 
