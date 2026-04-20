@@ -11,12 +11,12 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-1. **Identify objects:** Find all connected components of color 2. Each component is a solid rectangle; compute its bounding box `(r0, r1, c0, c1)`.
+1. **Identify objects:** Find all connected components of color 2. Each component forms a solid rectangle; compute its bounding box `(r0, r1, c0, c1)` where r0/r1 are the min/max row indices and c0/c1 are the min/max column indices.
 
 2. **Consider pairs:** For every unordered pair of rectangles `(A, B)`:
    - Compute their **row overlap**: `rs = max(A.r0, B.r0)`, `re = min(A.r1, B.r1)`. If `rs > re`, skip (no shared rows).
-   - Compute their **horizontal gap**: If `A` is left of `B` (`A.c1 < B.c0`), the gap columns are `A.c1+1` through `B.c0-1`. Symmetrically if `B` is left of `A`. If they overlap horizontally, skip.
-   - **Check for blockers:** A third rectangle `C` blocks this pair if `C`'s row range intersects `[rs, re]` AND `C`'s column range intersects the gap. If any blocker exists, skip the entire pair (do not fill any row of the gap).
+   - Compute their **horizontal gap**: If `A` is left of `B` (`A.c1 < B.c0`), the gap columns are `A.c1+1` through `B.c0-1`. Symmetrically if `B` is left of `A`. If they overlap or touch horizontally, skip.
+   - **Check for blockers:** A third rectangle `C` blocks this pair if `C`'s row range intersects `[rs, re]` AND `C`'s column range intersects the gap columns. If any blocker exists, skip the entire pair (do not fill any row of the gap).
    - **Fill the gap:** If unblocked, set all cells in rows `rs..re` and gap columns to color 9 (only if currently 0).
 
 3. **Preserve everything else:** All non-gap pixels copy unchanged from input to output.
@@ -74,4 +74,4 @@ def transform(grid):
 
 ## Why this generalizes
 
-This belongs to the **gap-fill** primitive family: identify discrete objects, find spatial relationships between pairs (here: horizontal separation with row overlap), and fill the intervening space with a new color. The **blocking check** is critical — it ensures fills only occur when the gap is truly empty, preventing incorrect fills when a third object interrupts the line of sight between the pair. This pattern appears in multiple ARC tasks where objects must "connect" or "bridge" across empty space, but only when unobstructed.
+This belongs to the **gap-fill** primitive family: identify discrete objects (connected components), find spatial relationships between pairs (here: horizontal separation with row overlap), and fill the intervening space with a new color. The **blocking check** is critical — it ensures fills only occur when the gap is truly empty, preventing incorrect fills when a third object interrupts the line of sight between the pair. This pattern appears in multiple ARC tasks where objects must "connect" or "bridge" across empty space, but only when unobstructed. The key insight is that the fill color (9) is distinct from the object color (2), signaling a "connection" or "bridge" rather than object growth.
