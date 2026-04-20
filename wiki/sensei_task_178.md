@@ -17,7 +17,7 @@ This task exhibits structured redundancy in the input grid. The transformation d
 
 2. **All columns identical**: Every column in the grid is the same. Extract one representative column, apply run-length compression, and output as a single column (N×1).
 
-The key insight is that these two cases are mutually exclusive and cover all training examples. When each row is internally uniform (all values in a row are identical), the columns automatically become identical to each other. Similarly, when each column is internally uniform, the rows automatically become identical. So we only need to check for global row/column identity, not per-row/per-column uniformity.
+The key insight is that these two cases are mutually exclusive for non-trivial inputs and cover all training examples. When each row is internally uniform (all values in a row are identical), the columns automatically become identical to each other. Similarly, when each column is internally uniform, the rows automatically become identical. So we only need to check for global row/column identity, not per-row/per-column uniformity.
 
 ## Reference implementation
 
