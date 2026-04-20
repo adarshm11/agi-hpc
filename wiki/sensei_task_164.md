@@ -11,9 +11,9 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-The transformation creates a horizontal mirror image of each row. For every row in the input grid, concatenate the row with its reverse. This doubles the width of the grid while keeping the height the same. The result is that each row becomes palindromic (symmetric left-to-right).
+For each row in the input grid, concatenate the row with its reverse. This creates a horizontal mirror image that doubles the width while keeping the height the same. Each output row becomes palindromic (symmetric left-to-right).
 
-For example, a row `[6, 8, 1]` becomes `[6, 8, 1, 1, 8, 6]` - the original three elements followed by those same three elements in reverse order.
+For example, a row `[6, 8, 1]` becomes `[6, 8, 1, 1, 8, 6]` — the original three elements followed by those same three elements in reverse order.
 
 ## Reference implementation
 
