@@ -524,6 +524,117 @@ def compact(path: Path | None = None) -> int:
     return len(ordered)
 
 
+# ── dashboard summary ────────────────────────────────────────────
+
+
+def summary(
+    path: Path | None = None,
+    *,
+    top_topics: int = 8,
+    recent_fills: int = 8,
+) -> dict[str, Any]:
+    """Aggregate the graph into the shape the dashboard card consumes.
+
+    Returns::
+
+        {
+          "total": int,
+          "by_type":   {"filled": N, "gap": N, "stub": N},
+          "by_status": {"active": N, "archived": N},
+          "fill_rate": float,              # 0..1, filled / (filled + gap)
+          "top_topics_by_gap": [
+            {"topic_key": str, "gaps": N, "filled": N,
+             "total": N, "fill_rate": float}, ...
+          ],
+          "recent_fills": [
+            {"id": str, "topic_key": str, "title": str,
+             "verified_at": int, "last_touched_at": int}, ...
+          ],
+        }
+
+    Intentionally narrow per the Phase 5 spec: node counts by type,
+    top topics by gap density, and recent fills. No "recent gaps" list —
+    add that in a later phase if the dashboard needs it.
+    """
+    latest = load_latest(path)
+    nodes = list(latest.values())
+
+    by_type = {t: 0 for t in ALLOWED_TYPES}
+    by_status = {s: 0 for s in ALLOWED_STATUSES}
+    # topic_key -> {"gaps": int, "filled": int}
+    per_topic: dict[str, dict[str, int]] = {}
+
+    for n in nodes:
+        t = n.get("type")
+        if t in by_type:
+            by_type[t] += 1
+        s = n.get("status")
+        if s in by_status:
+            by_status[s] += 1
+        tk = n.get("topic_key") or "unknown"
+        slot = per_topic.setdefault(tk, {"gaps": 0, "filled": 0})
+        if t == "gap":
+            slot["gaps"] += 1
+        elif t == "filled":
+            slot["filled"] += 1
+
+    filled_count = by_type["filled"]
+    gap_count = by_type["gap"]
+    denom = filled_count + gap_count
+    fill_rate = (filled_count / denom) if denom > 0 else 0.0
+
+    # Top topics by gap density: sort by (gaps desc, then total desc) so a
+    # topic with 5 gaps ranks above one with 2 even if both have the same
+    # fill_rate. Zero-gap topics are dropped — they don't help the user
+    # spot where the graph needs work.
+    topic_rows = []
+    for tk, counts in per_topic.items():
+        total = counts["gaps"] + counts["filled"]
+        if counts["gaps"] == 0:
+            continue
+        topic_rows.append(
+            {
+                "topic_key": tk,
+                "gaps": counts["gaps"],
+                "filled": counts["filled"],
+                "total": total,
+                "fill_rate": round(counts["filled"] / total, 3) if total else 0.0,
+            }
+        )
+    topic_rows.sort(key=lambda r: (-r["gaps"], -r["total"], r["topic_key"]))
+    topic_rows = topic_rows[:top_topics]
+
+    # Recent fills: verified filled nodes sorted by verified_at desc,
+    # fallback to last_touched_at when verified_at is missing. Archived
+    # fills are included — archival is a lifecycle signal, not a fill
+    # retraction, so "recent fills" honestly means "recently published."
+    fills = [n for n in nodes if n.get("type") == "filled"]
+    fills.sort(
+        key=lambda n: (n.get("verified_at") or n.get("last_touched_at") or 0),
+        reverse=True,
+    )
+    recent = [
+        {
+            "id": n.get("id"),
+            "topic_key": n.get("topic_key"),
+            "title": n.get("title"),
+            "verified_at": n.get("verified_at"),
+            "last_touched_at": n.get("last_touched_at"),
+            "status": n.get("status"),
+        }
+        for n in fills[:recent_fills]
+    ]
+
+    return {
+        "total": len(nodes),
+        "by_type": by_type,
+        "by_status": by_status,
+        "fill_rate": round(fill_rate, 3),
+        "top_topics_by_gap": topic_rows,
+        "recent_fills": recent,
+    }
+
+
 # ── config flag (context reader rollout) ─────────────────────────
 
 

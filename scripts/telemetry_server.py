@@ -2690,6 +2690,31 @@ def _get_primer_status():
     return status
 
 
+def _get_ukg_status():
+    """Phase-5 summary for the Unified Knowledge Graph dashboard card.
+
+    Delegates aggregation to ``agi.knowledge.graph.summary`` so the
+    endpoint is a thin wrapper — all logic stays next to the data model.
+    Returns an empty shape on any error so the dashboard degrades
+    gracefully instead of breaking.
+    """
+    empty = {
+        "total": 0,
+        "by_type": {"filled": 0, "gap": 0, "stub": 0},
+        "by_status": {"active": 0, "archived": 0},
+        "fill_rate": 0.0,
+        "top_topics_by_gap": [],
+        "recent_fills": [],
+    }
+    try:
+        from agi.knowledge.graph import summary
+
+        return summary()
+    except Exception as e:  # noqa: BLE001
+        log.warning("ukg_status_failed: %s", e)
+        return empty
+
+
 _erebus_fingerprints: dict = (
     {}
 )  # pre-cached at first chat, persists for server lifetime
@@ -2974,6 +2999,8 @@ class TelemetryHandler(SimpleHTTPRequestHandler):
             self._json_response(_get_erebus_activity(since=since, limit=limit))
         elif self.path == "/api/primer/status":
             self._json_response(_get_primer_status())
+        elif self.path == "/api/ukg/status":
+            self._json_response(_get_ukg_status())
         elif self.path == "/api/trends/erebus":
             self._json_response(_get_erebus_trends())
         elif self.path.startswith("/api/jobs/recent"):

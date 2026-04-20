@@ -838,6 +838,31 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       </div>
     </div>
 
+    <!-- Unified Knowledge Graph -->
+    <div class="metric-panel">
+      <div class="panel-title" style="display:flex;align-items:center;gap:6px">
+        <span class="icon">&#9901;</span> Knowledge Graph
+        <span id="ukg-total-pill" style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:rgba(255,255,255,0.08);font-size:9px;color:var(--text-dim);font-family:var(--mono)">--</span>
+      </div>
+      <div id="ukg-panel" style="font-family:var(--mono);font-size:11px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+          <span title="filled nodes (verified wiki notes)">Filled: <b style="color:var(--green)" id="ukg-filled">--</b></span>
+          <span title="gap nodes (open questions)">Gaps: <b style="color:var(--yellow)" id="ukg-gaps">--</b></span>
+          <span title="stub nodes (partial placeholders)" style="color:var(--text-dim);font-size:10px">Stubs: <span id="ukg-stubs">--</span></span>
+          <span title="filled / (filled + gap)" style="color:var(--text-dim);font-size:10px">Fill rate: <b style="color:var(--accent)" id="ukg-fill-rate">--</b></span>
+        </div>
+        <!-- Fill-rate horizontal bar -->
+        <svg id="ukg-fill-bar" viewBox="0 0 120 6" preserveAspectRatio="none"
+             style="width:100%;height:6px;display:block;margin-bottom:6px"></svg>
+        <!-- Top topics by gap -->
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Top gap topics:</div>
+        <div id="ukg-top-gaps" style="margin-bottom:6px"></div>
+        <!-- Recent fills -->
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Recent fills:</div>
+        <div id="ukg-recent" style="font-size:10px;color:var(--text-dim)"></div>
+      </div>
+    </div>
+
     <!-- Memory Tiers -->
     <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9733;</span> Memory Tiers</div>
@@ -2499,6 +2524,91 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
     } catch(e){}
   }
 
+  // ─── Unified Knowledge Graph ───
+  window._ukgStatus = null;
+  function _renderUKG(s){
+    if(!s) return;
+    var bt = s.by_type || {};
+    el('ukg-total-pill').textContent = (s.total || 0) + ' nodes';
+    el('ukg-filled').textContent = bt.filled == null ? '--' : bt.filled;
+    el('ukg-gaps').textContent = bt.gap == null ? '--' : bt.gap;
+    el('ukg-stubs').textContent = bt.stub == null ? '--' : bt.stub;
+    var fr = s.fill_rate == null ? 0 : s.fill_rate;
+    el('ukg-fill-rate').textContent = (fr * 100).toFixed(0) + '%';
+    // Fill-rate bar: green segment = fill_rate, yellow = remainder.
+    var bar = el('ukg-fill-bar');
+    if (bar) {
+      var filledW = (fr * 120).toFixed(2);
+      var gapW = (120 - parseFloat(filledW)).toFixed(2);
+      bar.innerHTML =
+        '<rect x="0" y="0" width="' + filledW + '" height="6" fill="var(--green)"/>'
+      + '<rect x="' + filledW + '" y="0" width="' + gapW + '" height="6" fill="var(--yellow)"/>';
+    }
+    // Top gap topics: topic | gaps/total mini-bar | count
+    var host = el('ukg-top-gaps');
+    if (host) {
+      var rows = s.top_topics_by_gap || [];
+      if (!rows.length) {
+        host.innerHTML = '<span style="color:var(--text-muted);font-size:10px">no gaps recorded</span>';
+      } else {
+        var html = '';
+        rows.forEach(function(r){
+          var total = Math.max(1, r.total || 0);
+          var gw = ((r.gaps || 0) / total) * 80;
+          var fw = ((r.filled || 0) / total) * 80;
+          var label = (r.topic_key || '?');
+          if (label.length > 28) label = label.slice(0, 27) + '…';
+          html += '<div style="display:grid;grid-template-columns:140px 80px 50px;gap:6px;align-items:center;margin-bottom:2px;font-size:10px">'
+                + '<span style="color:var(--text)" title="' + (r.topic_key || '') + '">' + label + '</span>'
+                + '<svg viewBox="0 0 80 6" preserveAspectRatio="none" style="width:80px;height:6px;display:block">'
+                + '<rect x="0" y="0" width="' + gw.toFixed(2) + '" height="6" fill="var(--yellow)"/>'
+                + '<rect x="' + gw.toFixed(2) + '" y="0" width="' + fw.toFixed(2) + '" height="6" fill="var(--green)"/>'
+                + '</svg>'
+                + '<span style="color:var(--text-dim);font-size:9px">' + (r.gaps || 0) + '/' + (r.total || 0) + '</span>'
+                + '</div>';
+        });
+        host.innerHTML = html;
+      }
+    }
+    // Recent fills
+    var rec = el('ukg-recent');
+    if (rec) {
+      var rows = s.recent_fills || [];
+      if (!rows.length) {
+        rec.innerHTML = '<span style="color:var(--text-muted)">no fills yet</span>';
+      } else {
+        var html = '';
+        rows.forEach(function(r){
+          var title = (r.title || r.id || '?');
+          if (title.length > 60) title = title.slice(0, 59) + '…';
+          var ts = r.verified_at || r.last_touched_at || 0;
+          var age = '';
+          if (ts > 0) {
+            var a = Math.max(0, (Date.now()/1000) - ts);
+            age = a < 60 ? (Math.floor(a) + 's')
+                : a < 3600 ? (Math.floor(a/60) + 'm')
+                : a < 86400 ? (Math.floor(a/3600) + 'h')
+                : (Math.floor(a/86400) + 'd');
+          }
+          html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:1px">'
+                + '<span style="color:var(--green)" title="' + (r.id || '') + '">&bull;</span>'
+                + '<span style="color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + title + '</span>'
+                + '<span style="color:var(--text-muted);font-size:9px">' + age + '</span>'
+                + '</div>';
+        });
+        rec.innerHTML = html;
+      }
+    }
+  }
+  async function pollUKG(){
+    try {
+      var res = await fetch('/api/ukg/status');
+      if(!res.ok) return;
+      window._ukgStatus = await res.json();
+      _renderUKG(window._ukgStatus);
+    } catch(e){}
+  }
+
   // ─── Erebus 30-day trend sparkline ───
   async function pollErebusTrends(){
     try {
@@ -2538,12 +2648,14 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
   pollNatsLive();
   pollErebus();
   pollPrimer();
+  pollUKG();
   pollErebusTrends();
   setInterval(poll, 5000);
   setInterval(pollEvents, 15000);
   setInterval(pollNRP, 30000);
   setInterval(pollErebus, 5000);
   setInterval(pollPrimer, 10000);
+  setInterval(pollUKG, 15000);            // graph shifts slowly; 15s is plenty
   setInterval(pollErebusTrends, 60000);   // trends only shift every few minutes; cheap
 
   // ─── Pod log tooltip ───

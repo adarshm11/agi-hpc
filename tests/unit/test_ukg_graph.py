@@ -32,6 +32,7 @@ from agi.knowledge.graph import (
     normalize_tags,
     normalize_topic_key,
     query_nodes,
+    summary,
     upsert_node,
     validate_record,
 )
@@ -436,3 +437,162 @@ def test_context_reader_mode_invalid_env_falls_back(monkeypatch, caplog):
     caplog.set_level(logging.WARNING, logger="knowledge.graph")
     assert context_reader_mode() == "wiki"
     assert any("EREBUS_CONTEXT_READER" in m for m in caplog.messages)
+
+
+# ── summary (Phase 5 dashboard aggregation) ──────────────────────
+
+
+def _seed_summary_graph(p: Path, t0: int) -> None:
+    """Helper: seed a graph with a mix of filled/gap/stub nodes and topics."""
+    # Topic A: 2 filled, 1 gap → fill_rate 2/3
+    upsert_node(
+        id="n_a1",
+        type="filled",
+        topic="topic A",
+        title="A one",
+        body_ref="wiki/a1.md",
+        verified=True,
+        source="primer",
+        now=t0,
+        path=p,
+    )
+    upsert_node(
+        id="n_a2",
+        type="filled",
+        topic="topic A",
+        title="A two",
+        body_ref="wiki/a2.md",
+        verified=True,
+        source="primer",
+        now=t0 + 10,
+        path=p,
+    )
+    upsert_node(
+        id="n_a3",
+        type="gap",
+        topic="topic A",
+        title="A three (gap)",
+        source="help_queue",
+        now=t0 + 5,
+        path=p,
+    )
+    # Topic B: 3 gaps, 0 filled — zero fill-rate, should rank high by gap count
+    for i in range(3):
+        upsert_node(
+            id=f"n_b{i}",
+            type="gap",
+            topic="topic B",
+            title=f"B gap {i}",
+            source="help_queue",
+            now=t0 + 20 + i,
+            path=p,
+        )
+    # Topic C: 1 filled, 0 gap — should not appear in top_topics_by_gap
+    upsert_node(
+        id="n_c1",
+        type="filled",
+        topic="topic C",
+        title="C one",
+        body_ref="wiki/c1.md",
+        verified=True,
+        source="primer",
+        now=t0 + 30,
+        path=p,
+    )
+
+
+def test_summary_counts_types_and_statuses(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    t0 = int(time.time())
+    _seed_summary_graph(p, t0)
+    s = summary(path=p)
+    assert s["total"] == 7
+    assert s["by_type"] == {"filled": 3, "gap": 4, "stub": 0}
+    assert s["by_status"] == {"active": 7, "archived": 0}
+
+
+def test_summary_fill_rate(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    t0 = int(time.time())
+    _seed_summary_graph(p, t0)
+    s = summary(path=p)
+    # 3 filled / (3 filled + 4 gap) = 3/7 ≈ 0.429
+    assert abs(s["fill_rate"] - 3 / 7) < 0.001
+
+
+def test_summary_top_topics_by_gap_excludes_zero_gap(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    t0 = int(time.time())
+    _seed_summary_graph(p, t0)
+    s = summary(path=p)
+    tops = s["top_topics_by_gap"]
+    topic_keys = [r["topic_key"] for r in tops]
+    # Topic B (3 gaps) first, Topic A (1 gap) second, Topic C excluded
+    assert topic_keys == ["topic-b", "topic-a"]
+    assert tops[0]["gaps"] == 3
+    assert tops[0]["filled"] == 0
+    assert tops[0]["fill_rate"] == 0.0
+    assert tops[1]["gaps"] == 1
+    assert tops[1]["filled"] == 2
+    assert abs(tops[1]["fill_rate"] - 2 / 3) < 0.001
+
+
+def test_summary_recent_fills_sorted_by_verified_at_desc(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    t0 = int(time.time())
+    _seed_summary_graph(p, t0)
+    s = summary(path=p)
+    recent = s["recent_fills"]
+    # Three filled nodes: C (t0+30), A2 (t0+10), A1 (t0)
+    assert [r["id"] for r in recent] == ["n_c1", "n_a2", "n_a1"]
+    assert recent[0]["title"] == "C one"
+    # All recent fills should report verified_at
+    assert all(r["verified_at"] is not None for r in recent)
+
+
+def test_summary_top_topics_limit(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    t0 = int(time.time())
+    # 12 topics with at least one gap each
+    for i in range(12):
+        upsert_node(
+            id=f"g{i}",
+            type="gap",
+            topic=f"topic {i:02d}",
+            title=f"gap {i}",
+            source="help_queue",
+            now=t0 + i,
+            path=p,
+        )
+    s = summary(path=p, top_topics=5)
+    assert len(s["top_topics_by_gap"]) == 5
+
+
+def test_summary_recent_fills_limit(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    t0 = int(time.time())
+    for i in range(12):
+        upsert_node(
+            id=f"f{i}",
+            type="filled",
+            topic="t",
+            title=f"fill {i}",
+            body_ref=f"wiki/f{i}.md",
+            verified=True,
+            source="primer",
+            now=t0 + i,
+            path=p,
+        )
+    s = summary(path=p, recent_fills=5)
+    assert len(s["recent_fills"]) == 5
+
+
+def test_summary_empty_graph(tmp_path: Path):
+    p = tmp_path / "g.jsonl"
+    s = summary(path=p)
+    assert s["total"] == 0
+    assert s["by_type"] == {"filled": 0, "gap": 0, "stub": 0}
+    assert s["by_status"] == {"active": 0, "archived": 0}
+    assert s["fill_rate"] == 0.0
+    assert s["top_topics_by_gap"] == []
+    assert s["recent_fills"] == []
