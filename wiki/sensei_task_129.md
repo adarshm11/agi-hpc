@@ -9,9 +9,9 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-Find the most frequently occurring color (integer value) in the input grid. Then create an output grid with the exact same dimensions as the input, where every cell is filled with that most frequent color.
+Count the frequency of each color (integer value) in the input grid. Identify which color appears most often. Then create an output grid with the exact same dimensions as the input, where every single cell is filled with that most frequent color.
 
-In other words: count all colors in the input, identify which color appears most often, and flood-fill the entire output with that winner color.
+This is a global aggregation task: you must scan the entire input to compute color frequencies, select the winner, and then uniformly expand that single value across all output positions.
 
 ## Reference implementation
 
@@ -36,10 +36,10 @@ def transform(grid):
 
 ## Why this generalizes
 
-This belongs to the **most-frequent-color-fill** primitive family. The pattern is:
+This belongs to the **most-frequent-color-fill** primitive family. The pattern consists of three steps:
 
-1. **Global aggregation**: Scan the entire input grid to compute a statistic (color frequency)
-2. **Winner selection**: Pick the color with maximum count
-3. **Uniform expansion**: Replicate that single value across all output positions
+1. **Global aggregation**: Scan the entire input grid to compute a statistic (color frequency distribution)
+2. **Winner selection**: Pick the color with the maximum count (ties are resolved by Counter's arbitrary but deterministic ordering)
+3. **Uniform expansion**: Replicate that single winning value across all output positions
 
-This generalizes to any grid size and any color palette because it only depends on counting frequencies, not on spatial relationships or specific color values. The output shape always matches the input shape (TRANSFORMATION class), making this a shape-preserving fill operation driven by global color statistics.
+This generalizes to any grid size and any color palette because it depends only on counting frequencies, not on spatial relationships, specific color values, or geometric patterns. The output shape always matches the input shape (TRANSFORMATION class), making this a shape-preserving fill operation driven entirely by global color statistics.
