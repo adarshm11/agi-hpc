@@ -13,7 +13,7 @@ verified_by: run-against-train (all examples pass)
 
 This task involves **vertical alignment** of multiple colored objects. The rule is:
 
-1. Identify all colored objects in the grid (each color forms one or more connected components, but we treat all cells of the same color as one object for alignment purposes).
+1. Identify all colored objects in the grid (each color forms one object; treat all cells of the same color as one unit).
 2. Find the **top row** (minimum row index) of the color-1 object.
 3. Shift every other colored object **vertically** so that their top rows align with the top row of the color-1 object.
 4. **Horizontal positions remain unchanged** — only vertical shifting occurs.
