@@ -274,6 +274,20 @@ def conversation_has_event(conversation_id: str, *, path: Path | None = None) ->
     )
 
 
+def recent_events(n: int = 5, *, path: Path | None = None) -> list[dict]:
+    """Return the ``n`` most recent events, newest first.
+
+    Used by the dashboard's "Recent dissatisfaction events" row. For
+    v1 volumes, reading the whole sidecar and sorting is fine; if the
+    log grows large we can tail-seek in a later phase.
+    """
+    if n <= 0:
+        return []
+    evs = list(iter_events(path=path))
+    evs.sort(key=lambda e: e.get("ts", 0), reverse=True)
+    return evs[:n]
+
+
 def events_for_topic_key(topic_key: str, *, path: Path | None = None) -> list[dict]:
     """Return all events whose ``topic_key`` matches — ordered by ``ts``.
 

@@ -859,7 +859,14 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
         <div id="ukg-top-gaps" style="margin-bottom:6px"></div>
         <!-- Recent fills -->
         <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Recent fills:</div>
-        <div id="ukg-recent" style="font-size:10px;color:var(--text-dim)"></div>
+        <div id="ukg-recent" style="font-size:10px;color:var(--text-dim);margin-bottom:6px"></div>
+        <!-- Gap Mapping: dissatisfaction signals ----------------- -->
+        <div style="border-top:1px solid var(--border);padding-top:4px;margin-top:2px">
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Top dissatisfaction topics <span id="ukg-diss-count" style="color:var(--text-muted);font-family:var(--mono)">(0)</span>:</div>
+          <div id="ukg-diss-topics" style="margin-bottom:6px"></div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px">Recent dissatisfaction events:</div>
+          <div id="ukg-diss-events" style="font-size:10px;color:var(--text-dim)"></div>
+        </div>
       </div>
     </div>
 
@@ -2597,6 +2604,56 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
                 + '</div>';
         });
         rec.innerHTML = html;
+      }
+    }
+    // Gap Mapping — dissatisfaction topics + events
+    var diss = s.dissatisfaction || {};
+    var _age = function(ts){
+      if (!ts) return '';
+      var a = Math.max(0, (Date.now()/1000) - ts);
+      return a < 60 ? (Math.floor(a) + 's')
+           : a < 3600 ? (Math.floor(a/60) + 'm')
+           : a < 86400 ? (Math.floor(a/3600) + 'h')
+           : (Math.floor(a/86400) + 'd');
+    };
+    var dc = el('ukg-diss-count');
+    var topics = diss.top_topics || [];
+    if (dc) dc.textContent = '(' + topics.length + ')';
+    var dtop = el('ukg-diss-topics');
+    if (dtop) {
+      if (!topics.length) {
+        dtop.innerHTML = '<span style="color:var(--text-muted);font-size:10px">no dissatisfaction gaps</span>';
+      } else {
+        var html = '';
+        topics.forEach(function(t){
+          var label = (t.topic_key || t.topic || '?');
+          if (label.length > 28) label = label.slice(0, 27) + '…';
+          html += '<div style="display:grid;grid-template-columns:160px 40px 60px;gap:6px;align-items:center;margin-bottom:2px;font-size:10px">'
+                + '<span style="color:var(--text)" title="' + (t.topic || t.topic_key || '') + '">' + label + '</span>'
+                + '<span style="color:var(--yellow);font-weight:600" title="signal_count">x' + (t.signal_count || 0) + '</span>'
+                + '<span style="color:var(--text-muted);font-size:9px" title="last_signal_at">' + _age(t.last_signal_at) + ' ago</span>'
+                + '</div>';
+        });
+        dtop.innerHTML = html;
+      }
+    }
+    var devs = el('ukg-diss-events');
+    if (devs) {
+      var events = diss.recent_events || [];
+      if (!events.length) {
+        devs.innerHTML = '<span style="color:var(--text-muted)">no recent events</span>';
+      } else {
+        var html = '';
+        events.forEach(function(e){
+          var tk = (e.topic_key || '?');
+          if (tk.length > 40) tk = tk.slice(0, 39) + '…';
+          html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:1px">'
+                + '<span style="color:var(--yellow)" title="conv:' + (e.conversation_id || '') + '">&bull;</span>'
+                + '<span style="color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + (e.rationale || '') + '">' + tk + '</span>'
+                + '<span style="color:var(--text-muted);font-size:9px">' + _age(e.ts) + '</span>'
+                + '</div>';
+        });
+        devs.innerHTML = html;
       }
     }
   }

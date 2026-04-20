@@ -2697,6 +2697,11 @@ def _get_ukg_status():
     endpoint is a thin wrapper — all logic stays next to the data model.
     Returns an empty shape on any error so the dashboard degrades
     gracefully instead of breaking.
+
+    Gap-Mapping Phase 5 adds a ``dissatisfaction`` block with the
+    top topics (from the UKG's source-filtered view) + recent events
+    (from the sidecar log). Both read materialized fields / tail
+    scans only; neither walks ``evidence[]`` at render time.
     """
     empty = {
         "total": 0,
@@ -2705,14 +2710,29 @@ def _get_ukg_status():
         "fill_rate": 0.0,
         "top_topics_by_gap": [],
         "recent_fills": [],
+        "dissatisfaction": {"top_topics": [], "recent_events": []},
     }
     try:
         from agi.knowledge.graph import summary
 
-        return summary()
+        s = summary(source_filter="dissatisfaction")
     except Exception as e:  # noqa: BLE001
         log.warning("ukg_status_failed: %s", e)
         return empty
+
+    # Promote the source-filtered ranking + recent events into a
+    # nested "dissatisfaction" block so the dashboard consumer has one
+    # obvious place to find this data.
+    top_topics = s.pop("top_dissatisfaction_topics", [])
+    recent = []
+    try:
+        from agi.metacognition.dissatisfaction_events import recent_events
+
+        recent = recent_events(5)
+    except Exception as e:  # noqa: BLE001
+        log.warning("ukg_status_recent_events_failed: %s", e)
+    s["dissatisfaction"] = {"top_topics": top_topics, "recent_events": recent}
+    return s
 
 
 _erebus_fingerprints: dict = (

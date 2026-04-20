@@ -550,6 +550,7 @@ def summary(
     *,
     top_topics: int = 8,
     recent_fills: int = 8,
+    source_filter: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate the graph into the shape the dashboard card consumes.
 
@@ -570,9 +571,13 @@ def summary(
           ],
         }
 
-    Intentionally narrow per the Phase 5 spec: node counts by type,
-    top topics by gap density, and recent fills. No "recent gaps" list —
-    add that in a later phase if the dashboard needs it.
+    When ``source_filter`` is supplied, the result also carries a
+    ``top_<source>_topics`` key — a ranked view of nodes whose
+    ``source`` matches, ordered by node-level ``signal_count`` desc
+    then ``last_signal_at`` desc (Gap-Mapping spec §5.1, AC7). Base
+    counters above are unaffected — they always span the whole graph.
+    Ranking reads the materialized aggregate fields on each node; it
+    NEVER scans ``evidence[]``.
     """
     latest = load_latest(path)
     nodes = list(latest.values())
@@ -643,7 +648,7 @@ def summary(
         for n in fills[:recent_fills]
     ]
 
-    return {
+    result: dict[str, Any] = {
         "total": len(nodes),
         "by_type": by_type,
         "by_status": by_status,
@@ -651,6 +656,32 @@ def summary(
         "top_topics_by_gap": topic_rows,
         "recent_fills": recent,
     }
+
+    # Source-filtered ranking (Gap-Mapping spec §5.1). Reads the
+    # aggregate fields written by consumers (e.g. the gap aggregator's
+    # signal_count / last_signal_at) — never scans evidence[].
+    if source_filter:
+        filtered = [n for n in nodes if n.get("source") == source_filter]
+        filtered.sort(
+            key=lambda n: (
+                n.get("signal_count", 0),
+                n.get("last_signal_at") or 0,
+            ),
+            reverse=True,
+        )
+        result[f"top_{source_filter}_topics"] = [
+            {
+                "id": n.get("id"),
+                "topic": n.get("topic"),
+                "topic_key": n.get("topic_key"),
+                "signal_count": n.get("signal_count", 0),
+                "first_signal_at": n.get("first_signal_at"),
+                "last_signal_at": n.get("last_signal_at"),
+            }
+            for n in filtered[:top_topics]
+        ]
+
+    return result
 
 
 # ── config flag (context reader rollout) ─────────────────────────
