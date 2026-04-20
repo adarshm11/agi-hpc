@@ -9,18 +9,18 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-The transformation creates a symmetric expansion of the input grid by applying both horizontal and vertical mirroring:
+The transformation creates a symmetric expansion by mirroring the input grid both horizontally and vertically:
 
 1. **Horizontal mirror**: Each row is concatenated with its reverse. A 3-column input becomes 6 columns.
 2. **Vertical mirror**: The horizontally-mirrored grid is concatenated with its row-reversed version. A 3-row input becomes 6 rows.
 
 This produces a 2×2 block structure:
 - **Top-left**: Original input
-- **Top-right**: Horizontal mirror of input
-- **Bottom-left**: Vertical mirror of input  
-- **Bottom-right**: Both mirrors (equivalent to 180° rotation)
+- **Top-right**: Horizontal mirror of input (each row reversed)
+- **Bottom-left**: Vertical mirror of input (rows in reverse order)
+- **Bottom-right**: Both mirrors applied (equivalent to 180° rotation)
 
-The output dimensions are always exactly double the input dimensions in both axes.
+The output dimensions are always exactly double the input dimensions in both axes. For an N×M input, the output is (2N)×(2M).
 
 ## Reference implementation
 
@@ -41,4 +41,4 @@ def transform(grid):
 
 ## Why this generalizes
 
-This belongs to the **symmetry-completion** primitive family. The pattern is deterministic and size-agnostic: any rectangular input grid can be expanded using the same two-step mirroring process. The key insight is recognizing that the output exhibits both horizontal AND vertical symmetry axes through the center, which uniquely determines the transformation as a double-mirror expansion. This primitive appears in multiple ARC tasks where the goal is to create symmetric patterns from asymmetric seeds.
+This belongs to the **symmetry-completion** primitive family. The pattern is deterministic and size-agnostic: any rectangular input grid can be expanded using the same two-step mirroring process. The key insight is recognizing that the output exhibits both horizontal AND vertical symmetry axes through the center, which uniquely determines the transformation as a double-mirror expansion. This primitive appears in multiple ARC tasks where the goal is to create symmetric patterns from asymmetric seeds. The transformation preserves all input information while creating perfect bilateral symmetry along both the horizontal and vertical centerlines of the output.
