@@ -9,16 +9,17 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-This task involves **line attraction**. The grid contains one or more dominant lines—either vertical columns or horizontal rows—where a single color fills most cells. These lines act as "attractors" for stray pixels of the same color.
+This task implements **line attraction**. The grid contains one or more dominant lines—either vertical columns or horizontal rows—where a single non-zero color fills more than half the cells. These lines act as "attractors" for stray pixels of the same color.
 
 **Transformation steps:**
+
 1. **Detect lines**: Find all rows or columns where one non-zero color appears in more than half the cells. Record the color and position of each line.
 2. **Preserve lines**: Copy all detected lines unchanged to the output.
 3. **Move stray pixels**: For each non-zero pixel not part of a line:
-   - If its color matches a vertical line, move it horizontally to the cell immediately adjacent to that line (column = line_column ± 1, depending on which side the pixel is on).
-   - If its color matches a horizontal line, move it vertically to the cell immediately adjacent to that line (row = line_row ± 1).
-   - If no matching line exists, the pixel is removed (becomes 0).
-4. **Output**: Return the transformed grid with lines preserved and stray pixels repositioned.
+   - If its color matches a vertical line, move it horizontally to the cell immediately adjacent to that line (column = line_column - 1 if pixel is left of line, or line_column + 1 if pixel is right of line).
+   - If its color matches a horizontal line, move it vertically to the cell immediately adjacent to that line (row = line_row - 1 if pixel is above line, or line_row + 1 if pixel is below line).
+   - If no matching line exists for the pixel's color, the pixel is removed (becomes 0).
+4. **Output**: Return the transformed grid with lines preserved and stray pixels repositioned adjacent to their matching lines.
 
 ## Reference implementation
 
@@ -28,24 +29,24 @@ def transform(grid):
     arr = np.array(grid)
     h, w = arr.shape
     
-    # Find vertical lines (columns where one color appears in most cells)
+    # Find vertical lines (columns where one color appears in more than half the cells)
     vertical_lines = {}  # color -> column index
     for col in range(w):
         colors = arr[:, col]
         non_zero = colors[colors != 0]
-        if len(non_zero) > 0:
+        if len(non_zero) > h // 2:
             unique, counts = np.unique(non_zero, return_counts=True)
-            if len(unique) == 1 and counts[0] > h // 2:
+            if len(unique) == 1:
                 vertical_lines[int(unique[0])] = col
     
-    # Find horizontal lines (rows where one color appears in most cells)
+    # Find horizontal lines (rows where one color appears in more than half the cells)
     horizontal_lines = {}  # color -> row index
     for row in range(h):
         colors = arr[row, :]
         non_zero = colors[colors != 0]
-        if len(non_zero) > 0:
+        if len(non_zero) > w // 2:
             unique, counts = np.unique(non_zero, return_counts=True)
-            if len(unique) == 1 and counts[0] > w // 2:
+            if len(unique) == 1:
                 horizontal_lines[int(unique[0])] = row
     
     # Create output grid
@@ -93,11 +94,14 @@ def transform(grid):
 
 ## Why this generalizes
 
-This belongs to the **line-attraction** primitive family, a common pattern in ARC where dominant structures (lines, bars, frames) influence the position of related elements. The key insight is:
+This belongs to the **line-attraction** primitive family, a common pattern in ARC where dominant structures (lines, bars, frames) influence the position of related elements. The key insights are:
 
-1. **Line detection by dominance**: A line is identified when one color occupies >50% of a row or column. This threshold handles minor gaps or noise.
-2. **Color-based attraction**: Only pixels matching a line's color are affected, enabling multiple independent attraction systems in one grid.
-3. **Adjacent positioning**: Pixels move to the cell immediately next to their target line, not onto the line itself. This preserves the line's integrity.
-4. **Orphan removal**: Pixels without a matching attractor are eliminated, cleaning up irrelevant noise.
+1. **Line detection by dominance**: A line is identified when a single non-zero color fills more than 50% of cells in a row or column. This threshold is robust to small gaps or noise.
 
-This pattern appears in tasks involving gravitational pull, magnetic attraction, or structural completion where elements organize around dominant features.
+2. **Color-based attraction**: Only pixels matching a line's color are attracted to it. Pixels with colors that don't match any line are removed, implementing a filtering mechanism.
+
+3. **Adjacent positioning**: Attracted pixels stop one cell away from the line, never overlapping it. This preserves the line's integrity while showing the attraction relationship.
+
+4. **Directional movement**: Pixels move along the axis perpendicular to the line (horizontal movement for vertical lines, vertical movement for horizontal lines), maintaining their position along the line's axis.
+
+This pattern appears in many ARC tasks where structural elements organize or attract related objects based on color matching.
