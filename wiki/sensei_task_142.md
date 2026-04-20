@@ -28,16 +28,14 @@ The output dimensions are always exactly double the input dimensions in both axe
 def transform(grid):
     import numpy as np
     
-    # Convert to numpy array for easier manipulation
     arr = np.array(grid)
     
     # Step 1: Horizontal mirror - concatenate each row with its reverse
     h_mirror = np.concatenate([arr, np.fliplr(arr)], axis=1)
     
-    # Step 2: Vertical mirror - concatenate the result with its row-reversed version
+    # Step 2: Vertical mirror - concatenate with row-reversed version
     result = np.concatenate([h_mirror, np.flipud(h_mirror)], axis=0)
     
-    # Convert back to list of lists
     return result.tolist()
 ```
 
