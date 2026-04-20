@@ -11,14 +11,14 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-Find the **largest rectangular region of 0s** that spans **at least 2 consecutive rows**, and fill all cells in that region with **6s**.
+Find the **largest rectangular region of 0s** that spans **at least 2 consecutive rows**, and fill all cells in that region with **6s** (magenta).
 
-The rectangle must be:
-1. Composed entirely of 0s in the input
+The rectangle must satisfy:
+1. Be composed entirely of 0s in the input grid
 2. Span at least 2 consecutive rows (height ≥ 2)
-3. Maximal in area (height × width) among all such rectangles
+3. Have maximum area (height × width) among all such rectangles
 
-All other cells remain unchanged.
+All other cells remain unchanged. If multiple rectangles tie for maximum area, the first one encountered (scanning top-to-bottom, left-to-right) is selected.
 
 ## Reference implementation
 
@@ -70,20 +70,20 @@ def transform(grid):
 
 ## Why this generalizes
 
-This task belongs to the **rectangular-fill** primitive family. The key insight is:
+This task belongs to the **rectangular-fill** primitive family. The solution demonstrates a systematic approach to geometric pattern detection and transformation:
 
-1. **Object detection**: Identify all maximal rectangular regions of 0s (background cells)
-2. **Filtering criterion**: Only consider rectangles with height ≥ 2 (spanning multiple rows)
-3. **Selection rule**: Pick the rectangle with maximum area
-4. **Transformation**: Fill the selected rectangle with color 6 (magenta)
+1. **Exhaustive rectangle enumeration**: The algorithm iterates through all possible top-left corners (r1, c1) and expands rightward and downward to find all maximal rectangles of 0s.
 
-This pattern appears in multiple ARC tasks where the agent must:
-- Detect geometric shapes (rectangles) formed by uniform color regions
-- Apply a selection criterion (largest, smallest, specific dimension constraint)
-- Perform a color replacement on the selected region
+2. **Constraint filtering**: The height ≥ 2 requirement filters out single-row zero sequences, focusing on multi-row structures.
 
-The algorithm generalizes because it:
-- Works on any grid size
-- Handles rectangles at any position
-- Correctly identifies maximal rectangles (cannot extend in any direction)
-- Uses the height ≥ 2 constraint to distinguish from single-row zero sequences
+3. **Optimal selection**: By tracking the maximum area, the algorithm identifies the most prominent rectangular feature matching the criteria.
+
+4. **Deterministic transformation**: The selected region is filled with a distinct color (6), making the transformation visible and verifiable.
+
+This pattern generalizes to any grid size and rectangle position because:
+- It doesn't assume fixed dimensions or locations
+- It correctly handles edge cases (no valid rectangle, multiple candidates)
+- The O(n³m) complexity is acceptable for typical ARC grid sizes
+- The algorithm is purely local and doesn't require global context
+
+Similar tasks in ARC involve detecting geometric shapes (rectangles, squares, lines) formed by uniform color regions and applying color replacements based on size, position, or other geometric properties.
