@@ -1,52 +1,25 @@
 ---
 type: sensei_note
 task: 381
-tags: [objects, rectangle-pairs, gap-fill, blocked-pairs, arc]
-written_by: Professor Bond
-written_at: 2026-04-19
-verified_by: reference_implementation (train 3/3, test 1/1)
+tags: [transformation, gap-fill, arc, primer]
+written_by: The Primer
+written_at: 2026-04-20
+verified_by: run-against-train (all examples pass)
 ---
 
-# Task 381 — Fill Gap Between Rectangle Pairs With Color 9
+# Task 381 — Fill Horizontal Gaps Between Rectangle Pairs With Color 9
 
-## Object-level reasoning, not pixel-level.
+## The rule
 
-Operate on connected components of the marker color (2s). Previous
-sensei note was wrong about the rule — do not trust earlier attempts.
+1. **Identify objects:** Find all connected components of color 2. Each component is a solid rectangle; compute its bounding box `(r0, r1, c0, c1)`.
 
-## Verified rule
+2. **Consider pairs:** For every unordered pair of rectangles `(A, B)`:
+   - Compute their **row overlap**: `rs = max(A.r0, B.r0)`, `re = min(A.r1, B.r1)`. If `rs > re`, skip (no shared rows).
+   - Compute their **horizontal gap**: If `A` is left of `B` (`A.c1 < B.c0`), the gap columns are `A.c1+1` through `B.c0-1`. Symmetrically if `B` is left of `A`. If they overlap horizontally, skip.
+   - **Check for blockers:** A third rectangle `C` blocks this pair if `C`'s row range intersects `[rs, re]` AND `C`'s column range intersects the gap. If any blocker exists, skip the entire pair (do not fill any row of the gap).
+   - **Fill the gap:** If unblocked, set all cells in rows `rs..re` and gap columns to color 9 (only if currently 0).
 
-1. Find connected components of 2s. Compute each bounding box
-   `(r0, r1, c0, c1)`.
-2. For every ordered pair of rectangles `(A, B)`:
-   a. Compute row-overlap: `rs = max(A.r0, B.r0)`,
-      `re = min(A.r1, B.r1)`. Skip if `rs > re`.
-   b. Compute the strict horizontal gap: if `A` is left of `B`
-      (`A.c1 < B.c0`), gap cols are `A.c1+1 .. B.c0-1`. Symmetrically
-      if `B` is left of `A`. Skip if they overlap horizontally.
-   c. **Blocked-pair check** — skip the ENTIRE pair if any third
-      rectangle `C` satisfies:
-        - `C`'s row range intersects `[rs, re]`, AND
-        - `C`'s col range intersects the gap `[left+1, right-1]`.
-   d. Otherwise, for every `(r, c)` with `rs <= r <= re` and
-      `left+1 <= c <= right-1`, set the output cell to **9** (not 2).
-      Leave non-zero cells alone (defensive — in practice they are 0).
-3. Pixels outside filled gaps are copied from the input unchanged.
-
-## Key points that tripped earlier attempts
-
-- **Fill color is 9, not 2.** "Fill with marker color" is wrong.
-- **No width/height matching.** Pairs fill whenever they row-overlap
-  and are horizontally separated, regardless of size.
-- **Blocking matters.** In train ex2, rectangles E (rows 7-9, cols
-  0-3) and D (rows 6-9, col 9) row-overlap on rows 7-9, but rect C
-  (rows 3-8, cols 5-7) blocks rows 7-8. The entire (E, D) pair is
-  skipped, including row 9 which looks free. The fill is delivered
-  via the E-C and C-D chain instead.
-- **Horizontal gaps only in this task.** No vertical-gap fills
-  appear in the 3 training examples, so the reference solution only
-  handles horizontal. Keep the code symmetric if you extend it, but
-  the test set never exercises vertical.
+3. **Preserve everything else:** All non-gap pixels copy unchanged from input to output.
 
 ## Reference implementation
 
@@ -99,4 +72,6 @@ def transform(grid):
     return out.tolist()
 ```
 
-Verified against `train[0..2]` and `test[0]` — all pass exactly.
+## Why this generalizes
+
+This belongs to the **gap-fill** primitive family: identify discrete objects, find spatial relationships between pairs (here: horizontal separation with row overlap), and fill the intervening space with a new color. The **blocking check** is critical — it ensures fills only occur when the gap is truly empty, preventing incorrect fills when a third object interrupts the line of sight between the pair. This pattern appears in multiple ARC tasks where objects must "connect" or "bridge" across empty space, but only when unobstructed.
