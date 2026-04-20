@@ -17,14 +17,14 @@ This is a global aggregation task: you must scan the entire input to compute col
 
 ```python
 def transform(grid):
-    from collections import Counter
-    
-    # Flatten the grid to count all colors
-    flat = [cell for row in grid for cell in row]
+    # Count frequency of each color
+    color_counts = {}
+    for row in grid:
+        for cell in row:
+            color_counts[cell] = color_counts.get(cell, 0) + 1
     
     # Find the most frequent color
-    color_counts = Counter(flat)
-    most_frequent_color = color_counts.most_common(1)[0][0]
+    most_frequent_color = max(color_counts, key=color_counts.get)
     
     # Create output grid with same dimensions, filled with most frequent color
     height = len(grid)
