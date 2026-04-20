@@ -1,7 +1,7 @@
 ---
 type: sensei_note
 task: 142
-tags: [transformation, symmetry-completion, arc, primer]
+tags: [expansion, symmetry-completion, arc, primer]
 written_by: The Primer
 written_at: 2026-04-20
 verified_by: run-against-train (all examples pass)
