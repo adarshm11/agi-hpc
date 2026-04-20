@@ -1,38 +1,23 @@
 ---
 type: sensei_note
 task: 167
-tags: [classify, count-distinct-colors, diagonal, arc]
-written_by: Professor Bond
-written_at: 2026-04-19
-verified_by: reference_implementation (train 5/5, test 1/1)
+tags: [classification, count-distinct-colors, arc, primer]
+written_by: The Primer
+written_at: 2026-04-20
+verified_by: run-against-train (all examples pass)
 ---
 
 # Task 167 — Distinct-Color Count Selects a Pattern
 
-## Rule
+## The rule
 
-The output shape and non-zero cells depend ONLY on the number of distinct
-colors in the input grid (background included):
+Count the number of distinct colors present anywhere in the input grid (including what might look like background). The output pattern depends ONLY on this count:
 
-- **1 distinct color** → top row filled with 5s, rest 0.
-- **2 distinct colors** → main-diagonal 5s (`out[i][i] = 5`).
-- **3 distinct colors** → anti-diagonal 5s (`out[i][W-1-i] = 5`).
+- **1 distinct color** → fill the entire top row with 5s, all other cells 0
+- **2 distinct colors** → draw the main diagonal with 5s (`out[i][i] = 5`), all other cells 0
+- **3 distinct colors** → draw the anti-diagonal with 5s (`out[i][W-1-i] = 5`), all other cells 0
 
-The content of the input cells is irrelevant beyond the count. The
-output grid is the same dimensions as the input.
-
-## Why prior attempts failed
-
-The input grids look like puzzles with local structure (corners, strips,
-symmetry), so the natural hypothesis is a geometric transform of that
-structure. It is not. The local structure is a distractor; only the
-cardinality of the color set matters.
-
-Pattern for recognising this class: when multiple training examples
-with visually very different local structure produce identical outputs
-(both ex2 and ex3 give `[5,5,5]/[0,0,0]/[0,0,0]`), the rule is almost
-certainly reading a summary statistic of the input, not a geometric
-transform.
+The output grid has the same dimensions as the input. The actual color values and their spatial arrangement in the input are irrelevant—only the cardinality of the color set matters.
 
 ## Reference implementation
 
@@ -55,4 +40,8 @@ def transform(grid):
     return out
 ```
 
-Verified against `train[0..4]` and `test[0]` — all pass exactly.
+## Why this generalizes
+
+This task belongs to the **count-distinct-colors** primitive family. The key insight is that visually different inputs can produce identical outputs when they share the same color cardinality. For example, Train 2 (all 4s) and Train 3 (all 3s) both have 1 distinct color and both produce the top-row pattern. This is a strong signal that the rule operates on a summary statistic rather than geometric structure.
+
+When you see multiple training examples with very different local patterns yielding the same output, suspect a classification rule based on a global property (color count, object count, symmetry type) rather than a transformation of local structure.
