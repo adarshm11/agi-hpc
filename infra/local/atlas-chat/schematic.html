@@ -819,6 +819,25 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
       </div>
     </div>
 
+    <!-- The Primer — teaching daemon -->
+    <div class="metric-panel">
+      <div class="panel-title" style="display:flex;align-items:center;gap:6px">
+        <span class="icon">&#128218;</span> The Primer
+        <span id="pr-live-dot" title="Running?" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-left:4px"></span>
+      </div>
+      <div id="primer-panel" style="font-family:var(--mono);font-size:11px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+          <span title="sensei_task_*.md files on wiki">Taught: <b style="color:var(--green)" id="pr-taught">--</b></span>
+          <span title="Distinct tasks touched (cooldown file)">Touched: <b style="color:var(--accent)" id="pr-touched">--</b></span>
+          <span style="color:var(--text-dim);font-size:10px">Last: <span id="pr-last-task">--</span> <span id="pr-last-age" style="color:var(--text-muted)">--</span></span>
+        </div>
+        <div id="pr-experts" style="margin-top:4px"></div>
+        <div style="font-size:9px;color:var(--text-muted);margin-top:4px">
+          buckets: <span id="pr-bucket-legend">--</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Memory Tiers -->
     <div class="metric-panel">
       <div class="panel-title"><span class="icon">&#9733;</span> Memory Tiers</div>
@@ -2389,11 +2408,94 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 
   // ─── The Primer status ───
   window._primerStatus = null;
+  function _primerLatencyBar(buckets, labels){
+    // Render a stacked horizontal bar: one segment per bucket.
+    // Color scale: fast = green, mid = yellow, slow = orange, err = red.
+    var colors = ['var(--green)','#8cd97a','var(--yellow)','var(--orange)','#c25a5a','var(--red)'];
+    var total = buckets.reduce(function(a,b){ return a+b; }, 0) || 1;
+    var bw = 120;  // viewBox width
+    var x = 0, out = '';
+    for (var i = 0; i < buckets.length; i++){
+      var w = (buckets[i] / total) * bw;
+      if (w <= 0.01) continue;
+      var lab = (labels && labels[i]) || '';
+      out += '<rect x="' + x.toFixed(2) + '" y="0" width="' + w.toFixed(2)
+           + '" height="8" fill="' + colors[Math.min(i, colors.length-1)] + '">'
+           + '<title>' + lab + ': ' + buckets[i] + '</title></rect>';
+      x += w;
+    }
+    return '<svg viewBox="0 0 ' + bw + ' 8" preserveAspectRatio="none" '
+         + 'style="width:100%;height:8px;display:block">' + out + '</svg>';
+  }
+  function _renderPrimer(s){
+    if(!s) return;
+    var dot = el('pr-live-dot');
+    if(dot) dot.style.background = s.running ? 'var(--green)' : 'var(--red)';
+    var taught = el('pr-taught'); if(taught) taught.textContent = (s.tasks_taught == null ? '--' : s.tasks_taught);
+    var touched = el('pr-touched'); if(touched) touched.textContent = (s.tasks_touched == null ? '--' : s.tasks_touched);
+    var lastTask = el('pr-last-task'); if(lastTask) lastTask.textContent = (s.last_touched_task == null ? '--' : ('#' + s.last_touched_task));
+    var lastAge = el('pr-last-age');
+    if(lastAge){
+      if(s.last_touched_age_s == null){ lastAge.textContent = '--'; }
+      else {
+        var a = s.last_touched_age_s;
+        var t = a < 60 ? (a + 's ago')
+              : a < 3600 ? (Math.floor(a/60) + 'm ago')
+              : a < 86400 ? (Math.floor(a/3600) + 'h ago')
+              : (Math.floor(a/86400) + 'd ago');
+        lastAge.textContent = t;
+      }
+    }
+    var leg = el('pr-bucket-legend');
+    if(leg) leg.textContent = (s.bucket_labels || []).join(' · ');
+    // Per-expert rows: name | verify-rate bar | latency histogram
+    var rows = '';
+    var per = s.per_expert || {};
+    var names = Object.keys(per).sort();
+    if(!names.length){
+      rows = '<div style="color:var(--text-muted);font-size:10px">no calls logged yet</div>';
+    } else {
+      names.forEach(function(name){
+        var e = per[name];
+        var calls = e.calls || 0;
+        var pass = e.verify_pass || 0;
+        var fail = e.verify_fail || 0;
+        var err = e.errors || 0;
+        var rate = calls > 0 ? (pass / calls * 100).toFixed(0) : '--';
+        // verify-rate stacked segment (pass green, fail yellow, err red)
+        var vw = 80, xp = 0, vb = '';
+        if (calls > 0) {
+          var segs = [[pass,'var(--green)'], [fail,'var(--yellow)'], [err,'var(--red)']];
+          segs.forEach(function(sg){
+            var w = (sg[0] / calls) * vw;
+            if (w > 0.01){
+              vb += '<rect x="' + xp.toFixed(2) + '" y="0" width="' + w.toFixed(2)
+                  + '" height="8" fill="' + sg[1] + '"/>';
+              xp += w;
+            }
+          });
+        }
+        var vbar = '<svg viewBox="0 0 ' + vw + ' 8" preserveAspectRatio="none" '
+                 + 'style="width:' + vw + 'px;height:8px;display:block">' + vb + '</svg>';
+        var lbar = _primerLatencyBar(e.latency_buckets || [], s.bucket_labels || []);
+        rows += '<div style="display:grid;grid-template-columns:64px 30px 80px 10px 1fr;gap:6px;align-items:center;margin-bottom:3px;font-size:10px">'
+              + '<span style="color:var(--text)">' + name + '</span>'
+              + '<span style="color:var(--text-dim)" title="' + calls + ' calls">' + calls + '</span>'
+              + vbar
+              + '<span style="color:' + (rate === '--' ? 'var(--text-muted)' : 'var(--green)') + ';font-size:9px">' + rate + (rate === '--' ? '' : '%') + '</span>'
+              + lbar
+              + '</div>';
+      });
+    }
+    var host = el('pr-experts');
+    if(host) host.innerHTML = rows;
+  }
   async function pollPrimer(){
     try {
       var res = await fetch('/api/primer/status');
       if(!res.ok) return;
       window._primerStatus = await res.json();
+      _renderPrimer(window._primerStatus);
     } catch(e){}
   }
 

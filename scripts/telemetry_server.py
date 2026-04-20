@@ -2624,6 +2624,8 @@ def _get_erebus_status():
 EREBUS_HELP_PATH = "/archive/neurogolf/erebus_help_queue.json"
 PRIMER_COOLDOWN_PATH = "/archive/neurogolf/primer_cooldown.json"
 PRIMER_HEALTH_PATH = "/archive/neurogolf/primer_health.json"
+PRIMER_EVENTS_PATH = "/archive/neurogolf/primer_events.jsonl"
+PRIMER_WIKI_DIR = os.environ.get("EREBUS_WIKI_DIR", "/home/claude/agi-hpc/wiki")
 
 
 def _get_primer_status():
@@ -2633,7 +2635,11 @@ def _get_primer_status():
         "tasks_touched": 0,
         "last_touched_task": None,
         "last_touched_age_s": None,
+        "tasks_taught": 0,
         "expert_health": {},
+        "per_expert": {},
+        "bucket_labels": [],
+        "events_published": 0,
     }
     try:
         r = subprocess.run(
@@ -2660,6 +2666,25 @@ def _get_primer_status():
         health = json.loads(Path(PRIMER_HEALTH_PATH).read_text())
         if isinstance(health, dict):
             status["expert_health"] = health
+    except Exception:
+        pass
+    # Authoritative count of published sensei notes (survives event-log
+    # rotation and predates the events file).
+    try:
+        wiki = Path(PRIMER_WIKI_DIR)
+        if wiki.is_dir():
+            status["tasks_taught"] = sum(1 for _ in wiki.glob("sensei_task_*.md"))
+    except Exception:
+        pass
+    # Per-expert call/verify/latency aggregation from the JSONL event log.
+    try:
+        from agi.primer.events import aggregate, tail_lines
+
+        lines = tail_lines(Path(PRIMER_EVENTS_PATH), max_lines=2000)
+        agg = aggregate(lines)
+        status["per_expert"] = agg["per_expert"]
+        status["bucket_labels"] = agg["bucket_labels"]
+        status["events_published"] = agg["published"]
     except Exception:
         pass
     return status

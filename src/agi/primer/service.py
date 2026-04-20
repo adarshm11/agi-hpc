@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import events
 from .validator import ValidationResult, extract_code, validate
 from .vmoe import Response, vMOE, default_experts
 
@@ -407,6 +408,15 @@ async def _process_one(tn: int, cfg: Config, moe: vMOE) -> bool:
     for r in responses:
         if not r.ok:
             log.info("task%03d: %s failed (%s)", tn, r.expert, r.error)
+            events.append(
+                task=tn,
+                expert=r.expert,
+                ok=False,
+                latency_s=r.latency_s,
+                verify_pass=False,
+                published=False,
+                error=r.error,
+            )
             continue
         passed, vr, code = _verify_response(r, task)
         if passed:
@@ -431,6 +441,14 @@ async def _process_one(tn: int, cfg: Config, moe: vMOE) -> bool:
                     family=(parsed.get("family") or ""),
                     note_path=path.name,
                 )
+            events.append(
+                task=tn,
+                expert=r.expert,
+                ok=True,
+                latency_s=r.latency_s,
+                verify_pass=True,
+                published=True,
+            )
             return True
         log.info("task%03d: %s did not verify: %s", tn, r.expert, vr.diagnostic[:200])
         # Log a peek at the raw response so we can see WHY extraction
@@ -446,6 +464,15 @@ async def _process_one(tn: int, cfg: Config, moe: vMOE) -> bool:
                 latency_s=round(r.latency_s, 2),
                 diagnostic=vr.diagnostic[:200],
             )
+        events.append(
+            task=tn,
+            expert=r.expert,
+            ok=True,
+            latency_s=r.latency_s,
+            verify_pass=False,
+            published=False,
+            error=vr.diagnostic[:200],
+        )
     log.info("task%03d: no expert produced a verified solution this round", tn)
     return False
 
