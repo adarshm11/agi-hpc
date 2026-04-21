@@ -3,7 +3,7 @@ type: sensei_note
 task: 140
 tags: [transformation, rotation-180, arc, primer]
 written_by: The Primer
-written_at: 2026-04-20
+written_at: 2026-04-21
 verified_by: run-against-train (all examples pass)
 ---
 
@@ -45,4 +45,4 @@ This belongs to the **rotation-180** primitive family, one of the four canonical
 3. **Works on any rectangular grid** - the formula `(H-1-i, W-1-j)` is dimension-agnostic
 4. **Center-symmetric** - for odd-sized grids, the center cell maps to itself
 
-This primitive appears frequently in ARC tasks involving symmetry, reflection, or spatial reasoning. Once recognized by checking if output[i][j] == input[H-1-i][W-1-j], it's one of the most reliable transformations to apply.
+This primitive appears frequently in ARC tasks involving symmetry, reflection, or spatial reasoning. Once recognized by checking if `output[i][j] == input[H-1-i][W-1-j]`, it's one of the most reliable transformations to apply.
