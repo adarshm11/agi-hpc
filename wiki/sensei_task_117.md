@@ -3,25 +3,25 @@ type: sensei_note
 task: 117
 tags: [transformation, symmetry-reflection, arc, primer]
 written_by: The Primer
-written_at: 2026-04-20
+written_at: 2026-04-21
 verified_by: run-against-train (all examples pass)
 ---
 
 ## The rule
 
-This task involves two colored shapes on a black background. One shape (typically forming a symmetric diamond or cross pattern) acts as the **reflection center**. The other shape is **reflected across both axes** passing through the center shape's bounding box center.
+This task contains two colored shapes on a black (0) background. One shape exhibits **4-way symmetry** (typically a diamond or cross pattern) and acts as the **reflection anchor**. The other shape is **asymmetric** and gets reflected across both axes passing through the anchor shape's center.
 
-Specifically:
+**Step-by-step:**
 1. Identify the two non-zero colors in the grid
-2. Determine which shape is the "center" shape (the one with 4-way rotational/reflection symmetry around its center)
-3. Calculate the center point of the center shape's bounding box
-4. Keep the center shape unchanged
-5. For the other shape, create up to 4 copies: the original position, vertically reflected, horizontally reflected, and both reflected across the center point
+2. For each color, compute the center of its bounding box: `center_row = (min_row + max_row) / 2`, `center_col = (min_col + max_col) / 2`
+3. Determine which shape is the anchor by checking for 4-way symmetry: for every pixel at (r, c), verify that (2×cr−r, c), (r, 2×cc−c), and (2×cr−r, 2×cc−c) also exist in the shape
+4. Keep the anchor shape unchanged in the output
+5. For the asymmetric shape, create 4 copies: the original position, vertical reflection, horizontal reflection, and diagonal reflection across the anchor's center point
 
-The reflection formula for a point (r, c) across center (cr, cc) is:
-- Vertical reflection: (2×cr - r, c)
-- Horizontal reflection: (r, 2×cc - c)
-- Both: (2×cr - r, 2×cc - c)
+**Reflection formulas** (for point (r, c) across center (cr, cc)):
+- Vertical: (2×cr − r, c)
+- Horizontal: (r, 2×cc − c)
+- Both: (2×cr − r, 2×cc − c)
 
 ## Reference implementation
 
@@ -74,8 +74,12 @@ def transform(grid):
             break
     
     if center_color is None:
-        # Fallback: use the shape with fewer pixels
-        center_color = min(colors, key=lambda c: len(pos[c]))
+        # Fallback: use the shape with smaller bounding box
+        def bbox_size(positions):
+            rows = [p[0] for p in positions]
+            cols = [p[1] for p in positions]
+            return (max(rows) - min(rows) + 1) * (max(cols) - min(cols) + 1)
+        center_color = min(colors, key=lambda c: bbox_size(pos[c]))
     
     reflect_color = [c for c in colors if c != center_color][0]
     center_cr, center_cc = centers[center_color]
@@ -104,12 +108,12 @@ def transform(grid):
 
 ## Why this generalizes
 
-This solution uses the **symmetry-reflection** primitive family. The key insight is recognizing that one shape serves as an anchor point (identified by its intrinsic 4-way symmetry), while the other shape is the "content" to be mirrored. This pattern appears in multiple ARC tasks where objects need to be reflected around a central point or axis.
+This solution belongs to the **symmetry-reflection** primitive family. The key insight is recognizing that one object serves as an **intrinsic anchor** (identified by its 4-way rotational/reflection symmetry), while the other object is **content to be mirrored**.
 
-The algorithm generalizes because:
-1. It doesn't hardcode specific colors - it detects whichever shape has symmetry
-2. It works for any grid size and any positions of the shapes
-3. The reflection math (2×center - position) is universal for point reflection
-4. Boundary checking ensures reflections stay within the grid
+This pattern generalizes because:
+1. **Anchor identification is intrinsic**: The symmetric shape can be detected algorithmically without hardcoded colors or positions
+2. **Reflection is coordinate-based**: Using the bounding box center ensures the transformation works regardless of where shapes appear in the grid
+3. **Color-agnostic**: The logic works for any pair of non-zero colors
+4. **Size-invariant**: Works for asymmetric shapes of any size or complexity
 
-This is a fundamental geometric transformation pattern that Erebus should recognize: **identify anchor → compute center → reflect content across axes**.
+Similar patterns appear in ARC tasks involving mirroring, tiling, or symmetric completion where one object defines the transformation space for another.
