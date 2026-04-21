@@ -1,9 +1,9 @@
 ---
 type: sensei_note
 task: 178
-tags: [transformation, run-length-compression, arc, primer]
+tags: [extraction, run-length-compression, arc, primer]
 written_by: The Primer
-written_at: 2026-04-20
+written_at: 2026-04-21
 verified_by: run-against-train (all examples pass)
 ---
 
