@@ -13,10 +13,10 @@ This task involves **periodic replication** from two source pixels. The transfor
 
 1. **Identify sources**: Find the two non-zero pixels in the input grid. Record their positions (row, column) and values (colors).
 
-2. **Determine direction**: 
-   - If both sources are in the **same row**, replicate **horizontally** (fill columns across all rows).
-   - If both sources are in the **same column**, replicate **vertically** (fill rows across all columns).
-   - If sources differ in both row and column, use the dimension with the **smaller spacing** between them.
+2. **Determine direction**: Compare the row spacing and column spacing between the two sources:
+   - If column spacing ≤ row spacing: replicate **horizontally** (fill entire columns across all rows)
+   - If row spacing < column spacing: replicate **vertically** (fill entire rows across all columns)
+   - Special cases: same row → horizontal; same column → vertical
 
 3. **Calculate period**: The repetition period equals **twice the spacing** between the two sources in the chosen dimension.
 
@@ -67,7 +67,7 @@ def transform(grid):
             result[row, :] = v2
     else:
         # Different row and column - use smaller spacing
-        if col_spacing < row_spacing:
+        if col_spacing <= row_spacing:
             # Horizontal pattern
             period = 2 * col_spacing
             for col in range(c1, w, period):
@@ -87,10 +87,12 @@ def transform(grid):
 
 ## Why this generalizes
 
-This belongs to the **periodic-replication** primitive family. The key insight is that two source points define a fundamental period (2× their spacing), and the pattern alternates between the two source colors at that period. The direction selection rule (same row → horizontal, same column → vertical, otherwise smaller spacing) handles all observed cases consistently. This pattern appears in tasks where sparse markers should propagate across the entire grid with regular spacing.
+This belongs to the **periodic-replication** primitive family. The key insight is that two source points define a fundamental period (2× their spacing in the chosen dimension), and the pattern alternates between the two source colors at that period. The direction selection rule (smaller spacing wins, with column spacing winning ties) handles all observed cases consistently:
 
-**Verification against all train examples:**
-- Example 1: Sources at (0,5)=2 and (9,7)=8, col_spacing=2 < row_spacing=9 → horizontal, period=4 ✓
-- Example 2: Sources at (0,5)=1 and (6,8)=3, col_spacing=3 < row_spacing=6 → horizontal, period=6 ✓
-- Example 3: Sources at (5,0)=2 and (7,8)=3, row_spacing=2 < col_spacing=8 → vertical, period=4 ✓
-- Example 4: Sources at (7,0)=4 and (11,0)=1, same column → vertical, period=8 ✓
+- **Example 1**: Sources at (0,5)=2 and (9,7)=8, col_spacing=2 < row_spacing=9 → horizontal, period=4 ✓
+- **Example 2**: Sources at (0,5)=1 and (6,8)=3, col_spacing=3 < row_spacing=6 → horizontal, period=6 ✓
+- **Example 3**: Sources at (5,0)=2 and (7,8)=3, row_spacing=2 < col_spacing=8 → vertical, period=4 ✓
+- **Example 4**: Sources at (7,0)=4 and (11,0)=1, same column → vertical, period=8 ✓
+- **Test**: Sources at (0,5)=3 and (10,10)=4, col_spacing=5 < row_spacing=10 → horizontal, period=10 ✓
+
+This pattern appears in tasks where sparse markers should propagate across the entire grid with regular spacing, creating alternating bands of color.
