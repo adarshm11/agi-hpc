@@ -1,5 +1,6 @@
 import argparse
 import json as json_mod
+import importlib.metadata
 import re
 from dataclasses import dataclass, asdict
 from typing import Callable
@@ -83,38 +84,29 @@ def _read_pyproject_dependencies() -> list[str]:
     deps = [re.split(r"[<>=!~ ]", d, 1)[0] for d in data.get("project", {}).get("dependencies", [])]
     return deps
 
-# Map pyproject dependency names to their Python import names
-_IMPORT_NAME_MAP = {
-    'pyyaml': 'yaml',
-    'psycopg2-binary': 'psycopg2',
-    'sentence-transformers': 'sentence_transformers',
-    'nats-py': 'nats',
-}
-
 def check_core_dependencies() -> Check:
     deps = _read_pyproject_dependencies()
     if not deps:
         return Check(
-            name='Core dependencies importable',
+            name='Core dependencies installed',
             passed=False,
             message='Could not read dependencies from pyproject.toml',
             suggestion='Ensure pyproject.toml exists in project root',
         )
     missing = []
     for dep in deps:
-        import_name = _IMPORT_NAME_MAP.get(dep, dep.replace('-', '_'))
         try:
-            __import__(import_name)
-        except ImportError:
+            importlib.metadata.distribution(dep)
+        except importlib.metadata.PackageNotFoundError:
             missing.append(dep)
     if not missing:
         return Check(
-            name='Core dependencies importable',
+            name='Core dependencies installed',
             passed=True,
-            message='All core packages are importable',
+            message='All core packages are installed',
         )
     return Check(
-        name='Core dependencies importable',
+        name='Core dependencies installed',
         passed=False,
         message=f'Missing packages: {", ".join(missing)}',
         suggestion="Run: pip install -e '.[dev]'",
