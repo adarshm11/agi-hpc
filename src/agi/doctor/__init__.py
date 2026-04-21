@@ -42,7 +42,7 @@ class Check:
     suggestion: str = ''
     fix_command: str | None = None
 
-CheckFn = Callable[[], Check]
+CheckFn = Callable[[], Check | None]
 
 def check_python_version() -> Check:
     check = Check(name='Python version >= 3.10')
@@ -209,7 +209,15 @@ def check_required_ports(ports: tuple[int, ...] = REQUIRED_PORTS) -> Check:
         suggestion=f'Kill process on port: lsof -ti:{busy_ports[0]} | xargs kill',
     )
 
-def check_docker_running() -> Check:
+def _has_docker_config() -> bool:
+    for name in ('Dockerfile', 'docker-compose.yml', 'docker-compose.yaml'):
+        if os.path.isfile(os.path.join(os.getcwd(), name)):
+            return True
+    return False
+
+def check_docker_running() -> Check | None:
+    if not _has_docker_config():
+        return None
     try:
         subprocess.run(
             ['docker', 'info'],
@@ -252,6 +260,8 @@ def perform_checks(
     results: list[Check] = []
     for fn in check_fns:
         check = fn()
+        if check is None:
+            continue
         if not check.passed and fix and check.fix_command:
             print(f'  {YELLOW}⚙ Attempting fix:{RESET} {check.fix_command}')
             ret = subprocess.run(check.fix_command, shell=True, capture_output=True)
