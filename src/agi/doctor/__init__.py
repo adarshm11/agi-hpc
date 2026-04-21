@@ -42,6 +42,7 @@ class Check:
     message: str = ""
     suggestion: str = ""
     fix_command: str | None = None
+    advisory: bool = False
 
 
 CheckFn = Callable[[], Check | None]
@@ -169,6 +170,7 @@ def check_env_file() -> Check:
         message=".env file not found in project root",
         suggestion="Copy .env.example to .env",
         fix_command="cp .env.example .env",
+        advisory=True,
     )
 
 
@@ -288,6 +290,8 @@ def perform_checks(
     for check in results:
         if check.passed:
             icon = f"{GREEN}✅{RESET}"
+        elif check.advisory:
+            icon = f"{YELLOW}⚠{RESET}"
         else:
             icon = f"{RED}❌{RESET}"
         print(f"{icon} {BOLD}{check.name}{RESET} — {check.message}")
@@ -296,13 +300,19 @@ def perform_checks(
         if not check.passed and check.suggestion:
             print(f"     {YELLOW}↳ {check.suggestion}{RESET}")
 
-    passed = sum(1 for c in results if c.passed)
+    failures = sum(1 for c in results if not c.passed and not c.advisory)
+    warnings = sum(1 for c in results if not c.passed and c.advisory)
     total = len(results)
     print()
-    if passed == total:
+    parts = []
+    if failures:
+        parts.append(f"{RED}{BOLD}{failures}/{total} checks failed.{RESET}")
+    if warnings:
+        parts.append(f"{YELLOW}{warnings} advisory warning(s).{RESET}")
+    if not parts:
         print(f"{GREEN}{BOLD}All {total} checks passed.{RESET}")
     else:
-        print(f"{RED}{BOLD}{total - passed}/{total} checks failed.{RESET}")
+        print("  ".join(parts))
 
     return results
 
@@ -327,4 +337,5 @@ def main():
         json=args.json,
         fix=args.fix,
     )
-    sys.exit(0 if all(c.passed for c in results) else 1)
+    failed = any(not c.passed and not c.advisory for c in results)
+    sys.exit(1 if failed else 0)
