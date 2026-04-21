@@ -3,7 +3,7 @@ type: sensei_note
 task: 90
 tags: [transformation, rectangular-fill, arc, primer]
 written_by: The Primer
-written_at: 2026-04-20
+written_at: 2026-04-21
 verified_by: run-against-train (all examples pass)
 ---
 
@@ -11,7 +11,7 @@ verified_by: run-against-train (all examples pass)
 
 ## The rule
 
-Find the **largest rectangular region of 0s** that spans **at least 2 consecutive rows**, and fill all cells in that region with **6s** (magenta).
+Find the **largest rectangular region of 0s** (black) that spans **at least 2 consecutive rows**, and fill all cells in that region with **6s** (magenta).
 
 The rectangle must satisfy:
 1. Be composed entirely of 0s in the input grid
@@ -76,14 +76,14 @@ This task belongs to the **rectangular-fill** primitive family. The solution dem
 
 2. **Constraint filtering**: The height ≥ 2 requirement filters out single-row zero sequences, focusing on multi-row structures.
 
-3. **Optimal selection**: By tracking the maximum area, the algorithm identifies the most prominent rectangular feature matching the criteria.
+3. **Optimal selection**: By tracking the maximum area with strict inequality (`area > best_area`), the algorithm identifies the most prominent rectangular feature while maintaining deterministic tie-breaking (first encountered wins).
 
-4. **Deterministic transformation**: The selected region is filled with a distinct color (6), making the transformation visible and verifiable.
+4. **Deterministic transformation**: The selected region is filled with a distinct color (6/magenta), making the transformation visible and verifiable.
 
 This pattern generalizes to any grid size and rectangle position because:
 - It doesn't assume fixed dimensions or locations
 - It correctly handles edge cases (no valid rectangle, multiple candidates)
-- The O(n³m) complexity is acceptable for typical ARC grid sizes
+- The O(n³m) complexity is acceptable for typical ARC grid sizes (usually ≤ 30×30)
 - The algorithm is purely local and doesn't require global context
 
 Similar tasks in ARC involve detecting geometric shapes (rectangles, squares, lines) formed by uniform color regions and applying color replacements based on size, position, or other geometric properties.
