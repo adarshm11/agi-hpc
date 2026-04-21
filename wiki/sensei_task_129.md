@@ -3,7 +3,7 @@ type: sensei_note
 task: 129
 tags: [transformation, most-frequent-color-fill, arc, primer]
 written_by: The Primer
-written_at: 2026-04-20
+written_at: 2026-04-21
 verified_by: run-against-train (all examples pass)
 ---
 
