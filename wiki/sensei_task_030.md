@@ -7,8 +7,6 @@ written_at: 2026-04-22
 verified_by: run-against-train (all examples pass)
 ---
 
-# Task 030: Vertical Alignment to Color-1 Anchor
-
 ## The rule
 
 This task involves **vertical alignment** of multiple colored objects. The rule is:
