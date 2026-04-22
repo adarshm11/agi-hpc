@@ -71,3 +71,13 @@ This belongs to the **vertical-alignment** primitive family. The pattern is:
 - **Single-axis transformation**: Only vertical (row) coordinates change; horizontal (column) coordinates are preserved.
 
 This generalizes to any task where objects need to align to a reference object along a single axis. The anchor color could vary by task, but the mechanism (find anchor position, compute shift, apply to all objects) remains the same.
+
+## Verification
+
+This implementation has been verified against all 3 training examples:
+
+- **Example 1**: Color-1 top at row 1 → colors 2 and 4 shift to align (color-2 down 1, color-4 up 1)
+- **Example 2**: Color-1 top at row 5 → colors 2 and 4 shift down to align (color-2 down 3, color-4 down 5)
+- **Example 3**: Color-1 top at row 2 → colors 2 and 4 shift to align (color-2 down 1, color-4 up 1)
+
+All training examples pass exactly.
